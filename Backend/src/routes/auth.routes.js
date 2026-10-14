@@ -1,6 +1,7 @@
 const express = require("express");
 const authController = require("../controllers/auth.controller");
 const authMiddleWare = require("../middlewares/auth.middleware");
+const authValidatorMiddleware = require("../middlewares/validator.middleware");
 
 const router = express.Router();
 
@@ -13,6 +14,8 @@ const router = express.Router();
 router.post(
   "/verify-user",
   authMiddleWare.registerMiddleware,
+  authValidatorMiddleware.typeValidatorRule,
+  authValidatorMiddleware.idValidatorRule,
   authController.verifyUserAndSendEmail,
 );
 
@@ -25,6 +28,8 @@ router.post(
 router.post(
   "/verify-email",
   authMiddleWare.registerMiddleware,
+  authValidatorMiddleware.typeValidatorRule,
+  authValidatorMiddleware.otpValidatorRule,
   authController.verifyEmail,
 );
 
@@ -37,6 +42,8 @@ router.post(
 router.post(
   "/create-user",
   authMiddleWare.registerMiddleware,
+  authValidatorMiddleware.typeValidatorRule,
+  authValidatorMiddleware.passwordValidatorRule,
   authController.createUser,
 );
 
