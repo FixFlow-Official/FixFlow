@@ -1,13 +1,13 @@
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 export default function AppLayout() {
-  const location = useLocation()
-  const isLoginPage = location.pathname === '/login'
+  const location = useLocation();
+  const isLoginPage = location.pathname === "/login";
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div className="flex min-h-screen flex-col bg-canvas text-ink">
       <header className="sticky top-0 z-20 border-b border-line/80 bg-white/95">
-        <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-[68px]    max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link
             to="/login"
             className="flex items-center gap-2.5 rounded-lg"
@@ -26,7 +26,7 @@ export default function AppLayout() {
             <Link
               to="/login"
               className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                isLoginPage ? 'text-brand' : 'text-muted hover:text-ink'
+                isLoginPage ? "text-brand" : "text-muted hover:text-ink"
               }`}
             >
               Sign in
@@ -42,14 +42,14 @@ export default function AppLayout() {
         </div>
       </header>
 
-      <main>
+      <main className="flex-1">
         <Outlet />
       </main>
 
-      <footer className="mx-auto flex max-w-7xl items-center justify-between px-4 py-7 text-xs text-muted sm:px-6 lg:px-8">
+      <footer className="mx-auto flex max-w-7xl gap-70 items-center justify-between px-4 py-7 text-xs text-muted sm:px-6 lg:px-8">
         <span>© {new Date().getFullYear()} FixFlow</span>
         <span>Campus account support</span>
       </footer>
     </div>
-  )
+  );
 }

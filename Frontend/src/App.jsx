@@ -1,12 +1,7 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import AppLayout from './layouts/AppLayout.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-
-
-
-function RegisterPage() {
-  return <h1>Registration screen goes here</h1>
-}
+import { Navigate, Route, Routes } from "react-router-dom";
+import AppLayout from "./layouts/AppLayout.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
+import RegisterPage from "./pages/RegisterPage.jsx";
 
 export default function App() {
   return (
@@ -17,5 +12,5 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
       </Route>
     </Routes>
-  )
+  );
 }
