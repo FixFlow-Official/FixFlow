@@ -1,35 +1,60 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 
-const steps = ['Verify ID', 'Check email', 'Set password']
+const steps = ["Verify ID", "Check email", "Set password"];
 
 const roleNames = {
-  student: 'Student',
-  staff: 'Staff',
-  admin: 'Administrator',
-}
+  student: "Student",
+  staff: "Staff",
+  admin: "Administrator",
+};
 
 const idLabels = {
-  student: 'Student roll number',
-  staff: 'Staff ID',
-  admin: 'Admin ID',
-}
+  student: "Student roll number",
+  staff: "Staff ID",
+  admin: "Admin ID",
+};
 
 export default function RegisterPage() {
-  const [step, setStep] = useState(0)
-  const [type, setType] = useState('student')
-  const [id, setId] = useState('')
-  const [otp, setOtp] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
+  const [step, setStep] = useState(0);
+  const [type, setType] = useState("student");
+  const [id, setId] = useState("");
+  const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
 
   function handleSubmit(event) {
-    event.preventDefault()
+    event.preventDefault();
+    setError("");
 
-    // For now, advance through the UI without calling the backend.
-    if (step < 2) setStep(step + 1)
-    else console.log({ type, id, otp, password })
+    if (step === 0 && !id.trim()) {
+      setError(`Enter your ${idLabels[type].toLowerCase()}.`);
+      return;
+    }
+
+    if (step === 1 && !/^\d{6}$/.test(otp)) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+
+    if (step === 2) {
+      if (password.length < 8) {
+        setError("Use at least 8 characters for your password.");
+        return;
+      }
+
+      if (password !== confirm) {
+        setError("The passwords do not match.");
+        return;
+      }
+
+      console.log({ type, id, otp, password });
+      return;
+    }
+
+    setStep(step + 1);
   }
 
   return (
@@ -63,17 +88,17 @@ export default function RegisterPage() {
                 <div
                   className={`flex items-center gap-2 border-t-2 pt-3 ${
                     step >= index
-                      ? 'border-brand text-brand'
-                      : 'border-line text-slate-400'
+                      ? "border-brand text-brand"
+                      : "border-line text-slate-400"
                   }`}
                 >
                   <span
                     className={`grid size-7 shrink-0 place-items-center rounded-full ${
                       step > index
-                        ? 'bg-brand text-white'
+                        ? "bg-brand text-white"
                         : step === index
-                          ? 'bg-brand-soft'
-                          : 'bg-slate-100'
+                          ? "bg-brand-soft"
+                          : "bg-slate-100"
                     }`}
                   >
                     {step > index ? <Check size={15} /> : index + 1}
@@ -85,6 +110,15 @@ export default function RegisterPage() {
               </li>
             ))}
           </ol>
+
+          {error && (
+            <div
+              role="alert"
+              className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-800"
+            >
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {step === 0 && (
@@ -107,7 +141,9 @@ export default function RegisterPage() {
                 </label>
 
                 <label className="block space-y-1.5">
-                  <span className="text-sm font-semibold">{idLabels[type]}</span>
+                  <span className="text-sm font-semibold">
+                    {idLabels[type]}
+                  </span>
                   <input
                     value={id}
                     onChange={(event) => setId(event.target.value)}
@@ -137,7 +173,7 @@ export default function RegisterPage() {
                   <input
                     value={otp}
                     onChange={(event) =>
-                      setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))
+                      setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
                     }
                     inputMode="numeric"
                     autoComplete="one-time-code"
@@ -165,7 +201,9 @@ export default function RegisterPage() {
                 </label>
 
                 <label className="block space-y-1.5">
-                  <span className="text-sm font-semibold">Confirm password</span>
+                  <span className="text-sm font-semibold">
+                    Confirm password
+                  </span>
                   <input
                     type="password"
                     value={confirm}
@@ -195,10 +233,10 @@ export default function RegisterPage() {
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark"
               >
                 {step === 2
-                  ? 'Create account'
+                  ? "Create account"
                   : step === 1
-                    ? 'Verify email'
-                    : 'Send verification code'}
+                    ? "Verify email"
+                    : "Send verification code"}
                 <ArrowRight size={16} />
               </button>
             </div>
@@ -206,12 +244,15 @@ export default function RegisterPage() {
         </section>
 
         <p className="mt-5 text-center text-sm text-muted">
-          Already registered?{' '}
-          <Link to="/login" className="font-semibold text-brand hover:underline">
+          Already registered?{" "}
+          <Link
+            to="/login"
+            className="font-semibold text-brand hover:underline"
+          >
             Sign in
           </Link>
         </p>
       </div>
     </div>
-  )
+  );
 }
