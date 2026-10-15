@@ -1,6 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { verifyUserRequest } from "../services/api.js";
+import { verifyEmailRequest } from "../services/api.js";
+import { createAccountRequest } from "../services/api.js";
+import { Link, useNavigate } from "react-router-dom";
 
 const steps = ["Verify ID", "Check email", "Set password"];
 
@@ -24,37 +27,86 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     setError("");
 
-    if (step === 0 && !id.trim()) {
-      setError(`Enter your ${idLabels[type].toLowerCase()}.`);
+    if (step === 0) {
+      if (!id.trim()) {
+        setError(`Enter your ${idLabels[type].toLowerCase()}.`);
+        return;
+      }
+
+      setBusy(true);
+
+      try {
+        await verifyUserRequest({ id: id.trim(), type });
+        setStep(1);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        setBusy(false);
+      }
+
       return;
     }
 
+    // Keep your existing OTP and password checks below for now.
     if (step === 1 && !/^\d{6}$/.test(otp)) {
       setError("Enter the 6-digit code from your email.");
       return;
     }
 
-    if (step === 2) {
-      if (password.length < 8) {
-        setError("Use at least 8 characters for your password.");
-        return;
-      }
-
-      if (password !== confirm) {
-        setError("The passwords do not match.");
-        return;
-      }
-
-      console.log({ type, id, otp, password });
+    // First, reject anything that isn't six digits.
+    if (step === 1 && !/^\d{6}$/.test(otp)) {
+      setError("Enter the 6-digit code from your email.");
       return;
     }
 
-    setStep(step + 1);
+    // Then ask the backend to verify the code.
+    if (step === 1) {
+      setBusy(true);
+
+      try {
+        await verifyEmailRequest({
+          otp,
+          id: id.trim(),
+          type,
+        });
+        setStep(2);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        setBusy(false);
+      }
+
+      return;
+    }
+
+    // Password checks come after this.
+
+    if (password.length < 8) {
+      setError("Use at least 8 characters for your password.");
+      return;
+    }
+
+    if (password !== confirm) {
+      setError("The passwords do not match.");
+    }
+
+    setBusy(true);
+
+    try {
+      await createAccountRequest({ password, type });
+      navigate("/login");
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -232,11 +284,13 @@ export default function RegisterPage() {
                 type="submit"
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark"
               >
-                {step === 2
-                  ? "Create account"
-                  : step === 1
-                    ? "Verify email"
-                    : "Send verification code"}
+                {busy
+                  ? "Checking ID…"
+                  : step === 2
+                    ? "Create account"
+                    : step === 1
+                      ? "Verify email"
+                      : "Send verification code"}
                 <ArrowRight size={16} />
               </button>
             </div>

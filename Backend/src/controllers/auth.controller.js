@@ -24,7 +24,9 @@ async function verifyUserAndSendEmail(req, res) {
 
   const idField = req.idField;
 
-  const userFound = userData.find((s) => s[idField] === id);
+  const userFound = userData.find(
+  (s) => String(s[idField]) === String(id)
+);
 
   if (!userFound) {
     return res.status(401).json({
@@ -93,7 +95,9 @@ async function verifyEmail(req, res) {
 
   const idField = req.idField;
 
-  const userFound = userData.find((s) => s[idField] === id);
+  const userFound = userData.find(
+  (s) => String(s[idField]) === String(id)
+);
 
   if (!userFound) {
     return res.status(401).json({
@@ -166,7 +170,9 @@ async function createUser(req, res) {
     const userData = req.userData;
     const idField = req.idField;
 
-    const userFound = userData.find((e) => e[idField] === decoded.id);
+    const userFound = userData.find(
+  (e) => String(e[idField]) === String(decoded.id)
+);
 
     const depField = {
       student: "course",

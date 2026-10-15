@@ -1,4 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { loginRequest } from "../services/api.js";
+
+
 
 export default function LoginPage() {
   const [form, setForm] = useState({
@@ -6,6 +10,11 @@ export default function LoginPage() {
     email: "",
     password: "",
   });
+
+  const navigate = useNavigate();
+const [busy, setBusy] = useState(false);
+
+  const [error, setError] = useState("");
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -16,9 +25,38 @@ export default function LoginPage() {
     }));
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-    console.log("Login form:", form);
+    setError("");
+
+    const email = form.email.trim();
+    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+    if (!isValidEmail) {
+      setError("Enter a valid email address.");
+      return;
+    }
+
+    if (!form.password) {
+      setError("Enter your password.");
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      await loginRequest({
+        email,
+        password: form.password,
+        type: form.type,
+      });
+
+      navigate("/app");
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -97,11 +135,21 @@ export default function LoginPage() {
             />
           </label>
 
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-800"
+            >
+              {error}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="min-h-11 w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark"
+            disabled={busy}
+            className="min-h-11 w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Sign in
+            {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
 
