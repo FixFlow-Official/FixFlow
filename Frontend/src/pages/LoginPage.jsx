@@ -17,7 +17,7 @@ export default function LoginPage() {
   });
 
   const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const { setUser, setAccessToken } = useAuth()
   const [busy, setBusy] = useState(false);
 
   const [error, setError] = useState("");
@@ -64,6 +64,7 @@ export default function LoginPage() {
       }
 
       setUser(data.user);
+      setAccessToken(data.accessToken)
       navigate(destination);
     } catch (error) {
       setError(error.message);

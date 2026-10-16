@@ -44,6 +44,53 @@ export async function getCurrentUserRequest() {
   return data
 }
 
+export async function logoutRequest(accessToken) {
+  let token = accessToken
+
+  if (!token) {
+    let refreshResponse
+
+    try {
+      refreshResponse = await fetch('/api/auth/token-recreate', {
+        method: 'GET',
+        credentials: 'include',
+      })
+    } catch {
+      throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    }
+
+    const refreshData = await refreshResponse.json().catch(() => ({}))
+
+    if (!refreshResponse.ok) {
+      throw new Error(refreshData.message || 'Your session has expired. Please sign in again.')
+    }
+
+    token = refreshData.accessToken
+  }
+
+  let response
+
+  try {
+    response = await fetch('/api/auth/logout', {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  } catch {
+    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+  }
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Could not sign out.')
+  }
+
+  return data
+}
+
 export async function verifyUserRequest({ id, type }) {
   let response
 

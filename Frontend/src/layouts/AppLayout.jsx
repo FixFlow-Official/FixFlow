@@ -1,17 +1,42 @@
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ArrowRight, LogOut, Wrench } from "lucide-react";
+import { useState } from "react"
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
+import { ArrowRight, LogOut, Wrench } from "lucide-react"
+import { useAuth } from "../context/AuthContext.jsx"
+import { logoutRequest } from "../services/api.js"
+
+const dashboardPaths = {
+  student: "/student/dashboard",
+  staff: "/staff/dashboard",
+  admin: "/admin/dashboard",
+}
 
 export default function AppLayout() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { user, setUser, accessToken, setAccessToken } = useAuth()
+
+  const [signingOut, setSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState("")
 
   const isDashboard =
-    location.pathname === "/app" || location.pathname.endsWith("/dashboard");
-  const isLogin = location.pathname === "/login";
-  const isRegister = location.pathname === "/register";
+    location.pathname === "/app" || location.pathname.endsWith("/dashboard")
+  const isLogin = location.pathname === "/login"
+  const isRegister = location.pathname === "/register"
 
-  function handleSignOut() {
-    navigate("/login");
+  async function handleSignOut() {
+    setSigningOut(true)
+    setSignOutError("")
+
+    try {
+      await logoutRequest(accessToken)
+      setUser(null)
+      setAccessToken(null)
+      navigate("/login", { replace: true })
+    } catch (error) {
+      setSignOutError(error.message)
+    } finally {
+      setSigningOut(false)
+    }
   }
 
   return (
@@ -19,7 +44,11 @@ export default function AppLayout() {
       <header className="sticky top-0 z-20 border-b border-line/80 bg-white/95">
         <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link
-            to={isDashboard ? "/app" : "/login"}
+            to={
+              isDashboard
+                ? dashboardPaths[user?.role] || "/login"
+                : "/login"
+            }
             className="flex items-center gap-2.5 rounded-lg"
             aria-label="FixFlow home"
           >
@@ -36,16 +65,17 @@ export default function AppLayout() {
             {isDashboard ? (
               <>
                 <span className="hidden text-sm font-medium sm:inline">
-                  Alex Morgan
+                  {user?.username ?? "Account"}
                 </span>
 
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-stone-100 hover:text-ink"
+                  disabled={signingOut}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-stone-100 hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <LogOut size={17} />
-                  Sign out
+                  {signingOut ? "Signing out…" : "Sign out"}
                 </button>
               </>
             ) : (
@@ -80,6 +110,15 @@ export default function AppLayout() {
         </div>
       </header>
 
+      {signOutError && (
+        <p
+          role="alert"
+          className="bg-rose-50 px-4 py-2 text-center text-sm text-rose-800"
+        >
+          {signOutError}
+        </p>
+      )}
+
       <main className="flex-1">
         <Outlet />
       </main>
@@ -89,5 +128,5 @@ export default function AppLayout() {
         <span>Campus account support</span>
       </footer>
     </div>
-  );
+  )
 }
