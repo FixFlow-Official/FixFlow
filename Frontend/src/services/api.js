@@ -23,6 +23,27 @@ export async function loginRequest({ email, password, type }) {
   return data
 }
 
+export async function getCurrentUserRequest() {
+  let response
+
+  try {
+    response = await fetch('/api/auth/getMe', {
+      method: 'GET',
+      credentials: 'include',
+    })
+  } catch {
+    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+  }
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Could not get the signed-in user.')
+  }
+
+  return data
+}
+
 export async function verifyUserRequest({ id, type }) {
   let response
 

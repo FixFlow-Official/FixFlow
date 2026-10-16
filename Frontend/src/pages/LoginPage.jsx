@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginRequest } from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
-
+const dashboardPaths = {
+  student: "/student/dashboard",
+  staff: "/staff/dashboard",
+  admin: "/admin/dashboard",
+};
 
 export default function LoginPage() {
   const [form, setForm] = useState({
@@ -12,7 +17,8 @@ export default function LoginPage() {
   });
 
   const navigate = useNavigate();
-const [busy, setBusy] = useState(false);
+  const { setUser } = useAuth();
+  const [busy, setBusy] = useState(false);
 
   const [error, setError] = useState("");
 
@@ -45,13 +51,20 @@ const [busy, setBusy] = useState(false);
     setBusy(true);
 
     try {
-      await loginRequest({
+      const data = await loginRequest({
         email,
         password: form.password,
         type: form.type,
       });
 
-      navigate("/app");
+      const destination = dashboardPaths[data.user?.role];
+
+      if (!destination) {
+        throw new Error("Your account has an unrecognized role.");
+      }
+
+      setUser(data.user);
+      navigate(destination);
     } catch (error) {
       setError(error.message);
     } finally {

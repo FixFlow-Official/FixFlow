@@ -1,13 +1,17 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowRight, LogOut, Wrench } from 'lucide-react'
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { ArrowRight, LogOut, Wrench } from "lucide-react";
 
 export default function AppLayout() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const isDashboard = location.pathname === '/app'
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isDashboard =
+    location.pathname === "/app" || location.pathname.endsWith("/dashboard");
+  const isLogin = location.pathname === "/login";
+  const isRegister = location.pathname === "/register";
 
   function handleSignOut() {
-    navigate('/login')
+    navigate("/login");
   }
 
   return (
@@ -15,13 +19,14 @@ export default function AppLayout() {
       <header className="sticky top-0 z-20 border-b border-line/80 bg-white/95">
         <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link
-            to={isDashboard ? '/app' : '/login'}
+            to={isDashboard ? "/app" : "/login"}
             className="flex items-center gap-2.5 rounded-lg"
             aria-label="FixFlow home"
           >
             <span className="grid size-9 place-items-center rounded-xl bg-brand text-white">
               <Wrench size={18} />
             </span>
+
             <span className="font-display text-lg font-extrabold tracking-tight">
               fixflow<span className="text-brand">.</span>
             </span>
@@ -33,6 +38,7 @@ export default function AppLayout() {
                 <span className="hidden text-sm font-medium sm:inline">
                   Alex Morgan
                 </span>
+
                 <button
                   type="button"
                   onClick={handleSignOut}
@@ -46,19 +52,27 @@ export default function AppLayout() {
               <>
                 <Link
                   to="/login"
-                  className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                    location.pathname === '/login'
-                      ? 'text-brand'
-                      : 'text-muted hover:text-ink'
+                  aria-current={isLogin ? "page" : undefined}
+                  className={`inline-flex min-h-10 items-center justify-center rounded-xl px-3.5 text-sm font-semibold ${
+                    isLogin
+                      ? "bg-brand text-white"
+                      : "text-muted hover:bg-stone-100 hover:text-ink"
                   }`}
                 >
                   Sign in
                 </Link>
+
                 <Link
                   to="/register"
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-brand px-3.5 text-sm font-semibold text-white hover:bg-brand-dark"
+                  aria-current={isRegister ? "page" : undefined}
+                  className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-3.5 text-sm font-semibold ${
+                    isRegister
+                      ? "bg-brand text-white"
+                      : "text-muted hover:bg-stone-100 hover:text-ink"
+                  }`}
                 >
-                  Create account <ArrowRight size={15} />
+                  Create account
+                  <ArrowRight size={15} />
                 </Link>
               </>
             )}
@@ -75,5 +89,5 @@ export default function AppLayout() {
         <span>Campus account support</span>
       </footer>
     </div>
-  )
+  );
 }
