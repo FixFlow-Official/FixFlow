@@ -1,34 +1,32 @@
-import { CircleHelp, Inbox, UserRound, Wrench } from 'lucide-react'
+import { CircleHelp, Inbox, UserRound, Wrench } from "lucide-react";
+import { useAuth } from "../context/AuthContext.jsx";
 
-const user = {
-  username: 'Alex Morgan',
-  email: 'alex@college.edu',
-  role: 'student',
-}
+
 
 const roleContent = {
   student: {
-    label: 'Student',
-    title: 'Your campus support starts here',
+    label: "Student",
+    title: "Your campus support starts here",
     description:
-      'Your FixFlow account is ready. Campus support requests will be available here when your institution enables them.',
+      "Your FixFlow account is ready. Campus support requests will be available here when your institution enables them.",
   },
   staff: {
-    label: 'Staff',
-    title: 'Welcome to FixFlow',
+    label: "Staff",
+    title: "Welcome to FixFlow",
     description:
-      'Your staff account is verified. Staff tools will appear here when they are supported by your institution.',
+      "Your staff account is verified. Staff tools will appear here when they are supported by your institution.",
   },
   admin: {
-    label: 'Administrator',
-    title: 'Your workspace is ready',
+    label: "Administrator",
+    title: "Your workspace is ready",
     description:
-      'Your administrator account is verified. Administration tools will appear here when they are supported by your institution.',
+      "Your administrator account is verified. Administration tools will appear here when they are supported by your institution.",
   },
-}
+};
 
 export default function DashboardPage() {
-  const content = roleContent[user.role]
+  const { user } = useAuth();
+  const content = roleContent[user.role];
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
@@ -38,7 +36,7 @@ export default function DashboardPage() {
         </span>
 
         <h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
-          {content.title}
+          Welcome, {user.username}
         </h1>
 
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted sm:text-base">
@@ -56,9 +54,7 @@ export default function DashboardPage() {
               <h2 className="font-display text-lg font-bold">
                 Support requests
               </h2>
-              <p className="text-sm text-muted">
-                Request tracking and updates
-              </p>
+              <p className="text-sm text-muted">Request tracking and updates</p>
             </div>
           </div>
 
@@ -120,5 +116,5 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

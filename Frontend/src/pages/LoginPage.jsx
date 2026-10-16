@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginRequest } from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import RoleSelect from "../components/RoleSelect.jsx";
 
-
+const dashboardPaths = {
+  student: "/student/dashboard",
+  staff: "/staff/dashboard",
+  admin: "/admin/dashboard",
+};
 
 export default function LoginPage() {
   const [form, setForm] = useState({
@@ -12,7 +18,8 @@ export default function LoginPage() {
   });
 
   const navigate = useNavigate();
-const [busy, setBusy] = useState(false);
+  const { setUser, setAccessToken } = useAuth();
+  const [busy, setBusy] = useState(false);
 
   const [error, setError] = useState("");
 
@@ -45,13 +52,21 @@ const [busy, setBusy] = useState(false);
     setBusy(true);
 
     try {
-      await loginRequest({
+      const data = await loginRequest({
         email,
         password: form.password,
         type: form.type,
       });
 
-      navigate("/app");
+      const destination = dashboardPaths[data.user?.role];
+
+      if (!destination) {
+        throw new Error("Your account has an unrecognized role.");
+      }
+
+      setUser(data.user);
+      setAccessToken(data.accessToken);
+      navigate(destination);
     } catch (error) {
       setError(error.message);
     } finally {
@@ -97,16 +112,15 @@ const [busy, setBusy] = useState(false);
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block space-y-1.5">
             <span className="text-sm font-semibold">Account type</span>
-            <select
-              name="type"
+            <RoleSelect
               value={form.type}
-              onChange={handleChange}
-              className="min-h-12 w-full rounded-xl border border-line bg-white px-3.5 text-base shadow-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
-            >
-              <option value="student">Student</option>
-              <option value="staff">Staff</option>
-              <option value="admin">Administrator</option>
-            </select>
+              onChange={(value) =>
+                setForm((currentForm) => ({
+                  ...currentForm,
+                  type: value,
+                }))
+              }
+            />
           </label>
 
           <label className="block space-y-1.5">

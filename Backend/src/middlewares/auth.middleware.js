@@ -81,4 +81,41 @@ async function logoutMiddleware(req,res,next){
     }
 }
 
-module.exports = { registerMiddleware , logoutMiddleware };
+async function verifyAccessToken(req, res, next) {
+  const authHeader = req.headers.authorization
+  const accessToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.split(" ")[1]
+    : null
+
+  if (!accessToken) {
+    return res.status(401).json({ message: "Unauthorized" })
+  }
+
+  try {
+    const decoded = jwt.verify(accessToken, config.JWT_SECRET)
+
+    if (!decoded.id || !decoded.role || !decoded.sessionId) {
+      return res.status(401).json({ message: "Unauthorized" })
+    }
+
+    const activeSession = await sessionModel.findOne({
+      _id: decoded.sessionId,
+      user: decoded.id,
+      userRef: decoded.role,
+      revoked: false,
+    })
+
+    if (!activeSession) {
+      return res.status(401).json({ message: "Unauthorized" })
+    }
+
+    req.auth = decoded
+    req.accessToken = accessToken
+
+    next()
+  } catch {
+    return res.status(401).json({ message: "Unauthorized" })
+  }
+}
+
+module.exports = { registerMiddleware , logoutMiddleware , verifyAccessToken };

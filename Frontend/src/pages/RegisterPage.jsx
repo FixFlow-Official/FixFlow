@@ -4,6 +4,7 @@ import { verifyUserRequest } from "../services/api.js";
 import { verifyEmailRequest } from "../services/api.js";
 import { createAccountRequest } from "../services/api.js";
 import { Link, useNavigate } from "react-router-dom";
+import RoleSelect from "../components/RoleSelect.jsx";
 
 const steps = ["Verify ID", "Check email", "Set password"];
 
@@ -179,17 +180,7 @@ export default function RegisterPage() {
                   <span className="text-sm font-semibold">
                     I am registering as
                   </span>
-                  <select
-                    value={type}
-                    onChange={(event) => setType(event.target.value)}
-                    className="min-h-12 w-full rounded-xl border border-line bg-white px-3.5 text-base focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
-                  >
-                    {Object.entries(roleNames).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  <RoleSelect value={type} onChange={setType} />
                 </label>
 
                 <label className="block space-y-1.5">
