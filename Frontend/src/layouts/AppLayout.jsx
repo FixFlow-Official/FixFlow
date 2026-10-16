@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { ArrowRight, LogOut, Wrench } from "lucide-react"
 import { useAuth } from "../context/AuthContext.jsx"
-import { logoutRequest } from "../services/api.js"
+import { logoutRequest, logoutAllRequest } from "../services/api.js"
 
 const dashboardPaths = {
   student: "/student/dashboard",
@@ -15,6 +15,8 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const { user, setUser, accessToken, setAccessToken } = useAuth()
 
+  const [showSignOutDialog, setShowSignOutDialog] = useState(false)
+  const [signOutScope, setSignOutScope] = useState("current")
   const [signingOut, setSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState("")
 
@@ -23,20 +25,32 @@ export default function AppLayout() {
   const isLogin = location.pathname === "/login"
   const isRegister = location.pathname === "/register"
 
-  async function handleSignOut() {
+  async function handleConfirmSignOut() {
     setSigningOut(true)
     setSignOutError("")
 
     try {
-      await logoutRequest(accessToken)
+      if (signOutScope === "all") {
+        await logoutAllRequest(accessToken)
+      } else {
+        await logoutRequest(accessToken)
+      }
+
       setUser(null)
       setAccessToken(null)
+      setShowSignOutDialog(false)
       navigate("/login", { replace: true })
     } catch (error) {
       setSignOutError(error.message)
     } finally {
       setSigningOut(false)
     }
+  }
+
+  function handleOpenSignOutDialog() {
+    setSignOutScope("current")
+    setSignOutError("")
+    setShowSignOutDialog(true)
   }
 
   return (
@@ -70,12 +84,11 @@ export default function AppLayout() {
 
                 <button
                   type="button"
-                  onClick={handleSignOut}
-                  disabled={signingOut}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-stone-100 hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleOpenSignOutDialog}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-stone-100 hover:text-ink"
                 >
                   <LogOut size={17} />
-                  {signingOut ? "Signing out…" : "Sign out"}
+                  Sign out
                 </button>
               </>
             ) : (
@@ -110,7 +123,7 @@ export default function AppLayout() {
         </div>
       </header>
 
-      {signOutError && (
+      {signOutError && !showSignOutDialog && (
         <p
           role="alert"
           className="bg-rose-50 px-4 py-2 text-center text-sm text-rose-800"
@@ -127,6 +140,101 @@ export default function AppLayout() {
         <span>© {new Date().getFullYear()} FixFlow</span>
         <span>Campus account support</span>
       </footer>
+
+      {showSignOutDialog && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sign-out-title"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+          >
+            <h2
+              id="sign-out-title"
+              className="font-display text-xl font-bold"
+            >
+              Sign out?
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Choose whether to sign out on this device or on all devices.
+            </p>
+
+            <fieldset className="mt-5 space-y-3">
+              <legend className="text-sm font-semibold">
+                Where do you want to sign out?
+              </legend>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3">
+                <input
+                  type="radio"
+                  name="sign-out-scope"
+                  value="current"
+                  checked={signOutScope === "current"}
+                  onChange={() => setSignOutScope("current")}
+                  className="mt-1 accent-brand"
+                />
+                <span>
+                  <span className="block text-sm font-semibold">
+                    This device
+                  </span>
+                  <span className="text-xs text-muted">
+                    Keep other devices signed in.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3">
+                <input
+                  type="radio"
+                  name="sign-out-scope"
+                  value="all"
+                  checked={signOutScope === "all"}
+                  onChange={() => setSignOutScope("all")}
+                  className="mt-1 accent-brand"
+                />
+                <span>
+                  <span className="block text-sm font-semibold">
+                    All devices
+                  </span>
+                  <span className="text-xs text-muted">
+                    Sign out every active session for this account.
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+
+            {signOutError && (
+              <p
+                role="alert"
+                className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-800"
+              >
+                {signOutError}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={signingOut}
+                onClick={() => setShowSignOutDialog(false)}
+                className="min-h-10 rounded-xl px-4 text-sm font-semibold text-muted hover:bg-stone-100 disabled:opacity-60"
+              >
+                No, stay signed in
+              </button>
+
+              <button
+                type="button"
+                disabled={signingOut}
+                onClick={handleConfirmSignOut}
+                className="min-h-10 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {signingOut ? "Signing out…" : "Yes, sign out"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

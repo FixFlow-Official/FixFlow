@@ -1,12 +1,13 @@
-import { Navigate, Route, Routes } from "react-router-dom"
-import AppLayout from "./layouts/AppLayout.jsx"
-import LoginPage from "./pages/LoginPage.jsx"
-import RegisterPage from "./pages/RegisterPage.jsx"
-import DashboardPage from "./pages/DashboardPage.jsx"
-import StaffDashboardPage from "./pages/StaffDashboardPage.jsx"
-import AdminDashboardPage from "./pages/AdminDashboardPage.jsx"
-import ProtectedRoute from "./components/ProtectedRoute.jsx"
-import { AuthProvider } from "./context/AuthContext.jsx"
+import { Navigate, Route, Routes } from "react-router-dom";
+import AppLayout from "./layouts/AppLayout.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
+import RegisterPage from "./pages/RegisterPage.jsx";
+import DashboardPage from "./pages/DashboardPage.jsx";
+import StaffDashboardPage from "./pages/StaffDashboardPage.jsx";
+import AdminDashboardPage from "./pages/AdminDashboardPage.jsx";
+import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import { AuthProvider } from "./context/AuthContext.jsx";
+import PublicOnlyRoute from "./components/PublicOnlyRoute.jsx";
 
 export default function App() {
   return (
@@ -14,8 +15,23 @@ export default function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/login"
+            element={
+              <PublicOnlyRoute>
+                <LoginPage />
+              </PublicOnlyRoute>
+            }
+          />
+
+          <Route
+            path="/register"
+            element={
+              <PublicOnlyRoute>
+                <RegisterPage />
+              </PublicOnlyRoute>
+            }
+          />
 
           <Route
             path="/student/dashboard"
@@ -49,5 +65,5 @@ export default function App() {
         </Route>
       </Routes>
     </AuthProvider>
-  )
+  );
 }

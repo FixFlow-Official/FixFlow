@@ -310,35 +310,54 @@ async function loginController(req, res) {
  */
 
 async function getMe(req, res) {
-  const refreshToken = req.cookies.refreshToken;
+  const refreshToken = req.cookies.refreshToken
 
   if (!refreshToken) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ message: "Unauthorized" })
   }
 
   const userModels = {
     student: studentModel,
     staff: staffModel,
     admin: adminModel,
-  };
+  }
 
   try {
-    const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
-
-    const model = userModels[decoded.role];
+    const decoded = jwt.verify(refreshToken, config.JWT_SECRET)
+    const model = userModels[decoded.role]
 
     if (!model) {
-      return res.status(400).json({
-        message: "Type is wrong",
-      });
+      return res.status(401).json({ message: "Unauthorized" })
     }
 
-    const user = await model.findById(decoded.id);
+    const activeSessions = await sessionModel.find({
+      user: decoded.id,
+      userRef: decoded.role,
+      revoked: false,
+    })
+
+    let hasMatchingSession = false
+
+    for (const session of activeSessions) {
+      const matches = await bcrypt.compare(
+        refreshToken,
+        session.refreshTokenHash,
+      )
+
+      if (matches) {
+        hasMatchingSession = true
+        break
+      }
+    }
+
+    if (!hasMatchingSession) {
+      return res.status(401).json({ message: "Unauthorized" })
+    }
+
+    const user = await model.findById(decoded.id)
 
     if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
+      return res.status(401).json({ message: "Unauthorized" })
     }
 
     return res.status(200).json({
@@ -347,9 +366,9 @@ async function getMe(req, res) {
         email: user.email,
         role: user.role,
       },
-    });
-  } catch (err) {
-    return res.status(401).json({ message: "Unauthorized", err });
+    })
+  } catch {
+    return res.status(401).json({ message: "Unauthorized" })
   }
 }
 
@@ -503,6 +522,7 @@ async function tokenRecreate(req, res) {
     const accessToken = jwt.sign(
       {
         id: decoded.id || decoded._id,
+        sessionId: targetSession.id,
         role: decoded.role,
       },
       config.JWT_SECRET,
