@@ -595,6 +595,13 @@ async function tokenRecreate(req, res) {
   }
 }
 
+/**
+ *
+ * @route verifyUser
+ * @description verify User for password change
+ * @access public
+ */
+
 async function verifyUser(req, res) {
   const { id, type } = req.body;
 
@@ -645,6 +652,13 @@ async function verifyUser(req, res) {
     message: "Verification OTP has been sent to your registered email",
   });
 }
+
+/**
+ *
+ * @route forgotPasswordChange
+ * @description Change the previous password
+ * @access public
+ */
 
 async function forgotPasswordChange(req, res) {
   const token = req.cookies.token;
