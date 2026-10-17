@@ -99,6 +99,12 @@ router.get(
   authController.tokenRecreate,
 );
 
+/**
+ * @route api/auth/verify-user-for-password
+ * @description verify user for password change
+ * @access public
+ */
+
 router.post(
   "/verify-user-for-password",
   authMiddleWare.registerMiddleware,
@@ -106,6 +112,14 @@ router.post(
   authValidatorMiddleware.idValidatorRule,
   authController.verifyUser,
 );
+
+// use api/auth/verify-email route after verify-user-for-password and then proceed to api/auth/forgot-password
+
+/**
+ * @route api/auth/forgot-password
+ * @description Change the previous password
+ * @access public
+ */
 
 router.post(
   "/forgot-password",
