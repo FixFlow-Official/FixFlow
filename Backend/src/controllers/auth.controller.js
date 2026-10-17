@@ -24,9 +24,7 @@ async function verifyUserAndSendEmail(req, res) {
 
   const idField = req.idField;
 
-  const userFound = userData.find(
-  (s) => String(s[idField]) === String(id)
-);
+  const userFound = userData.find((s) => String(s[idField]) === String(id));
 
   if (!userFound) {
     return res.status(401).json({
@@ -68,12 +66,18 @@ async function verifyUserAndSendEmail(req, res) {
     },
   );
 
-  await sendEmail(
-    userFound.email,
-    "OTP Verification",
-    `Your OTP is ${otp}`,
-    html,
-  );
+  try {
+    await sendEmail(
+      userFound.email,
+      "OTP Verification",
+      `Your OTP is ${otp}`,
+      html,
+    );
+  } catch (error) {
+    return res.status(500).json({
+      message: "Could not send the verification email. Please try again.",
+    });
+  }
 
   res.status(200).json({
     message:
@@ -95,9 +99,7 @@ async function verifyEmail(req, res) {
 
   const idField = req.idField;
 
-  const userFound = userData.find(
-  (s) => String(s[idField]) === String(id)
-);
+  const userFound = userData.find((s) => String(s[idField]) === String(id));
 
   if (!userFound) {
     return res.status(401).json({
@@ -123,7 +125,8 @@ async function verifyEmail(req, res) {
 
   const token = jwt.sign(
     {
-      id: id,
+      id: String(id),
+      type,
     },
     config.JWT_SECRET,
     {
@@ -154,6 +157,7 @@ async function verifyEmail(req, res) {
 
 async function createUser(req, res) {
   const { password, type } = req.body;
+  
 
   const token = req.cookies.token;
 
@@ -165,14 +169,17 @@ async function createUser(req, res) {
 
   try {
     const decoded = jwt.verify(token, config.JWT_SECRET);
+    if (decoded.type !== type) {
+  return res.status(401).json({ message: "Unauthorized" });
+}
 
     const model = req.model;
     const userData = req.userData;
     const idField = req.idField;
 
     const userFound = userData.find(
-  (e) => String(e[idField]) === String(decoded.id)
-);
+      (e) => String(e[idField]) === String(decoded.id),
+    );
 
     const depField = {
       student: "course",
@@ -310,54 +317,54 @@ async function loginController(req, res) {
  */
 
 async function getMe(req, res) {
-  const refreshToken = req.cookies.refreshToken
+  const refreshToken = req.cookies.refreshToken;
 
   if (!refreshToken) {
-    return res.status(401).json({ message: "Unauthorized" })
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
   const userModels = {
     student: studentModel,
     staff: staffModel,
     admin: adminModel,
-  }
+  };
 
   try {
-    const decoded = jwt.verify(refreshToken, config.JWT_SECRET)
-    const model = userModels[decoded.role]
+    const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
+    const model = userModels[decoded.role];
 
     if (!model) {
-      return res.status(401).json({ message: "Unauthorized" })
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const activeSessions = await sessionModel.find({
       user: decoded.id,
       userRef: decoded.role,
       revoked: false,
-    })
+    });
 
-    let hasMatchingSession = false
+    let hasMatchingSession = false;
 
     for (const session of activeSessions) {
       const matches = await bcrypt.compare(
         refreshToken,
         session.refreshTokenHash,
-      )
+      );
 
       if (matches) {
-        hasMatchingSession = true
-        break
+        hasMatchingSession = true;
+        break;
       }
     }
 
     if (!hasMatchingSession) {
-      return res.status(401).json({ message: "Unauthorized" })
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const user = await model.findById(decoded.id)
+    const user = await model.findById(decoded.id);
 
     if (!user) {
-      return res.status(401).json({ message: "Unauthorized" })
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     return res.status(200).json({
@@ -366,9 +373,9 @@ async function getMe(req, res) {
         email: user.email,
         role: user.role,
       },
-    })
+    });
   } catch {
-    return res.status(401).json({ message: "Unauthorized" })
+    return res.status(401).json({ message: "Unauthorized" });
   }
 }
 

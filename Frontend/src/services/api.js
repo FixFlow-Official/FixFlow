@@ -42,13 +42,7 @@ export async function getCurrentUserRequest() {
   }
 
   return data
-}    
-
-
-
-
-
-
+}
 
 export async function logoutRequest(accessToken) {
   let token = accessToken
@@ -78,7 +72,7 @@ export async function logoutRequest(accessToken) {
 
   try {
     response = await fetch('/api/auth/logout', {
-      method: 'GET',
+      method: 'POST',
       credentials: 'include',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -96,12 +90,6 @@ export async function logoutRequest(accessToken) {
 
   return data
 }
-
-
-
-
-
-
 
 export async function logoutAllRequest(accessToken) {
   let token = accessToken
@@ -133,7 +121,7 @@ export async function logoutAllRequest(accessToken) {
 
   try {
     response = await fetch('/api/auth/logoutAll', {
-      method: 'GET',
+      method: 'POST',
       credentials: 'include',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -151,13 +139,6 @@ export async function logoutAllRequest(accessToken) {
 
   return data
 }
-
-
-
-
-
-
-
 
 export async function verifyUserRequest({ id, type }) {
   let response
@@ -183,7 +164,6 @@ export async function verifyUserRequest({ id, type }) {
 
   return data
 }
-
 
 export async function verifyEmailRequest({ otp, id, type }) {
   let response
