@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
-import { verifyUserRequest } from "../services/api.js";
-import { verifyEmailRequest } from "../services/api.js";
-import { createAccountRequest } from "../services/api.js";
+import {
+  verifyUserRequest,
+  verifyEmailRequest,
+  createAccountRequest,
+} from "../services/api.js";
 import { Link, useNavigate } from "react-router-dom";
 import RoleSelect from "../components/RoleSelect.jsx";
 
@@ -29,7 +31,41 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+
+    const timer = window.setTimeout(() => {
+      setResendCooldown((seconds) => seconds - 1);
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
+
+  async function handleResendCode() {
+    setError("");
+    setResending(true);
+
+    try {
+      await verifyUserRequest({
+        id: id.trim(),
+        type,
+      });
+
+      setResendCooldown(60);
+    } catch (error) {
+      setError(error.message);
+
+      const seconds = Number(error.message.match(/(\d+)\s*seconds?/i)?.[1]);
+      if (seconds > 0) setResendCooldown(seconds);
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -45,6 +81,7 @@ export default function RegisterPage() {
 
       try {
         await verifyUserRequest({ id: id.trim(), type });
+        setResendCooldown(60);
         setStep(1);
       } catch (error) {
         setError(error.message);
@@ -55,20 +92,12 @@ export default function RegisterPage() {
       return;
     }
 
-    // Keep your existing OTP and password checks below for now.
-    if (step === 1 && !/^\d{6}$/.test(otp)) {
-      setError("Enter the 6-digit code from your email.");
-      return;
-    }
-
-    // First, reject anything that isn't six digits.
-    if (step === 1 && !/^\d{6}$/.test(otp)) {
-      setError("Enter the 6-digit code from your email.");
-      return;
-    }
-
-    // Then ask the backend to verify the code.
     if (step === 1) {
+      if (!/^\d{6}$/.test(otp)) {
+        setError("Enter the 6-digit code from your email.");
+        return;
+      }
+
       setBusy(true);
 
       try {
@@ -87,8 +116,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Password checks come after this.
-
     if (password.length < 8) {
       setError("Use at least 8 characters for your password.");
       return;
@@ -96,6 +123,7 @@ export default function RegisterPage() {
 
     if (password !== confirm) {
       setError("The passwords do not match.");
+      return;
     }
 
     setBusy(true);
@@ -224,6 +252,19 @@ export default function RegisterPage() {
                     className="min-h-12 w-full rounded-xl border border-line bg-white px-3.5 text-center font-mono text-xl tracking-[0.35em] focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
                   />
                 </label>
+
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resendCooldown > 0 || resending || busy}
+                  className="text-sm font-semibold text-brand hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline"
+                >
+                  {resending
+                    ? "Sending code…"
+                    : resendCooldown > 0
+                      ? `Resend code in ${resendCooldown}s`
+                      : "Resend code"}
+                </button>
               </>
             )}
 
@@ -262,7 +303,7 @@ export default function RegisterPage() {
               {step > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setStep(step - 1)}
+                  onClick={() => setStep((currentStep) => currentStep - 1)}
                   className="min-h-11 rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold hover:bg-stone-50"
                 >
                   Back
@@ -273,10 +314,15 @@ export default function RegisterPage() {
 
               <button
                 type="submit"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark"
+                disabled={busy}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {busy
-                  ? "Checking ID…"
+                  ? step === 0
+                    ? "Checking ID…"
+                    : step === 1
+                      ? "Verifying email…"
+                      : "Creating account…"
                   : step === 2
                     ? "Create account"
                     : step === 1

@@ -73,7 +73,7 @@ router.get("/getMe", authController.getMe);
  * @access public
  */
 
-router.get("/logout", authMiddleWare.logoutMiddleware, authController.logout);
+router.post("/logout", authMiddleWare.logoutMiddleware, authController.logout);
 
 /**
  * @route api/auth/logoutAll
@@ -81,7 +81,7 @@ router.get("/logout", authMiddleWare.logoutMiddleware, authController.logout);
  * @access public
  */
 
-router.get(
+router.post(
   "/logoutAll",
   authMiddleWare.logoutMiddleware,
   authController.logoutAll,
