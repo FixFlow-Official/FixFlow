@@ -2,13 +2,31 @@ function getOtp() {
   return Math.floor(100000 + Math.random() * 900000);
 }
 
-function getHtml(otp) {
+function getHtml(otp, purpose = "registration") {
+  const isPasswordReset = purpose === "password-reset";
+
+  const emailTitle = isPasswordReset
+    ? "Your FixFlow password reset code"
+    : "Your FixFlow verification code";
+
+  const emailHeading = isPasswordReset
+    ? "Reset your password"
+    : "Verify your email";
+
+  const emailDescription = isPasswordReset
+    ? "Enter this one-time code on the FixFlow password reset page to choose a new password."
+    : "Enter this one-time code on the FixFlow registration page to continue creating your account.";
+
+  const emailCategory = isPasswordReset
+    ? "Password reset"
+    : "Campus account verification";
+
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Your FixFlow verification code</title>
+    <title>${emailTitle}</title>
   </head>
   <body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: Arial, Helvetica, sans-serif; color: #172b27;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f7f6; padding: 32px 12px;">
@@ -25,13 +43,13 @@ function getHtml(otp) {
             <tr>
               <td style="padding: 32px;">
                 <p style="margin: 0 0 8px; color: #246b5b; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;">
-                  Campus account verification
+                  ${emailCategory}
                 </p>
                 <h1 style="margin: 0 0 12px; font-size: 26px; line-height: 1.3; color: #172b27;">
-                  Verify your email
+                  ${emailHeading}
                 </h1>
                 <p style="margin: 0 0 24px; color: #64736f; font-size: 15px; line-height: 1.6;">
-                  Enter this one-time code on the FixFlow registration page to continue creating your account.
+                  ${emailDescription}
                 </p>
 
                 <table role="presentation" cellspacing="0" cellpadding="0" style="width: 100%; border-radius: 12px; background-color: #f1f7f4;">

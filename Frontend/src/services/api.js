@@ -165,7 +165,38 @@ export async function verifyUserRequest({ id, type }) {
   return data
 }
 
-export async function verifyEmailRequest({ otp, id, type }) {
+
+export async function requestPasswordResetCode({ id, type }) {
+  let response
+
+  try {
+    response = await fetch('/api/auth/verify-user-for-password', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ id, type }),
+    })
+  } catch {
+    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+  }
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Could not send a password reset code.')
+  }
+
+  return data
+}
+
+export async function verifyEmailRequest({
+  otp,
+  id,
+  type,
+  purpose = 'registration',
+}) {
   let response
 
   try {
@@ -175,7 +206,7 @@ export async function verifyEmailRequest({ otp, id, type }) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ otp, id, type }),
+      body: JSON.stringify({ otp, id, type, purpose }),
     })
   } catch {
     throw new Error('Could not reach FixFlow. Check that the backend is running.')
@@ -185,6 +216,32 @@ export async function verifyEmailRequest({ otp, id, type }) {
 
   if (!response.ok) {
     throw new Error(data.message || 'Could not verify this code.')
+  }
+
+  return data
+}
+
+
+export async function resetPasswordRequest({ password, id, type }) {
+  let response
+
+  try {
+    response = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ password, id, type }),
+    })
+  } catch {
+    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+  }
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Could not reset your password.')
   }
 
   return data

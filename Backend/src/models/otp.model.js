@@ -11,6 +11,12 @@ const otpSchema = new mongoose.Schema(
       required: [true, "User type is required"],
       enum: ["student", "staff", "admin"],
     },
+    purpose: {
+      type: String,
+      enum: ["registration", "password-reset"],
+      default: "registration",
+      required: true,
+    },
     email: {
       type: String,
       required: [true, "Email is required"],

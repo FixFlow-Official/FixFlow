@@ -43,22 +43,22 @@ async function verifyUserAndSendEmail(req, res) {
   }
 
   const previousOtp = await otpModel.findOne({
-  userId: String(id),
-  userType: type,
-});
+    userId: String(id),
+    userType: type,
+  });
 
-if (previousOtp?.updatedAt) {
-  const secondsLeft = Math.ceil(
-    (60_000 - (Date.now() - previousOtp.updatedAt.getTime())) / 1000,
-  );
+  if (previousOtp?.updatedAt) {
+    const secondsLeft = Math.ceil(
+      (60_000 - (Date.now() - previousOtp.updatedAt.getTime())) / 1000,
+    );
 
-  if (secondsLeft > 0) {
-    return res.status(429).json({
-      message: `Please wait ${secondsLeft} seconds before requesting another code.`,
-      retryAfterSeconds: secondsLeft,
-    });
+    if (secondsLeft > 0) {
+      return res.status(429).json({
+        message: `Please wait ${secondsLeft} seconds before requesting another code.`,
+        retryAfterSeconds: secondsLeft,
+      });
+    }
   }
-}
 
   const otp = getOtp();
   const html = getHtml(otp);
@@ -111,7 +111,7 @@ if (previousOtp?.updatedAt) {
  */
 
 async function verifyEmail(req, res) {
-  const { otp, id, type } = req.body;
+  const { otp, id, type, purpose = "registration" } = req.body;
 
   const userData = req.userData;
 
@@ -125,7 +125,11 @@ async function verifyEmail(req, res) {
     });
   }
 
-  const otpDoc = await otpModel.findOne({ userId: id, userType: type });
+  const otpDoc = await otpModel.findOne({
+    userId: id,
+    userType: type,
+    purpose,
+  });
 
   if (!otpDoc || otpDoc.expiresAt <= new Date()) {
     return res.status(401).json({
@@ -145,6 +149,7 @@ async function verifyEmail(req, res) {
     {
       id: String(id),
       type,
+      purpose,
     },
     config.JWT_SECRET,
     {
@@ -175,7 +180,6 @@ async function verifyEmail(req, res) {
 
 async function createUser(req, res) {
   const { password, type } = req.body;
-  
 
   const token = req.cookies.token;
 
@@ -187,9 +191,9 @@ async function createUser(req, res) {
 
   try {
     const decoded = jwt.verify(token, config.JWT_SECRET);
-    if (decoded.type !== type) {
-  return res.status(401).json({ message: "Unauthorized" });
-}
+    if (decoded.type !== type || decoded.purpose !== "registration") {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
     const model = req.model;
     const userData = req.userData;
@@ -617,8 +621,37 @@ async function verifyUser(req, res) {
     });
   }
 
+  const existingAccount = await req.model.findOne({
+    [idField]: id,
+  });
+
+  if (!existingAccount) {
+    return res.status(404).json({
+      message: "No account is registered for this campus ID.",
+    });
+  }
+
+  const previousOtp = await otpModel.findOne({
+    userId: String(id),
+    userType: type,
+    purpose: "password-reset",
+  });
+
+  if (previousOtp?.updatedAt) {
+    const secondsLeft = Math.ceil(
+      (60_000 - (Date.now() - previousOtp.updatedAt.getTime())) / 1000,
+    );
+
+    if (secondsLeft > 0) {
+      return res.status(429).json({
+        message: `Please wait ${secondsLeft} seconds before requesting another code.`,
+        retryAfterSeconds: secondsLeft,
+      });
+    }
+  }
+
   const otp = getOtp();
-  const html = getHtml(otp);
+  const html = getHtml(otp, "password-reset");
 
   const otpHash = await bcrypt.hash(String(otp), 10);
 
@@ -626,10 +659,12 @@ async function verifyUser(req, res) {
     {
       userId: id,
       userType: type,
+      purpose: "password-reset",
     },
     {
       userId: id,
       userType: type,
+      purpose: "password-reset",
       email: userFound.email,
       otpHash: otpHash,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
@@ -641,12 +676,24 @@ async function verifyUser(req, res) {
     },
   );
 
-  await sendEmail(
-    userFound.email,
-    "OTP Verification",
-    `Your OTP is ${otp}`,
-    html,
-  );
+  try {
+    await sendEmail(
+      userFound.email,
+      "Password reset code",
+      `Your password reset code is ${otp}`,
+      html,
+    );
+  } catch {
+    await otpModel.deleteOne({
+      userId: String(id),
+      userType: type,
+      purpose: "password-reset",
+    });
+
+    return res.status(500).json({
+      message: "Could not send the password reset email. Please try again.",
+    });
+  }
 
   res.status(200).json({
     message: "Verification OTP has been sent to your registered email",
@@ -672,14 +719,24 @@ async function forgotPasswordChange(req, res) {
   try {
     const decoded = jwt.verify(token, config.JWT_SECRET);
 
-    const { password, id } = req.body;
+    const { password, id, type } = req.body;
+
+    if (
+      String(decoded.id) !== String(id) ||
+      decoded.type !== type ||
+      decoded.purpose !== "password-reset"
+    ) {
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
+    }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
     const model = req.model;
     const idField = req.idField;
 
-    const user = await model.findOne({ [idField]: id });
+    const user = await model.findOne({ [idField]: decoded.id });
 
     if (!user) {
       return res.status(401).json({
@@ -688,8 +745,19 @@ async function forgotPasswordChange(req, res) {
     }
 
     await model.findOneAndUpdate(
-      { [idField]: id },
+      { [idField]: decoded.id },
       { password: passwordHash },
+    );
+
+    await sessionModel.updateMany(
+      {
+        user: user._id,
+        userRef: type,
+        revoked: false,
+      },
+      {
+        revoked: true,
+      },
     );
 
     res.clearCookie("token");

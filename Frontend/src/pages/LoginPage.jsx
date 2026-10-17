@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { loginRequest } from "../services/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import RoleSelect from "../components/RoleSelect.jsx";
@@ -18,6 +18,7 @@ export default function LoginPage() {
   });
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { setUser, setAccessToken } = useAuth();
   const [busy, setBusy] = useState(false);
 
@@ -109,6 +110,15 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {location.state?.passwordResetSuccess && (
+          <p
+            role="status"
+            className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800"
+          >
+            Password reset successfully. Sign in with your new password.
+          </p>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block space-y-1.5">
             <span className="text-sm font-semibold">Account type</span>
@@ -148,6 +158,15 @@ export default function LoginPage() {
               className="min-h-12 w-full rounded-xl border border-line bg-white px-3.5 text-base shadow-sm placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
             />
           </label>
+
+          <div className="flex justify-end">
+            <Link
+              to="/forgot-password"
+              className="text-sm font-semibold text-brand hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
 
           {error && (
             <div
