@@ -99,4 +99,19 @@ router.get(
   authController.tokenRecreate,
 );
 
+router.post(
+  "/verify-user-for-password",
+  authMiddleWare.registerMiddleware,
+  authValidatorMiddleware.typeValidatorRule,
+  authValidatorMiddleware.idValidatorRule,
+  authController.verifyUser,
+);
+
+router.post(
+  "/forgot-password",
+  authMiddleWare.registerMiddleware,
+  authValidatorMiddleware.passwordValidatorRule,
+  authController.forgotPasswordChange,
+);
+
 module.exports = router;

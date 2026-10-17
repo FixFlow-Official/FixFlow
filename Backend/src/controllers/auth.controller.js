@@ -24,9 +24,7 @@ async function verifyUserAndSendEmail(req, res) {
 
   const idField = req.idField;
 
-  const userFound = userData.find(
-  (s) => String(s[idField]) === String(id)
-);
+  const userFound = userData.find((s) => String(s[idField]) === String(id));
 
   if (!userFound) {
     return res.status(401).json({
@@ -95,9 +93,7 @@ async function verifyEmail(req, res) {
 
   const idField = req.idField;
 
-  const userFound = userData.find(
-  (s) => String(s[idField]) === String(id)
-);
+  const userFound = userData.find((s) => String(s[idField]) === String(id));
 
   if (!userFound) {
     return res.status(401).json({
@@ -171,8 +167,8 @@ async function createUser(req, res) {
     const idField = req.idField;
 
     const userFound = userData.find(
-  (e) => String(e[idField]) === String(decoded.id)
-);
+      (e) => String(e[idField]) === String(decoded.id),
+    );
 
     const depField = {
       student: "course",
@@ -570,6 +566,102 @@ async function tokenRecreate(req, res) {
   }
 }
 
+async function verifyUser(req, res) {
+  const { id, type } = req.body;
+
+  const userData = req.userData;
+
+  const idField = req.idField;
+
+  const userFound = userData.find((s) => String(s[idField]) === String(id));
+
+  if (!userFound) {
+    return res.status(401).json({
+      message: "Unauthorized",
+    });
+  }
+
+  const otp = getOtp();
+  const html = getHtml(otp);
+
+  const otpHash = await bcrypt.hash(String(otp), 10);
+
+  await otpModel.findOneAndUpdate(
+    {
+      userId: id,
+      userType: type,
+    },
+    {
+      userId: id,
+      userType: type,
+      email: userFound.email,
+      otpHash: otpHash,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    },
+    {
+      upsert: true,
+      new: true,
+      runValidators: true,
+    },
+  );
+
+  await sendEmail(
+    userFound.email,
+    "OTP Verification",
+    `Your OTP is ${otp}`,
+    html,
+  );
+
+  res.status(200).json({
+    message: "Verification OTP has been sent to your registered email",
+  });
+}
+
+async function forgotPasswordChange(req, res) {
+  const token = req.cookies.token;
+
+  if (!token) {
+    return res.status(401).json({
+      message: "Unauthorized",
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, config.JWT_SECRET);
+
+    const { password, id } = req.body;
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const model = req.model;
+    const idField = req.idField;
+
+    const user = await model.findOne({ [idField]: id });
+
+    if (!user) {
+      return res.status(401).json({
+        message: "User not found",
+      });
+    }
+
+    await model.findOneAndUpdate(
+      { [idField]: id },
+      { password: passwordHash },
+    );
+
+    res.clearCookie("token");
+
+    res.status(200).json({
+      message: "Password changed successfully",
+    });
+  } catch (err) {
+    return res.status(401).json({
+      message: "Unauthorized",
+      error: err.message,
+    });
+  }
+}
+
 module.exports = {
   verifyUserAndSendEmail,
   verifyEmail,
@@ -579,4 +671,6 @@ module.exports = {
   logout,
   logoutAll,
   tokenRecreate,
+  verifyUser,
+  forgotPasswordChange,
 };
