@@ -42,6 +42,24 @@ async function verifyUserAndSendEmail(req, res) {
     });
   }
 
+  const previousOtp = await otpModel.findOne({
+  userId: String(id),
+  userType: type,
+});
+
+if (previousOtp?.updatedAt) {
+  const secondsLeft = Math.ceil(
+    (60_000 - (Date.now() - previousOtp.updatedAt.getTime())) / 1000,
+  );
+
+  if (secondsLeft > 0) {
+    return res.status(429).json({
+      message: `Please wait ${secondsLeft} seconds before requesting another code.`,
+      retryAfterSeconds: secondsLeft,
+    });
+  }
+}
+
   const otp = getOtp();
   const html = getHtml(otp);
 
