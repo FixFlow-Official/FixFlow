@@ -25,39 +25,75 @@ async function createComplaint(req, res) {
   try {
     const decoded = jwt.verify(accessToken, config.JWT_SECRET);
 
-    const userModels = {
-        student: studentModel,
-        staff: staffModel,
-        admin: adminModel,
-      };
-
-    const model = userModels[decoded.role];
-
-    const user = await model.findById(decoded.id);
-
-    if (!user) {
-      return res.status(401).json({
-        message: "User not found",
+    // Complaints can only be submitted by students.
+    if (decoded.role !== "student") {
+      return res.status(403).json({
+        message: "Only students can submit complaints.",
       });
     }
 
-    const complaintPicture = req.file;
-    const { title, description } = req.body;
+    const user = await studentModel.findById(decoded.id);
 
-    const result = await uploadFile(complaintPicture.buffer, title);
+    if (!user) {
+      return res.status(401).json({
+        message: "User not found.",
+      });
+    }
 
-    if (!result) {
+    const {
+      title,
+      description,
+      category,
+      building,
+      room = "",
+    } = req.body;
+
+    const allowedCategories = [
+      "Electrical",
+      "Plumbing",
+      "Cleaning",
+      "Internet",
+      "Furniture",
+      "Other",
+    ];
+
+    if (!title?.trim() || !description?.trim() || !building?.trim()) {
+      return res.status(400).json({
+        message: "Title, description, and building are required.",
+      });
+    }
+
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({
+        message: "Choose a valid complaint category.",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        message: "Attach a photo as proof of the complaint.",
+      });
+    }
+
+    const result = await uploadFile(req.file.buffer, title.trim());
+
+    if (!result?.url) {
       return res.status(500).json({
-        message: "something went wrong",
+        message: "Could not upload the complaint photo. Please try again.",
       });
     }
 
     const complaint = await complaintModel.create({
       user: user._id,
-      userRef:user.role,
+      userRef: user.role,
       complaintPictureUrl: result.url,
-      complaintTitle: title,
-      complaintDescription: description,
+      complaintTitle: title.trim(),
+      complaintDescription: description.trim(),
+      category,
+      location: {
+        building: building.trim(),
+        room: room.trim(),
+      },
     });
 
     return res.status(201).json({

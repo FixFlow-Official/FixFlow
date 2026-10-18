@@ -1,5 +1,17 @@
 const mongoose = require("mongoose");
 
+const complaintStatuses = [
+  "Submitted",
+  "Under_Review",
+  "Assigned",
+  "In_Progress",
+  "On_Hold",
+  "Resolved",
+  "Rejected",
+  "Closed",
+  "Withdrawn",
+];
+
 const complaintSchema = new mongoose.Schema(
   {
     user: {
@@ -24,27 +36,104 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       required: [true, "Complaint Description is required"],
     },
-    status: {
+
+    category: {
       type: String,
       enum: [
-        "Submitted",
-        "Under_Review",
-        "In_Progress",
-        "On_Hold",
-        "Rejected",
-        "Resolved",
-        "Closed",
+        "Electrical",
+        "Plumbing",
+        "Cleaning",
+        "Internet",
+        "Furniture",
+        "Other",
       ],
-      default:"Submitted"
+      required: [true, "Complaint category is required"],
     },
-    rejectedReason:{
-        type:String,
-        default:null
+    location: {
+      building: {
+        type: String,
+        required: [true, "Building is required"],
+        trim: true,
+      },
+      room: {
+        type: String,
+        trim: true,
+        default: "",
+      },
     },
-    onHoldReason:{
-        type:String,
-        default:null
-    }
+    status: {
+      type: String,
+      enum: complaintStatuses,
+      default: "Submitted",
+    },
+    assignedDepartment: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    assignedStaff: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "staff",
+      default: null,
+    },
+    statusHistory: [
+      {
+        status: {
+          type: String,
+          enum: complaintStatuses,
+          required: true,
+        },
+        note: {
+          type: String,
+          trim: true,
+          default: "",
+        },
+        changedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          default: null,
+        },
+        changedByRole: {
+          type: String,
+          enum: ["student", "staff", "admin"],
+          default: null,
+        },
+        changedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    comments: [
+      {
+        author: {
+          type: mongoose.Schema.Types.ObjectId,
+          required: true,
+        },
+        authorRole: {
+          type: String,
+          enum: ["student", "staff", "admin"],
+          required: true,
+        },
+        message: {
+          type: String,
+          trim: true,
+          required: true,
+          maxlength: 1000,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    rejectedReason: {
+      type: String,
+      default: null,
+    },
+    onHoldReason: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,

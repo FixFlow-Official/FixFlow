@@ -379,12 +379,15 @@ export async function getComplaintsRequest(accessToken) {
 }
 
 export async function createComplaintRequest(
-  { title, description, image },
+  { title, description, category, building, room, image },
   accessToken,
 ) {
   const formData = new FormData();
   formData.append("title", title);
   formData.append("description", description);
+  formData.append("category", category);
+  formData.append("building", building);
+  formData.append("room", room);
   formData.append("complaintImage", image);
 
   return complaintRequest(
@@ -392,6 +395,44 @@ export async function createComplaintRequest(
     {
       method: "POST",
       body: formData,
+    },
+    accessToken,
+  );
+}
+
+
+
+
+export async function getUnassignedComplaintsRequest(accessToken) {
+  return complaintRequest(
+    "/api/admin/complaints/unassigned",
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function getStaffByDepartmentRequest(department, accessToken) {
+  const query = new URLSearchParams({ department });
+
+  return complaintRequest(
+    `/api/admin/staff?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function assignComplaintRequest(
+  { complaintId, staffId, department },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/assign`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ staffId, department }),
     },
     accessToken,
   );

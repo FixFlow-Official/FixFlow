@@ -11,7 +11,6 @@ import {
   Plus,
   Send,
   Upload,
-  Wrench,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
@@ -49,8 +48,12 @@ export default function DashboardPage() {
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [building, setBuilding] = useState("");
+  const [room, setRoom] = useState("");
   const [image, setImage] = useState(null);
 
   useEffect(() => {
@@ -115,12 +118,20 @@ export default function DashboardPage() {
     const form = event.currentTarget;
     const cleanTitle = title.trim();
     const cleanDescription = description.trim();
+    const cleanBuilding = building.trim();
+    const cleanRoom = room.trim();
 
     setFormError("");
     setSuccessMessage("");
 
-    if (!cleanTitle || !cleanDescription || !image) {
-      setFormError("Enter a title and description, and attach an image.");
+    if (
+      !cleanTitle ||
+      !cleanDescription ||
+      !category ||
+      !cleanBuilding ||
+      !image
+    ) {
+      setFormError("Complete the required fields and attach a photo as proof.");
       return;
     }
 
@@ -131,6 +142,9 @@ export default function DashboardPage() {
         {
           title: cleanTitle,
           description: cleanDescription,
+          category,
+          building: cleanBuilding,
+          room: cleanRoom,
           image,
         },
         accessToken,
@@ -139,6 +153,9 @@ export default function DashboardPage() {
       setSuccessMessage(result.message || "Complaint submitted successfully.");
       setTitle("");
       setDescription("");
+      setCategory("");
+      setBuilding("");
+      setRoom("");
       setImage(null);
       form.reset();
 
@@ -148,7 +165,8 @@ export default function DashboardPage() {
         setComplaintError("");
       } catch (error) {
         setComplaintError(
-          error.message || "Complaint submitted, but the list could not refresh.",
+          error.message ||
+            "Complaint submitted, but the list could not refresh.",
         );
       }
     } catch (error) {
@@ -254,10 +272,70 @@ export default function DashboardPage() {
 
             <div>
               <label
+                htmlFor="complaint-category"
+                className="mb-2 block text-sm font-semibold"
+              >
+                Category
+              </label>
+              <select
+                id="complaint-category"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                required
+                className="min-h-12 w-full rounded-xl border border-line bg-white px-3.5 text-sm text-ink shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+              >
+                <option value="">Choose a category</option>
+                <option value="Electrical">Electrical</option>
+                <option value="Plumbing">Plumbing</option>
+                <option value="Cleaning">Cleaning</option>
+                <option value="Internet">Internet</option>
+                <option value="Furniture">Furniture</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="complaint-building"
+                className="mb-2 block text-sm font-semibold"
+              >
+                Building
+              </label>
+              <input
+                id="complaint-building"
+                value={building}
+                onChange={(event) => setBuilding(event.target.value)}
+                maxLength={100}
+                required
+                placeholder="For example, Science Block"
+                className="min-h-12 w-full rounded-xl border border-line bg-white px-3.5 text-sm text-ink shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="complaint-room"
+                className="mb-2 block text-sm font-semibold"
+              >
+                Room number{" "}
+                <span className="font-normal text-muted">(optional)</span>
+              </label>
+              <input
+                id="complaint-room"
+                value={room}
+                onChange={(event) => setRoom(event.target.value)}
+                maxLength={30}
+                placeholder="For example, Room 204"
+                className="min-h-12 w-full rounded-xl border border-line bg-white px-3.5 text-sm text-ink shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+              />
+            </div>
+
+            <div>
+              <label
                 htmlFor="complaint-image"
                 className="mb-2 block text-sm font-semibold"
               >
-                Add a photo
+                Add a photo <span className="text-rose-600">(required proof)</span>
               </label>
 
               <label
@@ -405,7 +483,7 @@ export default function DashboardPage() {
                         >
                           <img
                             src={complaint.complaintPictureUrl}
-                            alt=""
+                            alt={`Proof for ${complaint.complaintTitle}`}
                             loading="lazy"
                             className="size-[76px] rounded-xl bg-canvas object-cover"
                           />
@@ -430,6 +508,16 @@ export default function DashboardPage() {
 
                         <p className="mt-2 line-clamp-3 text-sm leading-5 text-muted">
                           {complaint.complaintDescription}
+                        </p>
+
+                        <p className="mt-2 text-xs font-medium text-muted">
+                          {complaint.category || "Category not available"}
+                          {" · "}
+                          {complaint.location?.building ||
+                            "Building not available"}
+                          {complaint.location?.room
+                            ? ` · Room ${complaint.location.room}`
+                            : ""}
                         </p>
 
                         <p className="mt-3 flex items-center gap-1.5 text-xs text-muted">
