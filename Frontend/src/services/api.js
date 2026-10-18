@@ -271,3 +271,91 @@ export async function createAccountRequest({ password, type }) {
 
   return data
 }
+
+
+async function getComplaintAccessToken(accessToken) {
+  if (accessToken) {
+    return accessToken
+  }
+
+  let response
+
+  try {
+    response = await fetch('/api/auth/token-recreate', {
+      method: 'GET',
+      credentials: 'include',
+    })
+  } catch {
+    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+  }
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok || !data.accessToken) {
+    throw new Error(data.message || 'Your session has expired. Please sign in again.')
+  }
+
+  return data.accessToken
+}
+
+async function complaintRequest(url, options, accessToken) {
+  let token = await getComplaintAccessToken(accessToken)
+
+  async function sendRequest(currentToken) {
+    try {
+      return await fetch(url, {
+        ...options,
+        credentials: 'include',
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${currentToken}`,
+        },
+      })
+    } catch {
+      throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    }
+  }
+
+  let response = await sendRequest(token)
+
+  // If the access token expired, refresh it and retry once.
+  if (response.status === 401) {
+    token = await getComplaintAccessToken(null)
+    response = await sendRequest(token)
+  }
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.message || 'The complaint request failed.')
+  }
+
+  return data
+}
+
+export async function getComplaintsRequest(accessToken) {
+  return complaintRequest(
+    '/api/student/get-complaint',
+    { method: 'GET' },
+    accessToken,
+  )
+}
+
+export async function createComplaintRequest(
+  { title, description, image },
+  accessToken,
+) {
+  const formData = new FormData()
+  formData.append('title', title)
+  formData.append('description', description)
+  formData.append('complaintImage', image)
+
+  return complaintRequest(
+    '/api/student/create-complaint',
+    {
+      method: 'POST',
+      body: formData,
+    },
+    accessToken,
+  )
+}
