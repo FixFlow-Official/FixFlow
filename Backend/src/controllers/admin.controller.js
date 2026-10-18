@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const staffModel = require("../models/staff.model");
 
@@ -19,14 +20,14 @@ async function getUnassignedComplaints(req, res) {
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ complaints });
-  } catch {
+  } catch (err) {
+    console.error("getUnassignedComplaints failed:", err);
+
     return res.status(500).json({
       message: "Could not load the complaint queue.",
     });
   }
 }
-
-
 
 async function getStaffByDepartment(req, res) {
   if (req.auth?.role !== "admin") {
@@ -50,14 +51,14 @@ async function getStaffByDepartment(req, res) {
       .sort({ username: 1 });
 
     return res.status(200).json({ staff });
-  } catch {
+  } catch (err) {
+    console.error("getStaffByDepartment failed:", err);
+
     return res.status(500).json({
       message: "Could not load staff for this department.",
     });
   }
 }
-
-
 
 async function assignComplaint(req, res) {
   if (req.auth?.role !== "admin") {
@@ -69,7 +70,7 @@ async function assignComplaint(req, res) {
   const { complaintId } = req.params;
   const { staffId, department } = req.body;
 
-  if (!require("mongoose").isValidObjectId(complaintId)) {
+  if (!mongoose.isValidObjectId(complaintId)) {
     return res.status(400).json({
       message: "Invalid complaint ID.",
     });
@@ -124,13 +125,14 @@ async function assignComplaint(req, res) {
       message: "Complaint assigned successfully.",
       complaint,
     });
-  } catch {
+  } catch (err) {
+    console.error("assignComplaint failed:", err);
+
     return res.status(500).json({
       message: "Could not assign the complaint.",
     });
   }
 }
-
 
 module.exports = {
   getUnassignedComplaints,

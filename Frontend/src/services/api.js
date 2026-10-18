@@ -437,3 +437,29 @@ export async function assignComplaintRequest(
     accessToken,
   );
 }
+
+
+export async function getAssignedComplaintsRequest(accessToken) {
+  return complaintRequest(
+    "/api/staff/assigned-complaints",
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function updateComplaintStatusRequest(
+  { complaintId, status, note = "" },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/staff/complaints/${encodeURIComponent(complaintId)}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status, note }),
+    },
+    accessToken,
+  );
+}
