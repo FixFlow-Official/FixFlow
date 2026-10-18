@@ -2,6 +2,10 @@ const express = require("express");
 const authController = require("../controllers/auth.controller");
 const authMiddleWare = require("../middlewares/auth.middleware");
 const authValidatorMiddleware = require("../middlewares/validator.middleware");
+const {
+  otpRequestLimiter,
+  otpVerifyLimiter,
+} = require("../middlewares/otpRateLimit.middleware");
 
 const router = express.Router();
 
@@ -13,6 +17,7 @@ const router = express.Router();
 
 router.post(
   "/verify-user",
+  otpRequestLimiter,
   authMiddleWare.registerMiddleware,
   authValidatorMiddleware.typeValidatorRule,
   authValidatorMiddleware.idValidatorRule,
@@ -27,15 +32,17 @@ router.post(
 
 router.post(
   "/verify-email",
+  otpVerifyLimiter,
   authMiddleWare.registerMiddleware,
   authValidatorMiddleware.typeValidatorRule,
+  authValidatorMiddleware.otpPurposeValidatorRule,
   authValidatorMiddleware.otpValidatorRule,
   authController.verifyEmail,
 );
 
 /**
  * @route api/auth/create-user
- * @description create user after successfull user verification
+ * @description create user after successful user verification
  * @access public
  */
 
@@ -49,7 +56,7 @@ router.post(
 
 /**
  * @route api/auth/login
- * @description login user by email,password
+ * @description login user by email and password
  * @access public
  */
 
@@ -107,17 +114,19 @@ router.get(
 
 router.post(
   "/verify-user-for-password",
+  otpRequestLimiter,
   authMiddleWare.registerMiddleware,
   authValidatorMiddleware.typeValidatorRule,
   authValidatorMiddleware.idValidatorRule,
   authController.verifyUser,
 );
 
-// use api/auth/verify-email route after verify-user-for-password and then proceed to api/auth/forgot-password
+// Use /api/auth/verify-email after /verify-user-for-password,
+// then continue to /api/auth/forgot-password.
 
 /**
  * @route api/auth/forgot-password
- * @description Change the previous password
+ * @description change the previous password
  * @access public
  */
 

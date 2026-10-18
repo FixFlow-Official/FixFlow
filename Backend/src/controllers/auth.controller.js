@@ -43,6 +43,7 @@ async function verifyUserAndSendEmail(req, res) {
   const previousOtp = await otpModel.findOne({
     userId: String(id),
     userType: type,
+    purpose: "registration",
   });
 
   if (previousOtp?.updatedAt) {
@@ -66,10 +67,12 @@ async function verifyUserAndSendEmail(req, res) {
     {
       userId: id,
       userType: type,
+      purpose: "registration",
     },
     {
       userId: id,
       userType: type,
+      purpose: "registration",
       email: userFound.email,
       otpHash,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
@@ -89,6 +92,12 @@ async function verifyUserAndSendEmail(req, res) {
       html,
     );
   } catch {
+    await otpModel.deleteOne({
+      userId: String(id),
+      userType: type,
+      purpose: "registration",
+    });
+
     return res.status(500).json({
       message: "Could not send the verification email. Please try again.",
     });
@@ -133,9 +142,27 @@ async function verifyEmail(req, res) {
     });
   }
 
+  if (otpDoc.attempts >= 5) {
+    await otpModel.findByIdAndDelete(otpDoc._id);
+    return res.status(429).json({
+      message: "Too many incorrect attempts. Request a new code.",
+    });
+  }
+
   const isOtpValid = await bcrypt.compare(String(otp), otpDoc.otpHash);
 
   if (!isOtpValid) {
+    otpDoc.attempts += 1;
+
+    if (otpDoc.attempts >= 5) {
+      await otpModel.findByIdAndDelete(otpDoc._id);
+      return res.status(429).json({
+        message: "Too many incorrect attempts. Request a new code.",
+      });
+    }
+
+    await otpDoc.save();
+
     return res.status(401).json({
       message: "Invalid OTP",
     });
@@ -611,11 +638,13 @@ async function verifyUser(req, res) {
   const userData = req.userData;
   const idField = req.idField;
 
-  const userFound = userData.find((s) => String(s[idField]) === String(id));
+  const userFound = userData.find(
+    (student) => String(student[idField]) === String(id),
+  );
 
   if (!userFound) {
-    return res.status(401).json({
-      message: "Unauthorized",
+    return res.status(404).json({
+      message: "No account found for that campus ID.",
     });
   }
 
@@ -625,7 +654,7 @@ async function verifyUser(req, res) {
 
   if (!existingAccount) {
     return res.status(404).json({
-      message: "No account is registered for this campus ID.",
+      message: "No account found for that campus ID.",
     });
   }
 
@@ -654,17 +683,18 @@ async function verifyUser(req, res) {
 
   await otpModel.findOneAndUpdate(
     {
-      userId: id,
+      userId: String(id),
       userType: type,
       purpose: "password-reset",
     },
     {
-      userId: id,
+      userId: String(id),
       userType: type,
       purpose: "password-reset",
       email: userFound.email,
       otpHash,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      attempts: 0,
     },
     {
       upsert: true,
@@ -693,7 +723,7 @@ async function verifyUser(req, res) {
   }
 
   return res.status(200).json({
-    message: "Verification OTP has been sent to your registered email",
+    message: "A password reset code has been sent to your registered email.",
   });
 }
 

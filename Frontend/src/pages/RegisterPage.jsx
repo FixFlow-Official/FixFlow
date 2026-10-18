@@ -60,8 +60,9 @@ export default function RegisterPage() {
     } catch (error) {
       setError(error.message);
 
-      const seconds = Number(error.message.match(/(\d+)\s*seconds?/i)?.[1]);
-      if (seconds > 0) setResendCooldown(seconds);
+      if (error.retryAfterSeconds > 0) {
+        setResendCooldown(error.retryAfterSeconds);
+      }
     } finally {
       setResending(false);
     }

@@ -21,7 +21,7 @@ export default function ForgotPasswordPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (resendCooldown <= 0) return;
+    if (resendCooldown <= 0) return undefined;
 
     const timer = window.setTimeout(() => {
       setResendCooldown((seconds) => seconds - 1);
@@ -39,6 +39,10 @@ export default function ForgotPasswordPage() {
       setResendCooldown(60);
     } catch (requestError) {
       setError(requestError.message);
+
+      if (requestError.retryAfterSeconds > 0) {
+        setResendCooldown(requestError.retryAfterSeconds);
+      }
     } finally {
       setBusy(false);
     }
@@ -50,8 +54,8 @@ export default function ForgotPasswordPage() {
 
     const cleanId = id.trim();
 
-    if (!cleanId) {
-      setError("Enter your campus ID.");
+    if (step === 0 && !/^\d{10}$/.test(cleanId)) {
+      setError("Enter your 10-digit campus ID.");
       return;
     }
 
@@ -76,6 +80,7 @@ export default function ForgotPasswordPage() {
 
     try {
       if (step === 0) {
+        // The page moves to OTP only if the backend request succeeds.
         await requestPasswordResetCode({ id: cleanId, type });
         setResendCooldown(60);
         setStep(1);
@@ -116,13 +121,13 @@ export default function ForgotPasswordPage() {
           <h1 className="font-display text-2xl font-extrabold">
             Reset your password
           </h1>
+
           <p className="mt-2 text-sm leading-6 text-muted">
             {step === 0 &&
               "Enter your campus ID and account type. We’ll email a verification code to the address on file."}
             {step === 1 &&
               "Enter the 6-digit code sent to your registered email."}
-            {step === 2 &&
-              "Choose a new password for your FixFlow account."}
+            {step === 2 && "Choose a new password for your FixFlow account."}
           </p>
         </div>
 
@@ -140,8 +145,10 @@ export default function ForgotPasswordPage() {
                   value={id}
                   onChange={(event) => setId(event.target.value)}
                   autoComplete="username"
+                  inputMode="numeric"
+                  maxLength={10}
                   className="min-h-12 w-full rounded-xl border border-line px-3.5 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
-                  placeholder="Enter your campus ID"
+                  placeholder="Enter your 10-digit campus ID"
                 />
               </label>
             </>
