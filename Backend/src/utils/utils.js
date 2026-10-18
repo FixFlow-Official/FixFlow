@@ -1,5 +1,7 @@
+const { randomInt } = require("crypto");
+
 function getOtp() {
-  return Math.floor(100000 + Math.random() * 900000);
+  return randomInt(100000, 1_000_000);
 }
 
 function getHtml(otp, purpose = "registration") {

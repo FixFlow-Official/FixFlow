@@ -20,6 +20,15 @@ const otpValidatorRule = [
   validateResult,
 ];
 
+const otpPurposeValidatorRule = [
+  body("purpose")
+    .optional()
+    .isIn(["registration", "password-reset"])
+    .withMessage("Purpose must be registration or password-reset"),
+
+  validateResult,
+];
+
 const idValidatorRule = [
   body("id")
     .isNumeric()
@@ -55,4 +64,5 @@ module.exports = {
   passwordValidatorRule,
   idValidatorRule,
   otpValidatorRule,
+  otpPurposeValidatorRule,
 };

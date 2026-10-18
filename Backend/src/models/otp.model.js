@@ -25,14 +25,26 @@ const otpSchema = new mongoose.Schema(
       type: String,
       required: [true, "Otp Hash is required"],
     },
+    attempts: {
+      type: Number,
+      default: 0,
+    },
     expiresAt: {
       type: Date,
       required: true,
     },
+    
   },
   {
     timestamps: true,
   },
+);
+
+otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+otpSchema.index(
+  { userId: 1, userType: 1, purpose: 1 },
+  { unique: true },
 );
 
 const otpModel = mongoose.model("otp", otpSchema);

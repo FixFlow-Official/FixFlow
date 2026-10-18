@@ -1,273 +1,465 @@
 export async function loginRequest({ email, password, type }) {
-  let response
+  let response;
 
   try {
-    response = await fetch('/api/auth/login', {
-      method: 'POST',
-      credentials: 'include',
+    response = await fetch("/api/auth/login", {
+      method: "POST",
+      credentials: "include",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ email, password, type }),
-    })
+    });
   } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'Sign-in failed. Please try again.')
+    throw new Error(data.message || "Sign-in failed. Please try again.");
   }
 
-  return data
+  return data;
 }
 
 export async function getCurrentUserRequest() {
-  let response
+  let response;
 
   try {
-    response = await fetch('/api/auth/getMe', {
-      method: 'GET',
-      credentials: 'include',
-    })
+    response = await fetch("/api/auth/getMe", {
+      method: "GET",
+      credentials: "include",
+    });
   } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'Could not get the signed-in user.')
+    throw new Error(data.message || "Could not get the signed-in user.");
   }
 
-  return data
+  return data;
 }
 
 export async function logoutRequest(accessToken) {
-  let token = accessToken
+  let token = accessToken;
 
   if (!token) {
-    let refreshResponse
+    let refreshResponse;
 
     try {
-      refreshResponse = await fetch('/api/auth/token-recreate', {
-        method: 'GET',
-        credentials: 'include',
-      })
+      refreshResponse = await fetch("/api/auth/token-recreate", {
+        method: "GET",
+        credentials: "include",
+      });
     } catch {
-      throw new Error('Could not reach FixFlow. Check that the backend is running.')
+      throw new Error(
+        "Could not reach FixFlow. Check that the backend is running.",
+      );
     }
 
-    const refreshData = await refreshResponse.json().catch(() => ({}))
-
-    if (!refreshResponse.ok) {
-      throw new Error(refreshData.message || 'Your session has expired. Please sign in again.')
-    }
-
-    token = refreshData.accessToken
-  }
-
-  let response
-
-  try {
-    response = await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-  } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
-  }
-
-  const data = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(data.message || 'Could not sign out.')
-  }
-
-  return data
-}
-
-export async function logoutAllRequest(accessToken) {
-  let token = accessToken
-
-  if (!token) {
-    let refreshResponse
-
-    try {
-      refreshResponse = await fetch('/api/auth/token-recreate', {
-        method: 'GET',
-        credentials: 'include',
-      })
-    } catch {
-      throw new Error('Could not reach FixFlow. Check that the backend is running.')
-    }
-
-    const refreshData = await refreshResponse.json().catch(() => ({}))
+    const refreshData = await refreshResponse.json().catch(() => ({}));
 
     if (!refreshResponse.ok) {
       throw new Error(
-        refreshData.message || 'Your session has expired. Please sign in again.',
-      )
+        refreshData.message ||
+          "Your session has expired. Please sign in again.",
+      );
     }
 
-    token = refreshData.accessToken
+    token = refreshData.accessToken;
   }
 
-  let response
+  let response;
 
   try {
-    response = await fetch('/api/auth/logoutAll', {
-      method: 'POST',
-      credentials: 'include',
+    response = await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
       headers: {
         Authorization: `Bearer ${token}`,
       },
-    })
+    });
   } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'Could not sign out from all devices.')
+    throw new Error(data.message || "Could not sign out.");
   }
 
-  return data
+  return data;
+}
+
+export async function logoutAllRequest(accessToken) {
+  let token = accessToken;
+
+  if (!token) {
+    let refreshResponse;
+
+    try {
+      refreshResponse = await fetch("/api/auth/token-recreate", {
+        method: "GET",
+        credentials: "include",
+      });
+    } catch {
+      throw new Error(
+        "Could not reach FixFlow. Check that the backend is running.",
+      );
+    }
+
+    const refreshData = await refreshResponse.json().catch(() => ({}));
+
+    if (!refreshResponse.ok) {
+      throw new Error(
+        refreshData.message ||
+          "Your session has expired. Please sign in again.",
+      );
+    }
+
+    token = refreshData.accessToken;
+  }
+
+  let response;
+
+  try {
+    response = await fetch("/api/auth/logoutAll", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  } catch {
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
+  }
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.message || "Could not sign out from all devices.");
+  }
+
+  return data;
 }
 
 export async function verifyUserRequest({ id, type }) {
-  let response
+  let response;
 
   try {
-    response = await fetch('/api/auth/verify-user', {
-      method: 'POST',
-      credentials: 'include',
+    response = await fetch("/api/auth/verify-user", {
+      method: "POST",
+      credentials: "include",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ id, type }),
-    })
+    });
   } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'Could not verify this campus ID.')
+    const error = new Error(
+      data.message || "Could not verify this campus ID.",
+    );
+    error.retryAfterSeconds = data.retryAfterSeconds;
+    throw error;
   }
 
-  return data
+  return data;
 }
 
-
 export async function requestPasswordResetCode({ id, type }) {
-  let response
+  let response;
 
   try {
-    response = await fetch('/api/auth/verify-user-for-password', {
-      method: 'POST',
-      credentials: 'include',
+    response = await fetch("/api/auth/verify-user-for-password", {
+      method: "POST",
+      credentials: "include",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ id, type }),
-    })
+    });
   } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'Could not send a password reset code.')
+    const error = new Error(
+      data.message || "Could not send a password reset code.",
+    );
+    error.retryAfterSeconds = data.retryAfterSeconds;
+    throw error;
   }
 
-  return data
+  return data;
 }
 
 export async function verifyEmailRequest({
   otp,
   id,
   type,
-  purpose = 'registration',
+  purpose = "registration",
 }) {
-  let response
+  let response;
 
   try {
-    response = await fetch('/api/auth/verify-email', {
-      method: 'POST',
-      credentials: 'include',
+    response = await fetch("/api/auth/verify-email", {
+      method: "POST",
+      credentials: "include",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ otp, id, type, purpose }),
-    })
+    });
   } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'Could not verify this code.')
+    throw new Error(data.message || "Could not verify this code.");
   }
 
-  return data
+  return data;
 }
 
-
 export async function resetPasswordRequest({ password, id, type }) {
-  let response
+  let response;
 
   try {
-    response = await fetch('/api/auth/forgot-password', {
-      method: 'POST',
-      credentials: 'include',
+    response = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      credentials: "include",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ password, id, type }),
-    })
+    });
   } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'Could not reset your password.')
+    throw new Error(data.message || "Could not reset your password.");
   }
 
-  return data
+  return data;
 }
 
 export async function createAccountRequest({ password, type }) {
-  let response
+  let response;
 
   try {
-    response = await fetch('/api/auth/create-user', {
-      method: 'POST',
-      credentials: 'include',
+    response = await fetch("/api/auth/create-user", {
+      method: "POST",
+      credentials: "include",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ password, type }),
-    })
+    });
   } catch {
-    throw new Error('Could not reach FixFlow. Check that the backend is running.')
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || 'Could not create your account.')
+    throw new Error(data.message || "Could not create your account.");
   }
 
-  return data
+  return data;
+}
+
+async function getComplaintAccessToken(accessToken) {
+  if (accessToken) {
+    return accessToken;
+  }
+
+  let response;
+
+  try {
+    response = await fetch("/api/auth/token-recreate", {
+      method: "GET",
+      credentials: "include",
+    });
+  } catch {
+    throw new Error(
+      "Could not reach FixFlow. Check that the backend is running.",
+    );
+  }
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.accessToken) {
+    throw new Error(
+      data.message || "Your session has expired. Please sign in again.",
+    );
+  }
+
+  return data.accessToken;
+}
+
+async function complaintRequest(url, options, accessToken) {
+  let token = await getComplaintAccessToken(accessToken);
+
+  async function sendRequest(currentToken) {
+    try {
+      return await fetch(url, {
+        ...options,
+        credentials: "include",
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${currentToken}`,
+        },
+      });
+    } catch {
+      throw new Error(
+        "Could not reach FixFlow. Check that the backend is running.",
+      );
+    }
+  }
+
+  let response = await sendRequest(token);
+
+  // If the access token expired, refresh it and retry once.
+  if (response.status === 401) {
+    token = await getComplaintAccessToken(null);
+    response = await sendRequest(token);
+  }
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.message || "The complaint request failed.");
+  }
+
+  return data;
+}
+
+export async function getComplaintsRequest(accessToken) {
+  return complaintRequest(
+    "/api/student/get-complaint",
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function createComplaintRequest(
+  { title, description, category, building, room, image },
+  accessToken,
+) {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("description", description);
+  formData.append("category", category);
+  formData.append("building", building);
+  formData.append("room", room);
+  formData.append("complaintImage", image);
+
+  return complaintRequest(
+    "/api/student/create-complaint",
+    {
+      method: "POST",
+      body: formData,
+    },
+    accessToken,
+  );
+}
+
+
+
+
+export async function getUnassignedComplaintsRequest(accessToken) {
+  return complaintRequest(
+    "/api/admin/complaints/unassigned",
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function getStaffByDepartmentRequest(department, accessToken) {
+  const query = new URLSearchParams({ department });
+
+  return complaintRequest(
+    `/api/admin/staff?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function assignComplaintRequest(
+  { complaintId, staffId, department },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/assign`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ staffId, department }),
+    },
+    accessToken,
+  );
+}
+
+
+export async function getAssignedComplaintsRequest(accessToken) {
+  return complaintRequest(
+    "/api/staff/assigned-complaints",
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function updateComplaintStatusRequest(
+  { complaintId, status, note = "" },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/staff/complaints/${encodeURIComponent(complaintId)}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status, note }),
+    },
+    accessToken,
+  );
 }

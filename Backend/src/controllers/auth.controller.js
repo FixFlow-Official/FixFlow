@@ -21,7 +21,6 @@ async function verifyUserAndSendEmail(req, res) {
   const { id, type } = req.body;
 
   const userData = req.userData;
-
   const idField = req.idField;
 
   const userFound = userData.find((s) => String(s[idField]) === String(id));
@@ -33,7 +32,6 @@ async function verifyUserAndSendEmail(req, res) {
   }
 
   const model = req.model;
-
   const isUserAlreadyExists = await model.findOne({ [idField]: id });
 
   if (isUserAlreadyExists) {
@@ -45,6 +43,7 @@ async function verifyUserAndSendEmail(req, res) {
   const previousOtp = await otpModel.findOne({
     userId: String(id),
     userType: type,
+    purpose: "registration",
   });
 
   if (previousOtp?.updatedAt) {
@@ -62,19 +61,20 @@ async function verifyUserAndSendEmail(req, res) {
 
   const otp = getOtp();
   const html = getHtml(otp);
-
   const otpHash = await bcrypt.hash(String(otp), 10);
 
   await otpModel.findOneAndUpdate(
     {
       userId: id,
       userType: type,
+      purpose: "registration",
     },
     {
       userId: id,
       userType: type,
+      purpose: "registration",
       email: userFound.email,
-      otpHash: otpHash,
+      otpHash,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     },
     {
@@ -91,13 +91,19 @@ async function verifyUserAndSendEmail(req, res) {
       `Your OTP is ${otp}`,
       html,
     );
-  } catch (error) {
+  } catch {
+    await otpModel.deleteOne({
+      userId: String(id),
+      userType: type,
+      purpose: "registration",
+    });
+
     return res.status(500).json({
       message: "Could not send the verification email. Please try again.",
     });
   }
 
-  res.status(200).json({
+  return res.status(200).json({
     message:
       "User found successfully. Verification OTP has been sent to your registered email",
   });
@@ -114,7 +120,6 @@ async function verifyEmail(req, res) {
   const { otp, id, type, purpose = "registration" } = req.body;
 
   const userData = req.userData;
-
   const idField = req.idField;
 
   const userFound = userData.find((s) => String(s[idField]) === String(id));
@@ -137,9 +142,27 @@ async function verifyEmail(req, res) {
     });
   }
 
+  if (otpDoc.attempts >= 5) {
+    await otpModel.findByIdAndDelete(otpDoc._id);
+    return res.status(429).json({
+      message: "Too many incorrect attempts. Request a new code.",
+    });
+  }
+
   const isOtpValid = await bcrypt.compare(String(otp), otpDoc.otpHash);
 
   if (!isOtpValid) {
+    otpDoc.attempts += 1;
+
+    if (otpDoc.attempts >= 5) {
+      await otpModel.findByIdAndDelete(otpDoc._id);
+      return res.status(429).json({
+        message: "Too many incorrect attempts. Request a new code.",
+      });
+    }
+
+    await otpDoc.save();
+
     return res.status(401).json({
       message: "Invalid OTP",
     });
@@ -159,14 +182,14 @@ async function verifyEmail(req, res) {
 
   res.cookie("token", token, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 1000 * 60 * 10,
   });
 
   await otpModel.findByIdAndDelete(otpDoc._id);
 
-  res.status(200).json({
+  return res.status(200).json({
     message: "OTP verified successfully",
   });
 }
@@ -180,7 +203,6 @@ async function verifyEmail(req, res) {
 
 async function createUser(req, res) {
   const { password, type } = req.body;
-
   const token = req.cookies.token;
 
   if (!token) {
@@ -191,8 +213,11 @@ async function createUser(req, res) {
 
   try {
     const decoded = jwt.verify(token, config.JWT_SECRET);
+
     if (decoded.type !== type || decoded.purpose !== "registration") {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
     }
 
     const model = req.model;
@@ -236,7 +261,7 @@ async function createUser(req, res) {
 
     res.clearCookie("token");
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "User created successfully",
       user: {
         username: user.username,
@@ -261,7 +286,6 @@ async function createUser(req, res) {
 
 async function loginController(req, res) {
   const { email, password, type } = req.body;
-
   const model = req.model;
 
   const user = await model.findOne({ email, role: type });
@@ -315,12 +339,12 @@ async function loginController(req, res) {
 
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 1000 * 60 * 60 * 24 * 7,
   });
 
-  res.status(200).json({
+  return res.status(200).json({
     message: "User logged in successfully",
     user: {
       username: user.username,
@@ -435,7 +459,6 @@ async function logout(req, res) {
     }
 
     targetSession.revoked = true;
-
     await targetSession.save();
 
     const authHeader = req.headers.authorization;
@@ -443,7 +466,9 @@ async function logout(req, res) {
       req.accessToken || (authHeader && authHeader.split(" ")[1]);
 
     if (!accessToken) {
-      return res.status(400).json({ message: "Access token is required" });
+      return res.status(400).json({
+        message: "Access token is required",
+      });
     }
 
     const accessTokenHash = await bcrypt.hash(accessToken, 10);
@@ -451,13 +476,13 @@ async function logout(req, res) {
     await blackListTokenModel.create({
       user: decoded.id || decoded._id,
       userRef: decoded.role,
-      accessTokenHash: accessTokenHash,
+      accessTokenHash,
       expiresAt: new Date(decoded.exp * 1000),
     });
 
     res.clearCookie("refreshToken");
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "User logged out successfully",
     });
   } catch (err) {
@@ -490,7 +515,9 @@ async function logoutAll(req, res) {
       req.accessToken || (authHeader && authHeader.split(" ")[1]);
 
     if (!accessToken) {
-      return res.status(400).json({ message: "Access token is required" });
+      return res.status(400).json({
+        message: "Access token is required",
+      });
     }
 
     const accessTokenHash = await bcrypt.hash(accessToken, 10);
@@ -498,13 +525,13 @@ async function logoutAll(req, res) {
     await blackListTokenModel.create({
       user: decoded.id || decoded._id,
       userRef: decoded.role,
-      accessTokenHash: accessTokenHash,
+      accessTokenHash,
       expiresAt: new Date(decoded.exp * 1000),
     });
 
     res.clearCookie("refreshToken");
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "User logged out from all devices successfully",
     });
   } catch (err) {
@@ -582,12 +609,12 @@ async function tokenRecreate(req, res) {
 
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Token refreshed successfully",
       accessToken,
     });
@@ -608,16 +635,16 @@ async function tokenRecreate(req, res) {
 
 async function verifyUser(req, res) {
   const { id, type } = req.body;
-
   const userData = req.userData;
-
   const idField = req.idField;
 
-  const userFound = userData.find((s) => String(s[idField]) === String(id));
+  const userFound = userData.find(
+    (student) => String(student[idField]) === String(id),
+  );
 
   if (!userFound) {
-    return res.status(401).json({
-      message: "Unauthorized",
+    return res.status(404).json({
+      message: "No account found for that campus ID.",
     });
   }
 
@@ -627,7 +654,7 @@ async function verifyUser(req, res) {
 
   if (!existingAccount) {
     return res.status(404).json({
-      message: "No account is registered for this campus ID.",
+      message: "No account found for that campus ID.",
     });
   }
 
@@ -652,22 +679,22 @@ async function verifyUser(req, res) {
 
   const otp = getOtp();
   const html = getHtml(otp, "password-reset");
-
   const otpHash = await bcrypt.hash(String(otp), 10);
 
   await otpModel.findOneAndUpdate(
     {
-      userId: id,
+      userId: String(id),
       userType: type,
       purpose: "password-reset",
     },
     {
-      userId: id,
+      userId: String(id),
       userType: type,
       purpose: "password-reset",
       email: userFound.email,
-      otpHash: otpHash,
+      otpHash,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      attempts: 0,
     },
     {
       upsert: true,
@@ -695,8 +722,8 @@ async function verifyUser(req, res) {
     });
   }
 
-  res.status(200).json({
-    message: "Verification OTP has been sent to your registered email",
+  return res.status(200).json({
+    message: "A password reset code has been sent to your registered email.",
   });
 }
 
@@ -718,7 +745,6 @@ async function forgotPasswordChange(req, res) {
 
   try {
     const decoded = jwt.verify(token, config.JWT_SECRET);
-
     const { password, id, type } = req.body;
 
     if (
@@ -732,7 +758,6 @@ async function forgotPasswordChange(req, res) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-
     const model = req.model;
     const idField = req.idField;
 
@@ -762,7 +787,7 @@ async function forgotPasswordChange(req, res) {
 
     res.clearCookie("token");
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Password changed successfully",
     });
   } catch (err) {
