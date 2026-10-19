@@ -28,6 +28,25 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       required: [true, "ComplaintPictureUrl is required"],
     },
+    resolutionProofUrl: {
+      type: String,
+      default: null,
+    },
+    resolutionNote: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null,
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
+    resolvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "staff",
+      default: null,
+    },
     complaintTitle: {
       type: String,
       required: [true, "Complaint Title is required"],

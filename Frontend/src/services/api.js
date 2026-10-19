@@ -448,17 +448,22 @@ export async function getAssignedComplaintsRequest(accessToken) {
 }
 
 export async function updateComplaintStatusRequest(
-  { complaintId, status, note = "" },
+  { complaintId, status, note = "", resolutionProof = null },
   accessToken,
 ) {
+  const formData = new FormData();
+  formData.append("status", status);
+  formData.append("note", note);
+
+  if (resolutionProof) {
+    formData.append("resolutionProof", resolutionProof);
+  }
+
   return complaintRequest(
     `/api/staff/complaints/${encodeURIComponent(complaintId)}/status`,
     {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ status, note }),
+      body: formData,
     },
     accessToken,
   );

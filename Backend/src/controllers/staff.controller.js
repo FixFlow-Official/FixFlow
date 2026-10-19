@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
+const uploadFile = require("../services/storage.service");
 
 const staffStatuses = [
   "Under_Review",
@@ -20,6 +21,7 @@ async function getAssignedComplaints(req, res) {
       .find({
         userRef: "student",
         assignedStaff: req.auth.id,
+        status: { $ne: "Resolved" },
       })
       .populate("user", "username rollno")
       .sort({ updatedAt: -1 });
@@ -41,6 +43,7 @@ async function updateComplaintStatus(req, res) {
 
   const { complaintId } = req.params;
   const { status, note = "" } = req.body;
+  const trimmedNote = typeof note === "string" ? note.trim() : "";
 
   if (!mongoose.isValidObjectId(complaintId)) {
     return res.status(400).json({
@@ -54,9 +57,21 @@ async function updateComplaintStatus(req, res) {
     });
   }
 
-  if (status === "On_Hold" && !note.trim()) {
+  if (status === "On_Hold" && !trimmedNote) {
     return res.status(400).json({
       message: "Add a note explaining why this complaint is on hold.",
+    });
+  }
+
+  if (status === "Resolved" && !trimmedNote) {
+    return res.status(400).json({
+      message: "Add a resolution note before resolving this complaint.",
+    });
+  }
+
+  if (status === "Resolved" && !req.file) {
+    return res.status(400).json({
+      message: "Attach a photo as proof that the complaint is resolved.",
     });
   }
 
@@ -65,25 +80,50 @@ async function updateComplaintStatus(req, res) {
       _id: complaintId,
       userRef: "student",
       assignedStaff: req.auth.id,
+      status: { $ne: "Resolved" },
     });
 
     if (!complaint) {
       return res.status(404).json({
-        message: "Assigned complaint not found.",
+        message: "Active assigned complaint not found.",
       });
+    }
+
+    let resolutionProofUrl = null;
+
+    if (status === "Resolved") {
+      const uploadResult = await uploadFile(
+        req.file.buffer,
+        `resolution-${complaintId}`,
+      );
+
+      if (!uploadResult?.url) {
+        return res.status(500).json({
+          message: "Could not upload the resolution proof photo.",
+        });
+      }
+
+      resolutionProofUrl = uploadResult.url;
     }
 
     complaint.status = status;
 
     if (status === "On_Hold") {
-      complaint.onHoldReason = note.trim();
+      complaint.onHoldReason = trimmedNote;
     } else {
       complaint.onHoldReason = null;
     }
 
+    if (status === "Resolved") {
+      complaint.resolutionProofUrl = resolutionProofUrl;
+      complaint.resolutionNote = trimmedNote;
+      complaint.resolvedAt = new Date();
+      complaint.resolvedBy = req.auth.id;
+    }
+
     complaint.statusHistory.push({
       status,
-      note: note.trim(),
+      note: trimmedNote,
       changedBy: req.auth.id,
       changedByRole: "staff",
     });
