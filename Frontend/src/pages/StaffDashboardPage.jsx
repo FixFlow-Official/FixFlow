@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock3,
+  ImagePlus,
   LoaderCircle,
   RefreshCw,
   UserRound,
@@ -66,6 +67,7 @@ export default function StaffDashboardPage() {
   const [complaints, setComplaints] = useState([]);
   const [selectedStatuses, setSelectedStatuses] = useState({});
   const [notes, setNotes] = useState({});
+  const [resolutionProofs, setResolutionProofs] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState({});
@@ -104,6 +106,7 @@ export default function StaffDashboardPage() {
     const complaintId = complaint._id;
     const status = selectedStatuses[complaintId] ?? complaint.status;
     const note = notes[complaintId] ?? "";
+    const resolutionProof = resolutionProofs[complaintId] ?? null;
 
     setActionError((current) => ({ ...current, [complaintId]: "" }));
     setSuccessMessage((current) => ({ ...current, [complaintId]: "" }));
@@ -116,31 +119,66 @@ export default function StaffDashboardPage() {
       return;
     }
 
+    if (status === "Resolved" && !note.trim()) {
+      setActionError((current) => ({
+        ...current,
+        [complaintId]: "Add a resolution note before resolving this complaint.",
+      }));
+      return;
+    }
+
+    if (status === "Resolved" && !resolutionProof) {
+      setActionError((current) => ({
+        ...current,
+        [complaintId]: "Attach a photo as proof that the complaint is resolved.",
+      }));
+      return;
+    }
+
     setSavingId(complaintId);
 
     try {
       const data = await updateComplaintStatusRequest(
-        { complaintId, status, note },
+        { complaintId, status, note, resolutionProof },
         accessToken,
       );
 
-      setComplaints((current) =>
-        current.map((item) =>
-          item._id === complaintId
-            ? { ...item, ...data.complaint, user: item.user }
-            : item,
-        ),
-      );
+      if (status === "Resolved") {
+        setComplaints((current) =>
+          current.filter((item) => item._id !== complaintId),
+        );
+        setSelectedStatuses((current) => {
+          const next = { ...current };
+          delete next[complaintId];
+          return next;
+        });
+      } else {
+        setComplaints((current) =>
+          current.map((item) =>
+            item._id === complaintId
+              ? { ...item, ...data.complaint, user: item.user }
+              : item,
+          ),
+        );
 
-      setSelectedStatuses((current) => ({
-        ...current,
-        [complaintId]: data.complaint.status,
-      }));
+        setSelectedStatuses((current) => ({
+          ...current,
+          [complaintId]: data.complaint.status,
+        }));
+      }
 
       setNotes((current) => ({ ...current, [complaintId]: "" }));
+      setResolutionProofs((current) => ({
+        ...current,
+        [complaintId]: null,
+      }));
       setSuccessMessage((current) => ({
         ...current,
-        [complaintId]: data.message || "Complaint status updated.",
+        [complaintId]:
+          data.message ||
+          (status === "Resolved"
+            ? "Complaint resolved and removed from your active list."
+            : "Complaint status updated."),
       }));
     } catch (error) {
       setActionError((current) => ({
@@ -246,7 +284,7 @@ export default function StaffDashboardPage() {
                   key={complaintId}
                   className="overflow-hidden rounded-2xl border border-line bg-white shadow-sm"
                 >
-                  <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+                  <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_300px]">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span
@@ -343,10 +381,11 @@ export default function StaffDashboardPage() {
                         htmlFor={`note-${complaintId}`}
                         className="mt-4 block text-sm font-semibold"
                       >
-                        Note
-                        {selectedStatus === "On_Hold"
-                          ? " (required)"
-                          : " (optional)"}
+                        {selectedStatus === "Resolved"
+                          ? "Resolution note (required)"
+                          : selectedStatus === "On_Hold"
+                            ? "Note (required)"
+                            : "Note (optional)"}
                       </label>
 
                       <textarea
@@ -361,12 +400,57 @@ export default function StaffDashboardPage() {
                           }))
                         }
                         placeholder={
-                          selectedStatus === "On_Hold"
-                            ? "Explain why work is on hold"
-                            : "Add an update for the complaint history"
+                          selectedStatus === "Resolved"
+                            ? "Describe the work completed"
+                            : selectedStatus === "On_Hold"
+                              ? "Explain why work is on hold"
+                              : "Add an update for the complaint history"
                         }
                         className="mt-2 w-full resize-y rounded-xl border border-line bg-white px-3 py-2.5 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
                       />
+
+                      {selectedStatus === "Resolved" && (
+                        <div className="mt-4">
+                          <label
+                            htmlFor={`resolution-proof-${complaintId}`}
+                            className="block text-sm font-semibold"
+                          >
+                            Resolution photo (required)
+                          </label>
+
+                          <label
+                            htmlFor={`resolution-proof-${complaintId}`}
+                            className="mt-2 flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line bg-white p-3 transition hover:border-brand hover:bg-brand-soft/30"
+                          >
+                            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
+                              <ImagePlus size={19} />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-semibold">
+                                {resolutionProofs[complaintId]?.name ??
+                                  "Choose a resolution photo"}
+                              </span>
+                              <span className="mt-1 block text-xs text-muted">
+                                Add a photo showing the completed repair
+                              </span>
+                            </span>
+                          </label>
+
+                          <input
+                            id={`resolution-proof-${complaintId}`}
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] ?? null;
+                              setResolutionProofs((current) => ({
+                                ...current,
+                                [complaintId]: file,
+                              }));
+                            }}
+                          />
+                        </div>
+                      )}
 
                       {actionError[complaintId] && (
                         <p role="alert" className="mt-2 text-sm text-rose-700">
@@ -392,7 +476,9 @@ export default function StaffDashboardPage() {
                         {isSaving && (
                           <LoaderCircle size={16} className="animate-spin" />
                         )}
-                        Save update
+                        {selectedStatus === "Resolved"
+                          ? "Resolve complaint"
+                          : "Save update"}
                       </button>
                     </div>
                   </div>

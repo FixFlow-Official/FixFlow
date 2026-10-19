@@ -121,31 +121,33 @@ async function createComplaint(req, res) {
  * @access public
  */
 
-async function getComplaint(req,res){
+async function getComplaint(req, res) {
+  const accessToken = req.accessToken;
 
-    const accessToken = req.accessToken;
+  if (!accessToken) {
+    return res.status(401).json({
+      message: "Unauthorized",
+    });
+  }
 
-    if(!accessToken){
-        return res.status(401).json({
-            message:"Unauthorized"
-        })
-    }
+  try {
+    const decoded = jwt.verify(accessToken, config.JWT_SECRET);
 
-    try{
-        const decoded = jwt.verify(accessToken, config.JWT_SECRET);
+    const complaints = await complaintModel
+      .find({
+        user: decoded.id,
+        userRef: decoded.role,
+      })
+      .populate("resolvedBy", "username staffId department")
+      .sort({ createdAt: -1 });
 
-        const complaints = await complaintModel.find({user:decoded.id, userRef:decoded.role});
-
-        res.status(200).json({
-            complaints
-        })
-    }
-    catch(err){
-        return res.status(401).json({
-            message:"Unauthorized",
-            error:err.message
-        })
-    }
+    return res.status(200).json({ complaints });
+  } catch (err) {
+    return res.status(401).json({
+      message: "Unauthorized",
+      error: err.message,
+    });
+  }
 }
 
 module.exports = { createComplaint , getComplaint};
