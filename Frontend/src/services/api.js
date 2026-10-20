@@ -411,6 +411,14 @@ export async function getUnassignedComplaintsRequest(accessToken) {
   );
 }
 
+export async function getAssignedComplaintsRequest(accessToken) {
+  return complaintRequest(
+    "/api/admin/complaints/assigned",
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function getStaffByDepartmentRequest(department, accessToken) {
   const query = new URLSearchParams({ department });
 
@@ -438,14 +446,25 @@ export async function assignComplaintRequest(
   );
 }
 
-
-export async function getAssignedComplaintsRequest(accessToken) {
+export async function reassignComplaintRequest(
+  { complaintId, staffId, department },
+  accessToken,
+) {
   return complaintRequest(
-    "/api/staff/assigned-complaints",
-    { method: "GET" },
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/reassign`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ staffId, department }),
+    },
     accessToken,
   );
 }
+
+
+
 
 export async function updateComplaintStatusRequest(
   { complaintId, status, note = "", resolutionProof = null },

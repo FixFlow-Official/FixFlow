@@ -11,6 +11,12 @@ router.get(
 );
 
 router.get(
+  "/complaints/assigned",
+  verifyAccessToken,
+  adminController.getAssignedComplaints,
+);
+
+router.get(
   "/staff",
   verifyAccessToken,
   adminController.getStaffByDepartment,
@@ -20,6 +26,12 @@ router.patch(
   "/complaints/:complaintId/assign",
   verifyAccessToken,
   adminController.assignComplaint,
+);
+
+router.patch(
+  "/complaints/:complaintId/reassign",
+  verifyAccessToken,
+  adminController.reassignComplaint,
 );
 
 module.exports = router;
