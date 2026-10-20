@@ -28,4 +28,10 @@ router.patch(
   adminController.assignComplaint,
 );
 
+router.patch(
+  "/complaints/:complaintId/reassign",
+  verifyAccessToken,
+  adminController.reassignComplaint,
+);
+
 module.exports = router;

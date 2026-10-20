@@ -16,6 +16,7 @@ import {
   getAssignedComplaintsRequest,
   getStaffByDepartmentRequest,
   getUnassignedComplaintsRequest,
+  reassignComplaintRequest,
 } from "../services/api.js";
 
 const departments = [
@@ -33,6 +34,8 @@ const categoryDepartments = {
   Cleaning: "Housekeeping",
   Furniture: "Civil Maintenance",
 };
+
+const closedStatuses = ["Resolved", "Rejected", "Closed", "Withdrawn"];
 
 const statusStyles = {
   Submitted: "bg-sky-50 text-sky-700",
@@ -62,10 +65,23 @@ function formatStatus(status) {
   return (status || "Submitted").replaceAll("_", " ");
 }
 
-function AssignedComplaintDetails({ complaint, onClose }) {
+function AssignedComplaintDetails({
+  complaint,
+  onClose,
+  departments,
+  reassignDepartment,
+  reassignStaffId,
+  reassignStaffList,
+  loadingReassignStaff,
+  reassigning,
+  onDepartmentChange,
+  onStaffChange,
+  onReassign,
+}) {
   const status = complaint.status || "Assigned";
-  const statusClass =
-    statusStyles[status] || "bg-slate-100 text-slate-700";
+  const statusClass = statusStyles[status] || "bg-slate-100 text-slate-700";
+  const canReassign = !closedStatuses.includes(status);
+
   const history = [...(complaint.statusHistory ?? [])].sort(
     (a, b) => new Date(a.changedAt) - new Date(b.changedAt),
   );
@@ -143,9 +159,7 @@ function AssignedComplaintDetails({ complaint, onClose }) {
               <dt className="text-muted">Student</dt>
               <dd className="mt-1 break-words font-semibold">
                 {complaint.user?.username || "Student"}
-                {complaint.user?.rollno
-                  ? ` · ${complaint.user.rollno}`
-                  : ""}
+                {complaint.user?.rollno ? ` · ${complaint.user.rollno}` : ""}
               </dd>
             </div>
             <div className="min-w-0">
@@ -226,6 +240,86 @@ function AssignedComplaintDetails({ complaint, onClose }) {
               )}
             </section>
           )}
+
+          {canReassign && (
+            <section className="rounded-xl border border-line bg-canvas/50 p-4">
+              <h4 className="font-display font-bold">Reassign complaint</h4>
+              <p className="mt-1 text-sm text-muted">
+                Choose a department and staff member to transfer this complaint.
+              </p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="block min-w-0 space-y-1.5">
+                  <span className="text-sm font-semibold">Department</span>
+                  <select
+                    value={reassignDepartment}
+                    onChange={(event) => onDepartmentChange(event.target.value)}
+                    className="min-h-11 w-full min-w-0 rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
+                  >
+                    <option value="">Choose department</option>
+                    {departments.map((department) => (
+                      <option key={department} value={department}>
+                        {department}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block min-w-0 space-y-1.5">
+                  <span className="text-sm font-semibold">Staff member</span>
+                  <select
+                    value={reassignStaffId}
+                    onChange={(event) => onStaffChange(event.target.value)}
+                    disabled={!reassignDepartment || loadingReassignStaff}
+                    className="min-h-11 w-full min-w-0 rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-50"
+                  >
+                    <option value="">
+                      {loadingReassignStaff
+                        ? "Loading staff…"
+                        : !reassignDepartment
+                          ? "Choose a department first"
+                          : reassignStaffList.length === 0
+                            ? "No staff in this department"
+                            : "Choose staff member"}
+                    </option>
+                    {reassignStaffList.map((staff) => (
+                      <option
+                        key={staff._id || staff.staffId}
+                        value={staff.staffId}
+                      >
+                        {staff.username} · ID {staff.staffId}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onClick={onReassign}
+                disabled={
+                  reassigning ||
+                  loadingReassignStaff ||
+                  !reassignDepartment ||
+                  !reassignStaffId
+                }
+                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                {reassigning ? (
+                  <LoaderCircle size={16} className="animate-spin" />
+                ) : (
+                  <UserCheck size={16} />
+                )}
+                {reassigning ? "Reassigning…" : "Reassign complaint"}
+              </button>
+            </section>
+          )}
+
+          {closedStatuses.includes(status) && (
+            <p className="rounded-xl bg-canvas px-4 py-3 text-sm text-muted">
+              This complaint is closed and can no longer be reassigned.
+            </p>
+          )}
         </div>
 
         <aside className="min-w-0 rounded-xl border border-line bg-canvas/50 p-4">
@@ -285,6 +379,12 @@ export default function AdminDashboardPage() {
   const [assignedComplaints, setAssignedComplaints] = useState([]);
   const [assignedLoading, setAssignedLoading] = useState(true);
   const [assignedError, setAssignedError] = useState("");
+
+  const [reassignDepartment, setReassignDepartment] = useState("");
+  const [reassignStaffId, setReassignStaffId] = useState("");
+  const [reassignStaffList, setReassignStaffList] = useState([]);
+  const [loadingReassignStaff, setLoadingReassignStaff] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
 
   const selectedAssignedComplaint = assignedComplaints.find(
     (complaint) => complaint._id === selectedAssignedComplaintId,
@@ -443,6 +543,87 @@ export default function AdminDashboardPage() {
       setError(requestError.message || "Could not assign this complaint.");
     } finally {
       setAssigningId("");
+    }
+  }
+
+  async function openAssignedComplaint(complaint) {
+    setSelectedAssignedComplaintId(complaint._id);
+    setReassignDepartment(complaint.assignedDepartment || "");
+    setReassignStaffId(String(complaint.assignedStaff?.staffId || ""));
+    setReassignStaffList([]);
+    setError("");
+    setSuccessMessage("");
+
+    if (!complaint.assignedDepartment) return;
+
+    setLoadingReassignStaff(true);
+
+    try {
+      const data = await getStaffByDepartmentRequest(
+        complaint.assignedDepartment,
+        accessToken,
+      );
+      setReassignStaffList(data.staff ?? []);
+    } catch (requestError) {
+      setError(
+        requestError.message || "Could not load staff for this department.",
+      );
+    } finally {
+      setLoadingReassignStaff(false);
+    }
+  }
+
+  async function handleReassignDepartmentChange(department) {
+    setReassignDepartment(department);
+    setReassignStaffId("");
+    setReassignStaffList([]);
+    setError("");
+
+    if (!department) return;
+
+    setLoadingReassignStaff(true);
+
+    try {
+      const data = await getStaffByDepartmentRequest(department, accessToken);
+      setReassignStaffList(data.staff ?? []);
+    } catch (requestError) {
+      setError(
+        requestError.message || "Could not load staff for this department.",
+      );
+    } finally {
+      setLoadingReassignStaff(false);
+    }
+  }
+
+  async function handleReassign() {
+    if (!selectedAssignedComplaint) return;
+
+    if (!reassignDepartment || !reassignStaffId) {
+      setError("Choose a department and staff member first.");
+      return;
+    }
+
+    setError("");
+    setSuccessMessage("");
+    setReassigning(true);
+
+    try {
+      const result = await reassignComplaintRequest(
+        {
+          complaintId: selectedAssignedComplaint._id,
+          department: reassignDepartment,
+          staffId: Number(reassignStaffId),
+        },
+        accessToken,
+      );
+
+      const data = await getAssignedComplaintsRequest(accessToken);
+      setAssignedComplaints(data.complaints ?? []);
+      setSuccessMessage(result.message || "Complaint reassigned successfully.");
+    } catch (requestError) {
+      setError(requestError.message || "Could not reassign the complaint.");
+    } finally {
+      setReassigning(false);
     }
   }
 
@@ -730,7 +911,16 @@ export default function AdminDashboardPage() {
           ) : selectedAssignedComplaint ? (
             <AssignedComplaintDetails
               complaint={selectedAssignedComplaint}
+              departments={departments}
+              reassignDepartment={reassignDepartment}
+              reassignStaffId={reassignStaffId}
+              reassignStaffList={reassignStaffList}
+              loadingReassignStaff={loadingReassignStaff}
+              reassigning={reassigning}
               onClose={() => setSelectedAssignedComplaintId(null)}
+              onDepartmentChange={handleReassignDepartmentChange}
+              onStaffChange={setReassignStaffId}
+              onReassign={handleReassign}
             />
           ) : assignedComplaints.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center">
@@ -752,9 +942,7 @@ export default function AdminDashboardPage() {
                   <button
                     key={complaint._id}
                     type="button"
-                    onClick={() =>
-                      setSelectedAssignedComplaintId(complaint._id)
-                    }
+                    onClick={() => openAssignedComplaint(complaint)}
                     className="w-full rounded-2xl border border-line bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-brand/10 sm:p-5"
                   >
                     <span className="flex min-w-0 flex-col gap-4 sm:flex-row">

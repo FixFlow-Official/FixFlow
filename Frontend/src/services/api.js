@@ -446,6 +446,23 @@ export async function assignComplaintRequest(
   );
 }
 
+export async function reassignComplaintRequest(
+  { complaintId, staffId, department },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/reassign`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ staffId, department }),
+    },
+    accessToken,
+  );
+}
+
 
 
 
