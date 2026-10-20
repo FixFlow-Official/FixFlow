@@ -80,7 +80,7 @@ async function updateComplaintStatus(req, res) {
       _id: complaintId,
       userRef: "student",
       assignedStaff: req.auth.id,
-      status: { $ne: "Resolved" },
+      
     });
 
     if (!complaint) {
