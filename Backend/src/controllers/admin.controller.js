@@ -60,6 +60,34 @@ async function getStaffByDepartment(req, res) {
   }
 }
 
+async function getAssignedComplaints(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({
+      message: "Only administrators can view assigned complaints.",
+    });
+  }
+
+  try {
+    const complaints = await complaintModel
+      .find({
+        userRef: "student",
+        assignedStaff: { $ne: null },
+      })
+      .populate("user", "username rollno email")
+      .populate("assignedStaff", "staffId username department")
+      .populate("resolvedBy", "staffId username department")
+      .sort({ updatedAt: -1 });
+
+    return res.status(200).json({ complaints });
+  } catch (err) {
+    console.error("getAssignedComplaints failed:", err);
+
+    return res.status(500).json({
+      message: "Could not load assigned complaints.",
+    });
+  }
+}
+
 async function assignComplaint(req, res) {
   if (req.auth?.role !== "admin") {
     return res.status(403).json({
@@ -137,5 +165,6 @@ async function assignComplaint(req, res) {
 module.exports = {
   getUnassignedComplaints,
   getStaffByDepartment,
+  getAssignedComplaints,
   assignComplaint,
 };

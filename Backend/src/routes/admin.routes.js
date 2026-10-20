@@ -11,6 +11,12 @@ router.get(
 );
 
 router.get(
+  "/complaints/assigned",
+  verifyAccessToken,
+  adminController.getAssignedComplaints,
+);
+
+router.get(
   "/staff",
   verifyAccessToken,
   adminController.getStaffByDepartment,
