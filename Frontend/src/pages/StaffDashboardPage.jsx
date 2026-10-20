@@ -10,6 +10,7 @@ import {
   Wrench,
 } from "lucide-react";
 import DashboardShell from "../components/DashboardShell.jsx";
+import ComplaintToolbar from "../components/ComplaintToolbar.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   getAssignedComplaintsRequest,
@@ -21,6 +22,14 @@ const staffStatuses = [
   { value: "In_Progress", label: "In progress" },
   { value: "On_Hold", label: "On hold" },
   { value: "Resolved", label: "Resolved" },
+];
+
+const staffComplaintFilters = [
+  { id: "all", label: "All" },
+  { id: "Assigned", label: "Assigned" },
+  { id: "Under_Review", label: "Under review" },
+  { id: "In_Progress", label: "In progress" },
+  { id: "On_Hold", label: "On hold" },
 ];
 
 const staffNavItems = [
@@ -65,6 +74,8 @@ function formatDate(date) {
 export default function StaffDashboardPage() {
   const { user, accessToken } = useAuth();
   const [complaints, setComplaints] = useState([]);
+  const [complaintFilter, setComplaintFilter] = useState("all");
+  const [complaintSearch, setComplaintSearch] = useState("");
   const [selectedStatuses, setSelectedStatuses] = useState({});
   const [notes, setNotes] = useState({});
   const [resolutionProofs, setResolutionProofs] = useState({});
@@ -102,6 +113,30 @@ export default function StaffDashboardPage() {
     loadComplaints();
   }, [loadComplaints]);
 
+  // Apply the selected status and search query to the active complaint list.
+  const searchTerm = complaintSearch.trim().toLowerCase();
+
+  const filteredComplaints = complaints.filter((complaint) => {
+    const matchesStatus =
+      complaintFilter === "all" || complaint.status === complaintFilter;
+
+    const searchableText = [
+      complaint.complaintTitle,
+      complaint.complaintDescription,
+      complaint.category,
+      complaint.user?.username,
+      complaint.user?.rollno,
+      complaint.location?.building,
+      complaint.location?.room,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return matchesStatus && searchableText.includes(searchTerm);
+  });
+
+  // Validate and save a staff member's status update.
   async function handleStatusUpdate(complaint) {
     const complaintId = complaint._id;
     const status = selectedStatuses[complaintId] ?? complaint.status;
@@ -197,6 +232,7 @@ export default function StaffDashboardPage() {
       navItems={staffNavItems}
     >
       <main className="w-full">
+        {/* Staff dashboard welcome panel */}
         <section className="mb-7 rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">
           <span className="inline-flex rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand-dark">
             Staff workspace
@@ -229,6 +265,7 @@ export default function StaffDashboardPage() {
           </div>
         </section>
 
+        {/* Assigned complaint count */}
         <div className="mb-4 flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand">
             <Wrench size={19} />
@@ -244,6 +281,28 @@ export default function StaffDashboardPage() {
           </div>
         </div>
 
+        {/* Shared search and status filter component */}
+        {!loading && complaints.length > 0 && (
+          <ComplaintToolbar
+            filters={staffComplaintFilters.map((filter) => ({
+              ...filter,
+              count:
+                filter.id === "all"
+                  ? complaints.length
+                  : complaints.filter(
+                      (complaint) => complaint.status === filter.id,
+                    ).length,
+            }))}
+            activeFilter={complaintFilter}
+            onFilterChange={setComplaintFilter}
+            searchValue={complaintSearch}
+            onSearchChange={setComplaintSearch}
+            searchLabel="Search assigned complaints"
+            searchPlaceholder="Search title, student, roll number, category, or location"
+          />
+        )}
+
+        {/* Load error feedback */}
         {loadError && (
           <div
             role="alert"
@@ -254,6 +313,7 @@ export default function StaffDashboardPage() {
           </div>
         )}
 
+        {/* Loading, empty, filtered-empty, and complaint list states */}
         {loading ? (
           <div className="flex min-h-48 items-center justify-center gap-3 rounded-2xl border border-line bg-white text-sm text-muted">
             <LoaderCircle size={20} className="animate-spin text-brand" />
@@ -271,9 +331,18 @@ export default function StaffDashboardPage() {
               Complaints assigned to your account will appear here.
             </p>
           </section>
+        ) : filteredComplaints.length === 0 ? (
+          <section className="rounded-2xl border border-dashed border-line bg-white px-5 py-12 text-center">
+            <h3 className="font-display text-lg font-bold">
+              No matching complaints
+            </h3>
+            <p className="mt-1 text-sm leading-6 text-muted">
+              Try another search term or status filter.
+            </p>
+          </section>
         ) : (
           <div className="space-y-5">
-            {complaints.map((complaint) => {
+            {filteredComplaints.map((complaint) => {
               const complaintId = complaint._id;
               const selectedStatus =
                 selectedStatuses[complaintId] ?? complaint.status;
@@ -351,6 +420,7 @@ export default function StaffDashboardPage() {
                       )}
                     </div>
 
+                    {/* Status, update note, and resolution proof form */}
                     <div className="rounded-2xl bg-stone-50 p-4">
                       <label
                         htmlFor={`status-${complaintId}`}

@@ -9,6 +9,7 @@ import {
   Users,
 } from "lucide-react";
 import DashboardShell from "../components/DashboardShell.jsx";
+import ComplaintToolbar from "../components/ComplaintToolbar.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import AssignedComplaintDetails from "../components/admin/complaints/AssignedComplaintDetails.jsx";
 import {
@@ -77,8 +78,13 @@ export default function AdminDashboardPage() {
 
       const searchableText = [
         complaint.complaintTitle,
+        complaint.complaintDescription,
         complaint.user?.username,
         complaint.user?.rollno,
+        complaint.category,
+        complaint.location?.building,
+        complaint.location?.room,
+        complaint.status,
       ]
         .filter(Boolean)
         .join(" ")
@@ -445,75 +451,38 @@ export default function AdminDashboardPage() {
             </div>
 
             {activeQueue === "assigned" && !selectedAssignedComplaint && (
-              <div
-                role="tablist"
-                aria-label="Filter assigned complaints"
-                className="mt-4 grid grid-cols-3 gap-2"
-              >
-                {assignedFilters.map((filter) => {
-                  const count = assignedComplaints.filter((complaint) =>
+              <ComplaintToolbar
+                filters={assignedFilters.map((filter) => ({
+                  ...filter,
+                  count: assignedComplaints.filter((complaint) =>
                     assignedFilterStatuses[filter.id].includes(
                       complaint.status || "Assigned",
                     ),
-                  ).length;
-
-                  return (
-                    <button
-                      key={filter.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={assignedFilter === filter.id}
-                      onClick={() => {
-                        setAssignedFilter(filter.id);
-                        setAssignedPage(1);
-                      }}
-                      className={`min-h-10 rounded-xl px-3 text-sm font-semibold transition ${
-                        assignedFilter === filter.id
-                          ? "bg-brand text-white"
-                          : "border border-line bg-white text-muted hover:bg-brand-soft hover:text-brand-dark"
-                      }`}
-                    >
-                      {filter.label} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {activeQueue === "assigned" && !selectedAssignedComplaint && (
-              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-                <label className="block min-w-0">
-                  <span className="sr-only">Search assigned complaints</span>
-                  <input
-                    type="search"
-                    value={assignedSearch}
-                    onChange={(event) => {
-                      setAssignedSearch(event.target.value);
-                      setAssignedPage(1);
-                    }}
-                    placeholder="Search title, student, or roll number"
-                    aria-label="Search by complaint title, student name, or roll number"
-                    className="min-h-11 w-full rounded-xl border border-line bg-white px-3.5 text-sm outline-none transition placeholder:text-muted/70 focus:border-brand focus:ring-4 focus:ring-brand/10"
-                  />
-                </label>
-
-                <label className="block min-w-0">
-                  <span className="sr-only">Sort assigned complaints</span>
-                  <select
-                    value={assignedSort}
-                    onChange={(event) => {
-                      setAssignedSort(event.target.value);
-                      setAssignedPage(1);
-                    }}
-                    aria-label="Sort assigned complaints"
-                    className="min-h-11 w-full rounded-xl border border-line bg-white px-3.5 text-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-                  >
-                    <option value="newest">Newest first</option>
-                    <option value="oldest">Oldest first</option>
-                    <option value="updated">Recently updated</option>
-                  </select>
-                </label>
-              </div>
+                  ).length,
+                }))}
+                activeFilter={assignedFilter}
+                onFilterChange={(value) => {
+                  setAssignedFilter(value);
+                  setAssignedPage(1);
+                }}
+                searchValue={assignedSearch}
+                onSearchChange={(value) => {
+                  setAssignedSearch(value);
+                  setAssignedPage(1);
+                }}
+                searchLabel="Search assigned complaints"
+                searchPlaceholder="Search title, student, roll number, category, or location"
+                sortValue={assignedSort}
+                onSortChange={(value) => {
+                  setAssignedSort(value);
+                  setAssignedPage(1);
+                }}
+                sortOptions={[
+                  { value: "newest", label: "Newest first" },
+                  { value: "oldest", label: "Oldest first" },
+                  { value: "updated", label: "Recently updated" },
+                ]}
+              />
             )}
           </div>
 
@@ -739,7 +708,7 @@ export default function AdminDashboardPage() {
               </h3>
               <p className="mt-1 text-sm text-muted">
                 {assignedSearch.trim()
-                  ? "Try a different title, student name, or roll number."
+                  ? "Try a different title, student, roll number, category, or location."
                   : `There are no complaints in the ${assignedFilter} filter.`}
               </p>
             </div>
@@ -830,7 +799,9 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setAssignedPage((page) => Math.max(1, page - 1))}
+                    onClick={() =>
+                      setAssignedPage((page) => Math.max(1, page - 1))
+                    }
                     disabled={currentAssignedPage === 1}
                     className="min-h-10 rounded-xl border border-line bg-white px-3.5 text-sm font-semibold text-ink transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
                   >

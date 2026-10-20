@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "../components/DashboardShell.jsx";
+import ComplaintToolbar from "../components/ComplaintToolbar.jsx";
 import {
   AlertCircle,
   ArrowLeft,
@@ -73,6 +74,7 @@ export default function DashboardPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [complaintSearch, setComplaintSearch] = useState("");
   const [page, setPage] = useState("create");
   const [complaintFilter, setComplaintFilter] = useState("current");
   const [selectedComplaintId, setSelectedComplaintId] = useState(null);
@@ -131,8 +133,26 @@ export default function DashboardPage() {
     (complaint) => complaint.status === "Resolved",
   );
 
-  const filteredComplaints =
+  const complaintsForSelectedFilter =
     complaintFilter === "resolved" ? resolvedComplaints : currentComplaints;
+
+  const searchTerm = complaintSearch.trim().toLowerCase();
+
+  const filteredComplaints = complaintsForSelectedFilter.filter((complaint) => {
+    const searchableText = [
+      complaint.complaintTitle,
+      complaint.complaintDescription,
+      complaint.category,
+      complaint.location?.building,
+      complaint.location?.room,
+      complaint.status,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return searchableText.includes(searchTerm);
+  });
 
   const selectedComplaint = complaints.find(
     (complaint) => complaint._id === selectedComplaintId,
@@ -848,8 +868,8 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-2 sm:flex">
-              {[
+            <ComplaintToolbar
+              filters={[
                 {
                   id: "current",
                   label: "Current",
@@ -860,31 +880,14 @@ export default function DashboardPage() {
                   label: "Resolved",
                   count: resolvedComplaints.length,
                 },
-              ].map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  onClick={() => setComplaintFilter(filter.id)}
-                  aria-pressed={complaintFilter === filter.id}
-                  className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
-                    complaintFilter === filter.id
-                      ? "bg-brand text-white"
-                      : "border border-line bg-white text-muted hover:bg-brand-soft hover:text-brand-dark"
-                  }`}
-                >
-                  {filter.label}
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-xs ${
-                      complaintFilter === filter.id
-                        ? "bg-white/20"
-                        : "bg-canvas"
-                    }`}
-                  >
-                    {filter.count}
-                  </span>
-                </button>
-              ))}
-            </div>
+              ]}
+              activeFilter={complaintFilter}
+              onFilterChange={setComplaintFilter}
+              searchValue={complaintSearch}
+              onSearchChange={setComplaintSearch}
+              searchLabel="Search your complaints"
+              searchPlaceholder="Search title, description, category, or location"
+            />
 
             {loadingComplaints ? (
               <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted">
@@ -904,14 +907,18 @@ export default function DashboardPage() {
                   <Inbox size={22} />
                 </span>
                 <h2 className="mt-4 font-display font-bold">
-                  {complaintFilter === "resolved"
-                    ? "No resolved complaints"
-                    : "No current complaints"}
+                  {complaintSearch.trim()
+                    ? "No matching complaints"
+                    : complaintFilter === "resolved"
+                      ? "No resolved complaints"
+                      : "No current complaints"}
                 </h2>
                 <p className="mt-1 max-w-sm text-sm leading-6 text-muted">
-                  {complaintFilter === "resolved"
-                    ? "Resolved complaints will appear here."
-                    : "Your submitted complaints will appear here while they are being handled."}
+                  {complaintSearch.trim()
+                    ? "Try another title, category, description, or location."
+                    : complaintFilter === "resolved"
+                      ? "Resolved complaints will appear here."
+                      : "Your submitted complaints will appear here while they are being handled."}
                 </p>
               </div>
             ) : (
