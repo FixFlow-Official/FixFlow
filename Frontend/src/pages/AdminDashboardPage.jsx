@@ -37,6 +37,18 @@ const categoryDepartments = {
 
 const closedStatuses = ["Resolved", "Rejected", "Closed", "Withdrawn"];
 
+const assignedFilterStatuses = {
+  current: ["Assigned", "Under_Review", "In_Progress", "On_Hold"],
+  resolved: ["Resolved"],
+  closed: ["Rejected", "Closed", "Withdrawn"],
+};
+
+const assignedFilters = [
+  { id: "current", label: "Current" },
+  { id: "resolved", label: "Resolved" },
+  { id: "closed", label: "Closed" },
+];
+
 const statusStyles = {
   Submitted: "bg-sky-50 text-sky-700",
   Under_Review: "bg-amber-50 text-amber-800",
@@ -366,6 +378,9 @@ export default function AdminDashboardPage() {
   const [activeQueue, setActiveQueue] = useState("unassigned");
   const [selectedAssignedComplaintId, setSelectedAssignedComplaintId] =
     useState(null);
+  const [assignedFilter, setAssignedFilter] = useState("current");
+  const [assignedSearch, setAssignedSearch] = useState("");
+  const [assignedSort, setAssignedSort] = useState("newest");
 
   const [complaints, setComplaints] = useState([]);
   const [staffByDepartment, setStaffByDepartment] = useState({});
@@ -389,6 +404,39 @@ export default function AdminDashboardPage() {
   const selectedAssignedComplaint = assignedComplaints.find(
     (complaint) => complaint._id === selectedAssignedComplaintId,
   );
+
+  const filteredAssignedComplaints = assignedComplaints
+    .filter((complaint) =>
+      assignedFilterStatuses[assignedFilter].includes(
+        complaint.status || "Assigned",
+      ),
+    )
+    .filter((complaint) => {
+      const query = assignedSearch.trim().toLowerCase();
+      if (!query) return true;
+
+      const searchableText = [
+        complaint.complaintTitle,
+        complaint.user?.username,
+        complaint.user?.rollno,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(query);
+    })
+    .sort((first, second) => {
+      const firstDate = new Date(
+        assignedSort === "updated" ? first.updatedAt : first.createdAt,
+      ).getTime();
+      const secondDate = new Date(
+        assignedSort === "updated" ? second.updatedAt : second.createdAt,
+      ).getTime();
+
+      if (assignedSort === "oldest") return firstDate - secondDate;
+      return secondDate - firstDate;
+    });
 
   useEffect(() => {
     let active = true;
@@ -719,6 +767,69 @@ export default function AdminDashboardPage() {
                 Assigned
               </button>
             </div>
+
+            {activeQueue === "assigned" && !selectedAssignedComplaint && (
+              <div
+                role="tablist"
+                aria-label="Filter assigned complaints"
+                className="mt-4 grid grid-cols-3 gap-2"
+              >
+                {assignedFilters.map((filter) => {
+                  const count = assignedComplaints.filter((complaint) =>
+                    assignedFilterStatuses[filter.id].includes(
+                      complaint.status || "Assigned",
+                    ),
+                  ).length;
+
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={assignedFilter === filter.id}
+                      onClick={() => setAssignedFilter(filter.id)}
+                      className={`min-h-10 rounded-xl px-3 text-sm font-semibold transition ${
+                        assignedFilter === filter.id
+                          ? "bg-brand text-white"
+                          : "border border-line bg-white text-muted hover:bg-brand-soft hover:text-brand-dark"
+                      }`}
+                    >
+                      {filter.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {activeQueue === "assigned" && !selectedAssignedComplaint && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                <label className="block min-w-0">
+                  <span className="sr-only">Search assigned complaints</span>
+                  <input
+                    type="search"
+                    value={assignedSearch}
+                    onChange={(event) => setAssignedSearch(event.target.value)}
+                    placeholder="Search title, student, or roll number"
+                    aria-label="Search by complaint title, student name, or roll number"
+                    className="min-h-11 w-full rounded-xl border border-line bg-white px-3.5 text-sm outline-none transition placeholder:text-muted/70 focus:border-brand focus:ring-4 focus:ring-brand/10"
+                  />
+                </label>
+
+                <label className="block min-w-0">
+                  <span className="sr-only">Sort assigned complaints</span>
+                  <select
+                    value={assignedSort}
+                    onChange={(event) => setAssignedSort(event.target.value)}
+                    aria-label="Sort assigned complaints"
+                    className="min-h-11 w-full rounded-xl border border-line bg-white px-3.5 text-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                  >
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="updated">Recently updated</option>
+                  </select>
+                </label>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -931,9 +1042,22 @@ export default function AdminDashboardPage() {
                 Complaints will appear here after you assign them to staff.
               </p>
             </div>
+          ) : filteredAssignedComplaints.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center">
+              <h3 className="font-display font-bold">
+                {assignedSearch.trim()
+                  ? "No complaints match your search"
+                  : `No ${assignedFilter} complaints`}
+              </h3>
+              <p className="mt-1 text-sm text-muted">
+                {assignedSearch.trim()
+                  ? "Try a different title, student name, or roll number."
+                  : `There are no complaints in the ${assignedFilter} filter.`}
+              </p>
+            </div>
           ) : (
             <div className="space-y-4">
-              {assignedComplaints.map((complaint) => {
+              {filteredAssignedComplaints.map((complaint) => {
                 const status = complaint.status || "Assigned";
                 const statusClass =
                   statusStyles[status] || "bg-slate-100 text-slate-700";
