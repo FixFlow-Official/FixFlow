@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "../components/DashboardShell.jsx";
+import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
+import ExpandableComplaintCard from "../components/complaints/ExpandableComplaintCard.jsx";
 import {
   AlertCircle,
   ArrowLeft,
   ArrowUpRight,
   CheckCircle2,
-  Clock3,
   FileImage,
   Inbox,
   LoaderCircle,
@@ -14,9 +15,9 @@ import {
   Send,
   Upload,
   UserRound,
-  X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
+import { downloadComplaintPdf } from "../utils/complaintPdf.js";
 import {
   createComplaintRequest,
   getComplaintsRequest,
@@ -31,18 +32,6 @@ const activeComplaintStatuses = [
   "In_Progress",
   "On_Hold",
 ];
-
-const statusStyles = {
-  Submitted: "bg-sky-50 text-sky-700",
-  Under_Review: "bg-amber-50 text-amber-800",
-  Assigned: "bg-indigo-50 text-indigo-700",
-  In_Progress: "bg-violet-50 text-violet-700",
-  On_Hold: "bg-orange-50 text-orange-800",
-  Rejected: "bg-rose-50 text-rose-700",
-  Resolved: "bg-emerald-50 text-emerald-700",
-  Closed: "bg-slate-100 text-slate-700",
-  Withdrawn: "bg-slate-100 text-slate-700",
-};
 
 function formatDate(date) {
   if (!date) return "Date unavailable";
@@ -73,6 +62,7 @@ export default function DashboardPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [complaintSearch, setComplaintSearch] = useState("");
   const [page, setPage] = useState("create");
   const [complaintFilter, setComplaintFilter] = useState("current");
   const [selectedComplaintId, setSelectedComplaintId] = useState(null);
@@ -84,6 +74,7 @@ export default function DashboardPage() {
   const [room, setRoom] = useState("");
   const [image, setImage] = useState(null);
 
+  // Load the student's complaints.
   useEffect(() => {
     let active = true;
 
@@ -115,6 +106,7 @@ export default function DashboardPage() {
     };
   }, [accessToken]);
 
+  // Prepare sorted complaint lists and the active complaint for the home view.
   const newestFirst = [...complaints].sort(
     (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
   );
@@ -131,13 +123,32 @@ export default function DashboardPage() {
     (complaint) => complaint.status === "Resolved",
   );
 
-  const filteredComplaints =
+  const complaintsForSelectedFilter =
     complaintFilter === "resolved" ? resolvedComplaints : currentComplaints;
+
+  const searchTerm = complaintSearch.trim().toLowerCase();
+
+  const filteredComplaints = complaintsForSelectedFilter.filter((complaint) => {
+    const searchableText = [
+      complaint.complaintTitle,
+      complaint.complaintDescription,
+      complaint.category,
+      complaint.location?.building,
+      complaint.location?.room,
+      complaint.status,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return searchableText.includes(searchTerm);
+  });
 
   const selectedComplaint = complaints.find(
     (complaint) => complaint._id === selectedComplaintId,
   );
 
+  // Student navigation handlers.
   function openMyComplaints() {
     setComplaintFilter("current");
     setSelectedComplaintId(null);
@@ -154,6 +165,7 @@ export default function DashboardPage() {
     setPage("detail");
   }
 
+  // Validate the proof image selected in the submission form.
   function handleImageChange(event) {
     const selectedImage = event.target.files?.[0] ?? null;
     setFormError("");
@@ -179,6 +191,7 @@ export default function DashboardPage() {
     setImage(selectedImage);
   }
 
+  // Submit the student's complaint and refresh the complaint list.
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -245,109 +258,33 @@ export default function DashboardPage() {
 
   const firstName = user?.username?.trim()?.split(/\s+/)[0] || "there";
 
+  // Shared complaint card for the home and My complaints lists.
   function ComplaintCard({ complaint }) {
-    const status = complaint.status || "Submitted";
-    const statusClass = statusStyles[status] || statusStyles.Submitted;
-
     return (
-      <button
-        type="button"
-        onClick={() => openComplaintDetails(complaint)}
-        className="w-full overflow-hidden rounded-2xl border border-line/80 bg-white text-left transition duration-200 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-brand/10"
-      >
-        <span className="flex min-w-0 flex-col gap-3 p-4 sm:flex-row sm:gap-4">
-          {complaint.complaintPictureUrl ? (
-            <img
-              src={complaint.complaintPictureUrl}
-              alt={`Proof for ${complaint.complaintTitle}`}
-              loading="lazy"
-              className="size-20 shrink-0 rounded-xl bg-canvas object-cover sm:size-[76px]"
-            />
-          ) : (
-            <span className="grid size-20 shrink-0 place-items-center rounded-xl bg-canvas text-muted sm:size-[76px]">
-              <FileImage size={22} />
-            </span>
-          )}
-
-          <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-start justify-between gap-2">
-              <span className="line-clamp-2 font-semibold leading-5 text-ink">
-                {complaint.complaintTitle}
-              </span>
-              <span
-                className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${statusClass}`}
-              >
-                {formatStatus(status)}
-              </span>
-            </span>
-
-            <span className="mt-2 block line-clamp-2 text-sm leading-5 text-muted">
-              {complaint.complaintDescription}
-            </span>
-
-            <span className="mt-2 block break-words text-xs font-medium text-muted">
-              {complaint.category || "Category not available"}
-              {" · "}
-              {complaint.location?.building || "Building not available"}
-              {complaint.location?.room
-                ? ` · Room ${complaint.location.room}`
-                : ""}
-            </span>
-
-            <span className="mt-3 flex items-center gap-1.5 text-xs text-muted">
-              <Clock3 size={13} />
-              {formatDate(complaint.createdAt)}
-            </span>
-          </span>
-        </span>
-      </button>
+      <ExpandableComplaintCard
+        complaint={complaint}
+        expanded={false}
+        onToggle={() => openComplaintDetails(complaint)}
+        onDownloadPdf={downloadComplaintPdf}
+        summary="Select to view the complete complaint and its status history."
+      />
     );
   }
 
+  // Detailed student complaint content shown on the detail page.
   function ComplaintDetails({ complaint }) {
     const status = complaint.status || "Submitted";
-    const statusClass = statusStyles[status] || statusStyles.Submitted;
     const history = [...(complaint.statusHistory ?? [])].sort(
       (a, b) => new Date(a.changedAt) - new Date(b.changedAt),
     );
 
     return (
-      <section className="w-full rounded-[1.75rem] border border-white/90 bg-white/95 p-4 shadow-[0_18px_55px_-36px_rgba(24,35,45,0.38)] ring-1 ring-line/70 sm:p-7">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => setPage("mine")}
-            className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-dark transition hover:bg-brand-soft"
-          >
-            <ArrowLeft size={16} />
-            Back to My complaints
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPage("mine")}
-            aria-label="Close complaint details"
-            title="Close"
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line text-muted transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 focus:outline-none focus:ring-4 focus:ring-brand/10"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-muted">
-              Complaint details
-            </p>
-            <h2 className="mt-1 break-words font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">
-              {complaint.complaintTitle}
-            </h2>
-          </div>
-          <span
-            className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-bold ${statusClass}`}
-          >
-            {formatStatus(status)}
-          </span>
+      <div className="min-w-0">
+        <div className="mb-5 flex flex-col gap-1">
+          <p className="text-sm font-semibold text-muted">Complaint details</p>
+          <h2 className="break-words font-display text-xl font-bold tracking-tight text-ink sm:text-2xl">
+            {complaint.complaintTitle}
+          </h2>
         </div>
 
         <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -366,24 +303,28 @@ export default function DashboardPage() {
                   {complaint.category || "Not available"}
                 </dd>
               </div>
+
               <div className="min-w-0">
                 <dt className="text-muted">Building</dt>
                 <dd className="mt-1 break-words font-semibold">
                   {complaint.location?.building || "Not available"}
                 </dd>
               </div>
+
               <div className="min-w-0">
                 <dt className="text-muted">Room</dt>
                 <dd className="mt-1 break-words font-semibold">
                   {complaint.location?.room || "Not provided"}
                 </dd>
               </div>
+
               <div className="min-w-0">
                 <dt className="text-muted">Submitted</dt>
                 <dd className="mt-1 break-words font-semibold">
                   {formatDate(complaint.createdAt)}
                 </dd>
               </div>
+
               {complaint.assignedDepartment && (
                 <div className="min-w-0">
                   <dt className="text-muted">Assigned department</dt>
@@ -392,6 +333,7 @@ export default function DashboardPage() {
                   </dd>
                 </div>
               )}
+
               {complaint.assignedStaff && (
                 <div className="min-w-0">
                   <dt className="text-muted">Assigned staff</dt>
@@ -447,6 +389,7 @@ export default function DashboardPage() {
                       </dd>
                     </div>
                   )}
+
                   {complaint.resolvedBy && (
                     <div>
                       <dt className="inline font-semibold">Resolved by: </dt>
@@ -527,7 +470,7 @@ export default function DashboardPage() {
             )}
           </aside>
         </div>
-      </section>
+      </div>
     );
   }
 
@@ -848,8 +791,8 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-2 sm:flex">
-              {[
+            <ComplaintToolbar
+              filters={[
                 {
                   id: "current",
                   label: "Current",
@@ -860,31 +803,14 @@ export default function DashboardPage() {
                   label: "Resolved",
                   count: resolvedComplaints.length,
                 },
-              ].map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  onClick={() => setComplaintFilter(filter.id)}
-                  aria-pressed={complaintFilter === filter.id}
-                  className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
-                    complaintFilter === filter.id
-                      ? "bg-brand text-white"
-                      : "border border-line bg-white text-muted hover:bg-brand-soft hover:text-brand-dark"
-                  }`}
-                >
-                  {filter.label}
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-xs ${
-                      complaintFilter === filter.id
-                        ? "bg-white/20"
-                        : "bg-canvas"
-                    }`}
-                  >
-                    {filter.count}
-                  </span>
-                </button>
-              ))}
-            </div>
+              ]}
+              activeFilter={complaintFilter}
+              onFilterChange={setComplaintFilter}
+              searchValue={complaintSearch}
+              onSearchChange={setComplaintSearch}
+              searchLabel="Search your complaints"
+              searchPlaceholder="Search title, description, category, or location"
+            />
 
             {loadingComplaints ? (
               <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted">
@@ -904,14 +830,18 @@ export default function DashboardPage() {
                   <Inbox size={22} />
                 </span>
                 <h2 className="mt-4 font-display font-bold">
-                  {complaintFilter === "resolved"
-                    ? "No resolved complaints"
-                    : "No current complaints"}
+                  {complaintSearch.trim()
+                    ? "No matching complaints"
+                    : complaintFilter === "resolved"
+                      ? "No resolved complaints"
+                      : "No current complaints"}
                 </h2>
                 <p className="mt-1 max-w-sm text-sm leading-6 text-muted">
-                  {complaintFilter === "resolved"
-                    ? "Resolved complaints will appear here."
-                    : "Your submitted complaints will appear here while they are being handled."}
+                  {complaintSearch.trim()
+                    ? "Try another title, category, description, or location."
+                    : complaintFilter === "resolved"
+                      ? "Resolved complaints will appear here."
+                      : "Your submitted complaints will appear here while they are being handled."}
                 </p>
               </div>
             ) : (
@@ -926,7 +856,15 @@ export default function DashboardPage() {
             )}
           </section>
         ) : selectedComplaint ? (
-          <ComplaintDetails complaint={selectedComplaint} />
+          <ExpandableComplaintCard
+            complaint={selectedComplaint}
+            expanded
+            onToggle={() => setPage("mine")}
+            onDownloadPdf={downloadComplaintPdf}
+            summary="Your complaint record, updates, and resolution details."
+          >
+            <ComplaintDetails complaint={selectedComplaint} />
+          </ExpandableComplaintCard>
         ) : (
           <section className="w-full rounded-3xl border border-white/90 bg-white/95 p-6 text-center shadow-sm ring-1 ring-line/70 sm:p-8">
             <h1 className="font-display text-xl font-bold">

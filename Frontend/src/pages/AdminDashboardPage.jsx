@@ -9,8 +9,9 @@ import {
   Users,
 } from "lucide-react";
 import DashboardShell from "../components/DashboardShell.jsx";
+import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
+import ExpandableComplaintCard from "../components/complaints/ExpandableComplaintCard.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
-import AssignedComplaintDetails from "../components/admin/complaints/AssignedComplaintDetails.jsx";
 import {
   ASSIGNED_PAGE_SIZE,
   assignedFilterStatuses,
@@ -19,7 +20,6 @@ import {
   departments,
   formatDate,
   formatStatus,
-  statusStyles,
 } from "../utils/complaintConfig.js";
 import { downloadComplaintPdf } from "../utils/complaintPdf.js";
 import {
@@ -30,13 +30,15 @@ import {
   reassignComplaintRequest,
 } from "../services/api.js";
 
-// Main admin dashboard: state, data loading, queue actions, and page layout.
+// Main admin dashboard: complaint queues, assignment actions, and reassignment.
 export default function AdminDashboardPage() {
   const { user, accessToken } = useAuth();
 
   const [activeQueue, setActiveQueue] = useState("unassigned");
+  const [expandedUnassignedId, setExpandedUnassignedId] = useState(null);
   const [selectedAssignedComplaintId, setSelectedAssignedComplaintId] =
     useState(null);
+
   const [assignedFilter, setAssignedFilter] = useState("current");
   const [assignedSearch, setAssignedSearch] = useState("");
   const [assignedSort, setAssignedSort] = useState("newest");
@@ -77,8 +79,13 @@ export default function AdminDashboardPage() {
 
       const searchableText = [
         complaint.complaintTitle,
+        complaint.complaintDescription,
         complaint.user?.username,
         complaint.user?.rollno,
+        complaint.category,
+        complaint.location?.building,
+        complaint.location?.room,
+        complaint.status,
       ]
         .filter(Boolean)
         .join(" ")
@@ -110,7 +117,12 @@ export default function AdminDashboardPage() {
     firstVisibleComplaintIndex + ASSIGNED_PAGE_SIZE,
   );
 
-  // Load unassigned complaints and staff options by department.
+  const queueCount =
+    activeQueue === "unassigned"
+      ? complaints.length
+      : assignedComplaints.length;
+
+  // Load the unassigned queue and staff options for suggested departments.
   useEffect(() => {
     let active = true;
 
@@ -152,14 +164,10 @@ export default function AdminDashboardPage() {
         }
       } catch (requestError) {
         if (active) {
-          setError(
-            requestError.message || "Could not load the complaint queue.",
-          );
+          setError(requestError.message || "Could not load the complaint queue.");
         }
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
 
@@ -170,7 +178,7 @@ export default function AdminDashboardPage() {
     };
   }, [accessToken]);
 
-  // Load assigned complaints used by the filters, search, and sort controls.
+  // Load assigned complaints for the filters, search, sort, and detail cards.
   useEffect(() => {
     let active = true;
 
@@ -191,9 +199,7 @@ export default function AdminDashboardPage() {
           );
         }
       } finally {
-        if (active) {
-          setAssignedLoading(false);
-        }
+        if (active) setAssignedLoading(false);
       }
     }
 
@@ -204,7 +210,7 @@ export default function AdminDashboardPage() {
     };
   }, [accessToken]);
 
-  // Assignment and reassignment handlers.
+  // Load staff when an unassigned complaint's department is changed.
   async function handleDepartmentChange(complaintId, department) {
     setSelectedDepartments((current) => ({
       ...current,
@@ -231,6 +237,7 @@ export default function AdminDashboardPage() {
     }
   }
 
+  // Assign an unassigned complaint to a department and staff member.
   async function handleAssign(complaintId) {
     const department = selectedDepartments[complaintId];
     const staffId = selectedStaffIds[complaintId];
@@ -258,6 +265,7 @@ export default function AdminDashboardPage() {
       setComplaints((current) =>
         current.filter((complaint) => complaint._id !== complaintId),
       );
+      setExpandedUnassignedId(null);
 
       const assignedData = await getAssignedComplaintsRequest(accessToken);
       setAssignedComplaints(assignedData.complaints ?? []);
@@ -269,6 +277,7 @@ export default function AdminDashboardPage() {
     }
   }
 
+  // Expand an assigned complaint and load its department's staff options.
   async function openAssignedComplaint(complaint) {
     setSelectedAssignedComplaintId(complaint._id);
     setReassignDepartment(complaint.assignedDepartment || "");
@@ -296,6 +305,19 @@ export default function AdminDashboardPage() {
     }
   }
 
+  // Close an assigned complaint, or expand another one.
+  function toggleAssignedComplaint(complaint) {
+    if (selectedAssignedComplaintId === complaint._id) {
+      setSelectedAssignedComplaintId(null);
+      setError("");
+      setSuccessMessage("");
+      return;
+    }
+
+    openAssignedComplaint(complaint);
+  }
+
+  // Load staff when the reassignment department changes.
   async function handleReassignDepartmentChange(department) {
     setReassignDepartment(department);
     setReassignStaffId("");
@@ -318,6 +340,7 @@ export default function AdminDashboardPage() {
     }
   }
 
+  // Reassign the currently expanded complaint.
   async function handleReassign() {
     if (!selectedAssignedComplaint) return;
 
@@ -350,14 +373,10 @@ export default function AdminDashboardPage() {
     }
   }
 
-  // Queue selection and dashboard rendering.
-  const queueCount =
-    activeQueue === "unassigned"
-      ? complaints.length
-      : assignedComplaints.length;
-
+  // Switch queues and close any expanded complaint card.
   function changeQueue(queue) {
     setActiveQueue(queue);
+    setExpandedUnassignedId(null);
     setSelectedAssignedComplaintId(null);
     setError("");
     setSuccessMessage("");
@@ -398,16 +417,12 @@ export default function AdminDashboardPage() {
                 <h2 className="font-display text-xl font-bold">
                   {activeQueue === "unassigned"
                     ? "Unassigned complaints"
-                    : selectedAssignedComplaint
-                      ? "Complaint details"
-                      : "Assigned complaints"}
+                    : "Assigned complaints"}
                 </h2>
                 <p className="mt-1 text-sm leading-5 text-muted">
                   {activeQueue === "unassigned"
                     ? "Choose a department and staff member for each complaint."
-                    : selectedAssignedComplaint
-                      ? "Review the complaint, its assignment, and status history."
-                      : "Track assigned complaints and see who is handling them."}
+                    : "Track assigned complaints and see who is handling them."}
                 </p>
               </div>
 
@@ -444,80 +459,43 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            {activeQueue === "assigned" && !selectedAssignedComplaint && (
-              <div
-                role="tablist"
-                aria-label="Filter assigned complaints"
-                className="mt-4 grid grid-cols-3 gap-2"
-              >
-                {assignedFilters.map((filter) => {
-                  const count = assignedComplaints.filter((complaint) =>
+            {activeQueue === "assigned" && (
+              <ComplaintToolbar
+                filters={assignedFilters.map((filter) => ({
+                  ...filter,
+                  count: assignedComplaints.filter((complaint) =>
                     assignedFilterStatuses[filter.id].includes(
                       complaint.status || "Assigned",
                     ),
-                  ).length;
-
-                  return (
-                    <button
-                      key={filter.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={assignedFilter === filter.id}
-                      onClick={() => {
-                        setAssignedFilter(filter.id);
-                        setAssignedPage(1);
-                      }}
-                      className={`min-h-10 rounded-xl px-3 text-sm font-semibold transition ${
-                        assignedFilter === filter.id
-                          ? "bg-brand text-white"
-                          : "border border-line bg-white text-muted hover:bg-brand-soft hover:text-brand-dark"
-                      }`}
-                    >
-                      {filter.label} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {activeQueue === "assigned" && !selectedAssignedComplaint && (
-              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-                <label className="block min-w-0">
-                  <span className="sr-only">Search assigned complaints</span>
-                  <input
-                    type="search"
-                    value={assignedSearch}
-                    onChange={(event) => {
-                      setAssignedSearch(event.target.value);
-                      setAssignedPage(1);
-                    }}
-                    placeholder="Search title, student, or roll number"
-                    aria-label="Search by complaint title, student name, or roll number"
-                    className="min-h-11 w-full rounded-xl border border-line bg-white px-3.5 text-sm outline-none transition placeholder:text-muted/70 focus:border-brand focus:ring-4 focus:ring-brand/10"
-                  />
-                </label>
-
-                <label className="block min-w-0">
-                  <span className="sr-only">Sort assigned complaints</span>
-                  <select
-                    value={assignedSort}
-                    onChange={(event) => {
-                      setAssignedSort(event.target.value);
-                      setAssignedPage(1);
-                    }}
-                    aria-label="Sort assigned complaints"
-                    className="min-h-11 w-full rounded-xl border border-line bg-white px-3.5 text-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-                  >
-                    <option value="newest">Newest first</option>
-                    <option value="oldest">Oldest first</option>
-                    <option value="updated">Recently updated</option>
-                  </select>
-                </label>
-              </div>
+                  ).length,
+                }))}
+                activeFilter={assignedFilter}
+                onFilterChange={(value) => {
+                  setAssignedFilter(value);
+                  setAssignedPage(1);
+                }}
+                searchValue={assignedSearch}
+                onSearchChange={(value) => {
+                  setAssignedSearch(value);
+                  setAssignedPage(1);
+                }}
+                searchLabel="Search assigned complaints"
+                searchPlaceholder="Search title, student, roll number, category, or location"
+                sortValue={assignedSort}
+                onSortChange={(value) => {
+                  setAssignedSort(value);
+                  setAssignedPage(1);
+                }}
+                sortOptions={[
+                  { value: "newest", label: "Newest first" },
+                  { value: "oldest", label: "Oldest first" },
+                  { value: "updated", label: "Recently updated" },
+                ]}
+              />
             )}
           </div>
 
-          {/* Shared request feedback. */}
+          {/* Shared request feedback */}
           {error && (
             <p
               role="alert"
@@ -538,7 +516,7 @@ export default function AdminDashboardPage() {
             </p>
           )}
 
-          {/* Main queue content: unassigned list, assigned details, or filtered assigned list. */}
+          {/* Unassigned complaint queue */}
           {activeQueue === "unassigned" ? (
             loading ? (
               <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-muted">
@@ -559,62 +537,67 @@ export default function AdminDashboardPage() {
                 {complaints.map((complaint) => {
                   const department = selectedDepartments[complaint._id] || "";
                   const staff = staffByDepartment[department] ?? [];
+                  const isExpanded = expandedUnassignedId === complaint._id;
+                  const studentSummary = [
+                    `Submitted by ${complaint.user?.username || "Student"}`,
+                    complaint.user?.rollno
+                      ? `Roll no. ${complaint.user.rollno}`
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
 
                   return (
-                    <article
+                    <ExpandableComplaintCard
                       key={complaint._id}
-                      className="min-w-0 rounded-2xl border border-line p-4 sm:p-5"
+                      complaint={complaint}
+                      expanded={isExpanded}
+                      onToggle={() =>
+                        setExpandedUnassignedId((currentId) =>
+                          currentId === complaint._id ? null : complaint._id,
+                        )
+                      }
+                      onDownloadPdf={downloadComplaintPdf}
+                      summary={studentSummary}
                     >
-                      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="break-words font-display text-lg font-bold">
-                              {complaint.complaintTitle}
-                            </h3>
-                            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
-                              {formatStatus(complaint.status)}
-                            </span>
-                          </div>
-
-                          <p className="mt-2 break-words text-sm leading-6 text-muted">
-                            {complaint.complaintDescription}
-                          </p>
-
-                          <p className="mt-2 break-words text-xs font-medium text-muted">
-                            {complaint.category}
-                            {" · "}
-                            {complaint.location?.building}
-                            {complaint.location?.room
-                              ? ` · Room ${complaint.location.room}`
-                              : ""}
-                          </p>
-
-                          <p className="mt-2 break-words text-xs text-muted">
-                            Submitted by {complaint.user?.username || "Student"}
-                            {complaint.user?.rollno
-                              ? ` · Roll no. ${complaint.user.rollno}`
-                              : ""}
-                            {" · "}
-                            {formatDate(complaint.createdAt)}
-                          </p>
-
-                          {complaint.complaintPictureUrl && (
-                            <a
-                              href={complaint.complaintPictureUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-3 inline-block"
-                            >
-                              <img
-                                src={complaint.complaintPictureUrl}
-                                alt={`Proof for ${complaint.complaintTitle}`}
-                                className="size-24 rounded-xl object-cover"
-                              />
-                            </a>
-                          )}
+                      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+                        <div className="min-w-0">
+                          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                            <div>
+                              <dt className="text-xs text-muted">Student</dt>
+                              <dd className="mt-1 font-semibold">
+                                {complaint.user?.username || "Student"}
+                                {complaint.user?.rollno
+                                  ? ` · ${complaint.user.rollno}`
+                                  : ""}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs text-muted">Location</dt>
+                              <dd className="mt-1 font-semibold">
+                                {complaint.location?.building ||
+                                  "Building unavailable"}
+                                {complaint.location?.room
+                                  ? ` · Room ${complaint.location.room}`
+                                  : ""}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs text-muted">Submitted</dt>
+                              <dd className="mt-1 font-semibold">
+                                {formatDate(complaint.createdAt)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs text-muted">Category</dt>
+                              <dd className="mt-1 font-semibold">
+                                {complaint.category || "Not provided"}
+                              </dd>
+                            </div>
+                          </dl>
                         </div>
 
-                        <div className="grid min-w-0 gap-3 lg:w-72 lg:shrink-0">
+                        <div className="grid min-w-0 gap-3">
                           <label className="block min-w-0 space-y-1.5">
                             <span className="text-sm font-semibold">
                               Department
@@ -689,7 +672,7 @@ export default function AdminDashboardPage() {
                           </button>
                         </div>
                       </div>
-                    </article>
+                    </ExpandableComplaintCard>
                   );
                 })}
               </div>
@@ -706,21 +689,6 @@ export default function AdminDashboardPage() {
             >
               {assignedError}
             </p>
-          ) : selectedAssignedComplaint ? (
-            <AssignedComplaintDetails
-              complaint={selectedAssignedComplaint}
-              departments={departments}
-              reassignDepartment={reassignDepartment}
-              reassignStaffId={reassignStaffId}
-              reassignStaffList={reassignStaffList}
-              loadingReassignStaff={loadingReassignStaff}
-              reassigning={reassigning}
-              onClose={() => setSelectedAssignedComplaintId(null)}
-              onDepartmentChange={handleReassignDepartmentChange}
-              onStaffChange={setReassignStaffId}
-              onReassign={handleReassign}
-              onDownloadPdf={downloadComplaintPdf}
-            />
           ) : assignedComplaints.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center">
               <h3 className="font-display font-bold">
@@ -739,79 +707,251 @@ export default function AdminDashboardPage() {
               </h3>
               <p className="mt-1 text-sm text-muted">
                 {assignedSearch.trim()
-                  ? "Try a different title, student name, or roll number."
+                  ? "Try a different title, student, roll number, category, or location."
                   : `There are no complaints in the ${assignedFilter} filter.`}
               </p>
             </div>
           ) : (
             <div className="space-y-4">
               {visibleAssignedComplaints.map((complaint) => {
-                const status = complaint.status || "Assigned";
-                const statusClass =
-                  statusStyles[status] || "bg-slate-100 text-slate-700";
+                const isExpanded =
+                  selectedAssignedComplaintId === complaint._id;
+
+                const studentSummary = [
+                  `Submitted by ${complaint.user?.username || "Student"}`,
+                  complaint.user?.rollno
+                    ? `Roll no. ${complaint.user.rollno}`
+                    : "",
+                  complaint.assignedStaff?.username
+                    ? `Assigned to ${complaint.assignedStaff.username}`
+                    : "",
+                  complaint.assignedDepartment || "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
 
                 return (
-                  <button
+                  <ExpandableComplaintCard
                     key={complaint._id}
-                    type="button"
-                    onClick={() => openAssignedComplaint(complaint)}
-                    className="w-full rounded-2xl border border-line bg-white p-4 text-left transition hover:border-brand/40 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-brand/10 sm:p-5"
+                    complaint={complaint}
+                    expanded={isExpanded}
+                    onToggle={() => toggleAssignedComplaint(complaint)}
+                    onDownloadPdf={downloadComplaintPdf}
+                    summary={studentSummary}
                   >
-                    <span className="flex min-w-0 flex-col gap-4 sm:flex-row">
-                      {complaint.complaintPictureUrl && (
-                        <img
-                          src={complaint.complaintPictureUrl}
-                          alt=""
-                          className="size-20 shrink-0 rounded-xl object-cover sm:size-24"
-                        />
-                      )}
+                    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+                      <div className="min-w-0">
+                        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                          <div>
+                            <dt className="text-xs text-muted">Student</dt>
+                            <dd className="mt-1 font-semibold">
+                              {complaint.user?.username || "Student"}
+                              {complaint.user?.rollno
+                                ? ` · ${complaint.user.rollno}`
+                                : ""}
+                            </dd>
+                          </div>
 
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="break-words font-display text-lg font-bold text-ink">
-                            {complaint.complaintTitle}
+                          <div>
+                            <dt className="text-xs text-muted">Assigned staff</dt>
+                            <dd className="mt-1 font-semibold">
+                              {complaint.assignedStaff?.username ||
+                                "Staff member"}
+                            </dd>
+                          </div>
+
+                          <div>
+                            <dt className="text-xs text-muted">Department</dt>
+                            <dd className="mt-1 font-semibold">
+                              {complaint.assignedDepartment ||
+                                "Not provided"}
+                            </dd>
+                          </div>
+
+                          <div>
+                            <dt className="text-xs text-muted">Location</dt>
+                            <dd className="mt-1 font-semibold">
+                              {complaint.location?.building ||
+                                "Building unavailable"}
+                              {complaint.location?.room
+                                ? ` · Room ${complaint.location.room}`
+                                : ""}
+                            </dd>
+                          </div>
+
+                          <div>
+                            <dt className="text-xs text-muted">Submitted</dt>
+                            <dd className="mt-1 font-semibold">
+                              {formatDate(complaint.createdAt)}
+                            </dd>
+                          </div>
+
+                          <div>
+                            <dt className="text-xs text-muted">Last updated</dt>
+                            <dd className="mt-1 font-semibold">
+                              {formatDate(complaint.updatedAt)}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        {complaint.complaintPictureUrl && (
+                          <div className="mt-5">
+                            <h3 className="text-sm font-semibold">
+                              Submitted proof
+                            </h3>
+                            <a
+                              href={complaint.complaintPictureUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 inline-flex overflow-hidden rounded-xl border border-line"
+                            >
+                              <img
+                                src={complaint.complaintPictureUrl}
+                                alt={`Proof for ${complaint.complaintTitle}`}
+                                className="h-36 w-48 object-cover"
+                              />
+                            </a>
+                          </div>
+                        )}
+
+                        {Array.isArray(complaint.statusHistory) &&
+                          complaint.statusHistory.length > 0 && (
+                            <div className="mt-5">
+                              <h3 className="text-sm font-semibold">
+                                Status history
+                              </h3>
+                              <ol className="mt-3 space-y-3 border-l border-line pl-4">
+                                {complaint.statusHistory.map((item, index) => (
+                                  <li
+                                    key={`${item.changedAt || item.status}-${index}`}
+                                    className="relative"
+                                  >
+                                    <span className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-brand" />
+                                    <p className="text-sm font-semibold">
+                                      {formatStatus(item.status)}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-muted">
+                                      {formatDate(item.changedAt)}
+                                      {item.changedByRole
+                                        ? ` · ${item.changedByRole}`
+                                        : ""}
+                                    </p>
+                                    {item.note && (
+                                      <p className="mt-1 whitespace-pre-wrap text-sm leading-5 text-muted">
+                                        {item.note}
+                                      </p>
+                                    )}
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+                      </div>
+
+                      <div className="rounded-2xl bg-stone-50 p-4">
+                        <h3 className="font-semibold">Reassign complaint</h3>
+                        <p className="mt-1 text-sm leading-5 text-muted">
+                          Choose the department and staff member who should
+                          handle this complaint.
+                        </p>
+
+                        <label className="mt-4 block space-y-1.5">
+                          <span className="text-sm font-semibold">
+                            Department
                           </span>
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass}`}
+                          <select
+                            value={
+                              isExpanded
+                                ? reassignDepartment
+                                : complaint.assignedDepartment || ""
+                            }
+                            onChange={(event) =>
+                              handleReassignDepartmentChange(
+                                event.target.value,
+                              )
+                            }
+                            disabled={!isExpanded || reassigning}
+                            className="min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-100"
                           >
-                            {formatStatus(status)}
+                            <option value="">Choose department</option>
+                            {departments.map((department) => (
+                              <option key={department} value={department}>
+                                {department}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="mt-4 block space-y-1.5">
+                          <span className="text-sm font-semibold">
+                            Staff member
                           </span>
-                        </span>
+                          <select
+                            value={isExpanded ? reassignStaffId : ""}
+                            onChange={(event) =>
+                              setReassignStaffId(event.target.value)
+                            }
+                            disabled={
+                              !isExpanded ||
+                              loadingReassignStaff ||
+                              !reassignDepartment ||
+                              reassignStaffList.length === 0 ||
+                              reassigning
+                            }
+                            className="min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          >
+                            <option value="">
+                              {loadingReassignStaff
+                                ? "Loading staff…"
+                                : !reassignDepartment
+                                  ? "Choose a department first"
+                                  : reassignStaffList.length === 0
+                                    ? "No staff in this department"
+                                    : "Choose staff member"}
+                            </option>
+                            {reassignStaffList.map((person) => (
+                              <option
+                                key={person._id || person.staffId}
+                                value={person.staffId}
+                              >
+                                {person.username} · ID {person.staffId}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
 
-                        <span className="mt-2 block line-clamp-2 break-words text-sm leading-6 text-muted">
-                          {complaint.complaintDescription}
-                        </span>
-
-                        <span className="mt-2 block break-words text-xs text-muted">
-                          {complaint.category}
-                          {" · "}
-                          {complaint.location?.building}
-                          {complaint.location?.room
-                            ? ` · Room ${complaint.location.room}`
-                            : ""}
-                        </span>
-
-                        <span className="mt-2 block break-words text-xs text-muted">
-                          Assigned to{" "}
-                          {complaint.assignedStaff?.username || "Staff member"}
-                          {complaint.assignedDepartment
-                            ? ` · ${complaint.assignedDepartment}`
-                            : ""}
-                        </span>
-
-                        <span className="mt-2 block text-xs text-muted">
-                          Updated {formatDate(complaint.updatedAt)}
-                        </span>
-                      </span>
-                    </span>
-                  </button>
+                        <button
+                          type="button"
+                          onClick={handleReassign}
+                          disabled={
+                            !isExpanded ||
+                            reassigning ||
+                            loadingReassignStaff ||
+                            !reassignDepartment ||
+                            !reassignStaffId
+                          }
+                          className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {reassigning ? (
+                            <LoaderCircle
+                              size={16}
+                              className="animate-spin"
+                            />
+                          ) : (
+                            <UserCheck size={16} />
+                          )}
+                          Reassign complaint
+                        </button>
+                      </div>
+                    </div>
+                  </ExpandableComplaintCard>
                 );
               })}
             </div>
           )}
 
+          {/* Assigned complaint pagination */}
           {activeQueue === "assigned" &&
-            !selectedAssignedComplaint &&
             filteredAssignedComplaints.length > 0 &&
             assignedPageCount > 1 && (
               <nav
@@ -830,18 +970,22 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setAssignedPage((page) => Math.max(1, page - 1))}
+                    onClick={() =>
+                      setAssignedPage((page) => Math.max(1, page - 1))
+                    }
                     disabled={currentAssignedPage === 1}
                     className="min-h-10 rounded-xl border border-line bg-white px-3.5 text-sm font-semibold text-ink transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Previous
                   </button>
+
                   <span
                     aria-live="polite"
                     className="min-w-20 text-center text-sm font-medium text-muted"
                   >
                     Page {currentAssignedPage} of {assignedPageCount}
                   </span>
+
                   <button
                     type="button"
                     onClick={() =>

@@ -419,6 +419,14 @@ export async function getAssignedComplaintsRequest(accessToken) {
   );
 }
 
+export async function getStaffAssignedComplaintsRequest(accessToken) {
+  return complaintRequest(
+    "/api/staff/assigned-complaints",
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function getStaffByDepartmentRequest(department, accessToken) {
   const query = new URLSearchParams({ department });
 
