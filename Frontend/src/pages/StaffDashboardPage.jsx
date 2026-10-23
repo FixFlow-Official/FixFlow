@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
+import StaffComplaintCard from "../features/staff/StaffComplaintCard.jsx";
+import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
 import {
   AlertCircle,
   CheckCircle2,
-  Clock3,
-  ImagePlus,
   LoaderCircle,
   RefreshCw,
   UserRound,
   Wrench,
 } from "lucide-react";
-import DashboardShell from "../components/DashboardShell.jsx";
+import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
-import ExpandableComplaintCard from "../components/complaints/ExpandableComplaintCard.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../context/useAuth.js";
 import {
   getStaffAssignedComplaintsRequest,
   updateComplaintStatusRequest,
@@ -47,18 +46,6 @@ const staffNavItems = [
     disabled: true,
   },
 ];
-
-function formatDate(date) {
-  if (!date) return "Date unavailable";
-
-  const parsedDate = new Date(date);
-  if (Number.isNaN(parsedDate.getTime())) return "Date unavailable";
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(parsedDate);
-}
 
 export default function StaffDashboardPage() {
   const { user, accessToken } = useAuth();
@@ -184,7 +171,8 @@ export default function StaffDashboardPage() {
     if (status === "Resolved" && !resolutionProof) {
       setActionError((current) => ({
         ...current,
-        [complaintId]: "Attach a photo as proof that the complaint is resolved.",
+        [complaintId]:
+          "Attach a photo as proof that the complaint is resolved.",
       }));
       return;
     }
@@ -399,295 +387,53 @@ export default function StaffDashboardPage() {
               Loading complaints…
             </div>
           ) : complaintsForView.length === 0 ? (
-            <section className="mt-5 rounded-2xl border border-dashed border-line bg-white px-5 py-12 text-center">
-              <span className="mx-auto grid size-12 place-items-center rounded-xl bg-brand-soft text-brand">
-                <CheckCircle2 size={22} />
-              </span>
-              <h3 className="mt-4 font-display text-lg font-bold">
-                {complaintView === "current"
+            <ComplaintEmptyState
+              className="mt-5 rounded-2xl border border-dashed border-line bg-white px-5 py-12 text-center"
+              iconClassName="mx-auto grid size-12 place-items-center rounded-xl bg-brand-soft text-brand"
+              titleClassName="mt-4 font-display text-lg font-bold"
+              descriptionClassName="mx-auto mt-1 max-w-md text-sm leading-6 text-muted"
+              icon={CheckCircle2}
+              title={
+                complaintView === "current"
                   ? "No complaints to resolve"
-                  : "No resolved complaints yet"}
-              </h3>
-              <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted">
-                {complaintView === "current"
+                  : "No resolved complaints yet"
+              }
+              description={
+                complaintView === "current"
                   ? "Complaints assigned to your account will appear here."
-                  : "Complaints you resolve will be available here for reference."}
-              </p>
-            </section>
+                  : "Complaints you resolve will be available here for reference."
+              }
+            />
           ) : filteredComplaints.length === 0 ? (
-            <section className="mt-5 rounded-2xl border border-dashed border-line bg-white px-5 py-12 text-center">
-              <h3 className="font-display text-lg font-bold">
-                No matching complaints
-              </h3>
-              <p className="mt-1 text-sm leading-6 text-muted">
-                Try another search term or status filter.
-              </p>
-            </section>
+            <ComplaintEmptyState
+              className="mt-5 rounded-2xl border border-dashed border-line bg-white px-5 py-12 text-center"
+              titleClassName="font-display text-lg font-bold"
+              descriptionClassName="mt-1 text-sm leading-6 text-muted"
+              title="No matching complaints"
+              description="Try another search term or status filter."
+            />
           ) : (
             <div className="mt-5 space-y-5">
-              {filteredComplaints.map((complaint) => {
-                const complaintId = complaint._id;
-                const isResolved = complaint.status === "Resolved";
-                const selectedStatus =
-                  selectedStatuses[complaintId] ?? complaint.status;
-                const isSaving = savingId === complaintId;
-                const isExpanded = expandedComplaintId === complaintId;
-
-                const studentSummary = [
-                  complaint.user?.username ?? "Student",
-                  complaint.user?.rollno
-                    ? `Roll no. ${complaint.user.rollno}`
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" · ");
-
-                return (
-                  <ExpandableComplaintCard
-                    key={complaintId}
-                    complaint={complaint}
-                    expanded={isExpanded}
-                    onToggle={() => toggleComplaint(complaintId)}
-                    onDownloadPdf={downloadComplaintPdf}
-                    summary={studentSummary}
-                  >
-                    <div
-                      className={`grid gap-5 ${
-                        isResolved ? "" : "lg:grid-cols-[minmax(0,1fr)_300px]"
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                          <div>
-                            <dt className="inline text-muted">Student: </dt>
-                            <dd className="inline font-semibold">
-                              {complaint.user?.username ?? "Student"}
-                              {complaint.user?.rollno
-                                ? ` · ${complaint.user.rollno}`
-                                : ""}
-                            </dd>
-                          </div>
-
-                          <div>
-                            <dt className="inline text-muted">Location: </dt>
-                            <dd className="inline font-semibold">
-                              {complaint.location?.building ??
-                                "Building unavailable"}
-                              {complaint.location?.room
-                                ? `, Room ${complaint.location.room}`
-                                : ""}
-                            </dd>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 text-xs text-muted">
-                            <Clock3 size={14} />
-                            Submitted {formatDate(complaint.createdAt)}
-                          </div>
-
-                          {isResolved && (
-                            <div className="flex items-center gap-1.5 text-xs text-emerald-700">
-                              <CheckCircle2 size={14} />
-                              Resolved{" "}
-                              {formatDate(
-                                complaint.resolvedAt ?? complaint.updatedAt,
-                              )}
-                            </div>
-                          )}
-                        </dl>
-
-                        {complaint.complaintPictureUrl && (
-                          <a
-                            href={complaint.complaintPictureUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-4 inline-flex overflow-hidden rounded-xl border border-line"
-                            aria-label="Open complaint proof photo"
-                          >
-                            <img
-                              src={complaint.complaintPictureUrl}
-                              alt={`Proof for ${complaint.complaintTitle}`}
-                              className="h-36 w-48 object-cover"
-                            />
-                          </a>
-                        )}
-
-                        {/* Resolved complaint evidence and resolution details */}
-                        {isResolved && (
-                          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
-                            <h4 className="font-semibold text-emerald-900">
-                              Resolution details
-                            </h4>
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-900">
-                              {complaint.resolutionNote ||
-                                "No resolution note was recorded."}
-                            </p>
-
-                            {complaint.resolutionProofUrl ? (
-                              <a
-                                href={complaint.resolutionProofUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="mt-4 inline-flex overflow-hidden rounded-xl border border-emerald-200"
-                                aria-label="Open resolution proof photo"
-                              >
-                                <img
-                                  src={complaint.resolutionProofUrl}
-                                  alt={`Resolution proof for ${complaint.complaintTitle}`}
-                                  className="h-40 w-56 object-cover"
-                                />
-                              </a>
-                            ) : (
-                              <p className="mt-3 text-sm text-emerald-800">
-                                No resolution photo is available.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Current complaints can be updated; resolved ones are read-only. */}
-                      {!isResolved && (
-                        <div className="rounded-2xl bg-stone-50 p-4">
-                          <label
-                            htmlFor={`status-${complaintId}`}
-                            className="text-sm font-semibold"
-                          >
-                            Update status
-                          </label>
-
-                          <select
-                            id={`status-${complaintId}`}
-                            value={selectedStatus}
-                            onChange={(event) =>
-                              setSelectedStatuses((current) => ({
-                                ...current,
-                                [complaintId]: event.target.value,
-                              }))
-                            }
-                            className="mt-2 min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
-                          >
-                            {staffStatuses.map((status) => (
-                              <option key={status.value} value={status.value}>
-                                {status.label}
-                              </option>
-                            ))}
-                          </select>
-
-                          <label
-                            htmlFor={`note-${complaintId}`}
-                            className="mt-4 block text-sm font-semibold"
-                          >
-                            {selectedStatus === "Resolved"
-                              ? "Resolution note (required)"
-                              : selectedStatus === "On_Hold"
-                                ? "Note (required)"
-                                : "Note (optional)"}
-                          </label>
-
-                          <textarea
-                            id={`note-${complaintId}`}
-                            rows={3}
-                            maxLength={1000}
-                            value={notes[complaintId] ?? ""}
-                            onChange={(event) =>
-                              setNotes((current) => ({
-                                ...current,
-                                [complaintId]: event.target.value,
-                              }))
-                            }
-                            placeholder={
-                              selectedStatus === "Resolved"
-                                ? "Describe the work completed"
-                                : selectedStatus === "On_Hold"
-                                  ? "Explain why work is on hold"
-                                  : "Add an update for the complaint history"
-                            }
-                            className="mt-2 w-full resize-y rounded-xl border border-line bg-white px-3 py-2.5 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
-                          />
-
-                          {selectedStatus === "Resolved" && (
-                            <div className="mt-4">
-                              <label
-                                htmlFor={`resolution-proof-${complaintId}`}
-                                className="block text-sm font-semibold"
-                              >
-                                Resolution photo (required)
-                              </label>
-
-                              <label
-                                htmlFor={`resolution-proof-${complaintId}`}
-                                className="mt-2 flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line bg-white p-3 transition hover:border-brand hover:bg-brand-soft/30"
-                              >
-                                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
-                                  <ImagePlus size={19} />
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-semibold">
-                                    {resolutionProofs[complaintId]?.name ??
-                                      "Choose a resolution photo"}
-                                  </span>
-                                  <span className="mt-1 block text-xs text-muted">
-                                    Add a photo showing the completed repair
-                                  </span>
-                                </span>
-                              </label>
-
-                              <input
-                                id={`resolution-proof-${complaintId}`}
-                                type="file"
-                                accept="image/*"
-                                className="sr-only"
-                                onChange={(event) => {
-                                  const file = event.target.files?.[0] ?? null;
-                                  setResolutionProofs((current) => ({
-                                    ...current,
-                                    [complaintId]: file,
-                                  }));
-                                }}
-                              />
-                            </div>
-                          )}
-
-                          {actionError[complaintId] && (
-                            <p
-                              role="alert"
-                              className="mt-2 text-sm text-rose-700"
-                            >
-                              {actionError[complaintId]}
-                            </p>
-                          )}
-
-                          {successMessage[complaintId] && (
-                            <p
-                              role="status"
-                              className="mt-2 text-sm text-emerald-700"
-                            >
-                              {successMessage[complaintId]}
-                            </p>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => handleStatusUpdate(complaint)}
-                            disabled={isSaving}
-                            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isSaving && (
-                              <LoaderCircle
-                                size={16}
-                                className="animate-spin"
-                              />
-                            )}
-                            {selectedStatus === "Resolved"
-                              ? "Resolve complaint"
-                              : "Save update"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </ExpandableComplaintCard>
-                );
-              })}
+              {filteredComplaints.map((complaint) => (
+                <StaffComplaintCard
+                  key={complaint._id}
+                  complaint={complaint}
+                  selectedStatuses={selectedStatuses}
+                  staffStatuses={staffStatuses}
+                  setSelectedStatuses={setSelectedStatuses}
+                  notes={notes}
+                  setNotes={setNotes}
+                  resolutionProofs={resolutionProofs}
+                  setResolutionProofs={setResolutionProofs}
+                  actionError={actionError}
+                  successMessage={successMessage}
+                  savingId={savingId}
+                  expanded={expandedComplaintId === complaint._id}
+                  onToggle={() => toggleComplaint(complaint._id)}
+                  onDownloadPdf={downloadComplaintPdf}
+                  onSave={() => handleStatusUpdate(complaint)}
+                />
+              ))}
             </div>
           )}
         </section>

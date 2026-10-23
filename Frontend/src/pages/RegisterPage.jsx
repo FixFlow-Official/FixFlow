@@ -6,7 +6,8 @@ import {
   createAccountRequest,
 } from "../services/api.js";
 import { Link, useNavigate } from "react-router-dom";
-import RoleSelect from "../components/RoleSelect.jsx";
+import RoleSelect from "../components/auth/RoleSelect.jsx";
+import TermsModal from "../components/registration/TermsModal.jsx";
 
 const steps = ["Verify ID", "Check email", "Set password"];
 
@@ -29,6 +30,8 @@ export default function RegisterPage() {
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -127,10 +130,19 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!termsAccepted) {
+      setError("Please accept the Terms and Conditions to create an account.");
+      return;
+    }
+
     setBusy(true);
 
     try {
-      await createAccountRequest({ password, type });
+      await createAccountRequest({
+        password,
+        type,
+        termsAccepted,
+      });
       navigate("/login");
     } catch (error) {
       setError(error.message);
@@ -297,6 +309,28 @@ export default function RegisterPage() {
                     className="min-h-12 w-full rounded-xl border border-line bg-white px-3.5 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
                   />
                 </label>
+
+                <label className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-muted">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(event) =>
+                      setTermsAccepted(event.target.checked)
+                    }
+                    className="mt-1 size-4 shrink-0 accent-[var(--color-brand)]"
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowTerms(true)}
+                      className="font-semibold text-brand underline underline-offset-2 hover:text-brand-dark"
+                    >
+                      Terms and Conditions
+                    </button>
+                    .
+                  </span>
+                </label>
               </>
             )}
 
@@ -334,6 +368,8 @@ export default function RegisterPage() {
             </div>
           </form>
         </section>
+
+        {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
 
         <p className="mt-5 text-center text-sm text-muted">
           Already registered?{" "}

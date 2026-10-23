@@ -19,3 +19,12 @@
   --color-line: #e3e8e9;
   --color-canvas: #f7f8f7;
 }
+
+.terms-modal-scroll {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer and Edge */
+}
+
+.terms-modal-scroll::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, and other WebKit browsers */
+}

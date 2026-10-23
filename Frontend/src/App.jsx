@@ -5,10 +5,11 @@ import RegisterPage from "./pages/RegisterPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import StaffDashboardPage from "./pages/StaffDashboardPage.jsx";
 import AdminDashboardPage from "./pages/AdminDashboardPage.jsx";
-import ProtectedRoute from "./components/ProtectedRoute.jsx";
-import { AuthProvider } from "./context/AuthContext.jsx";
-import PublicOnlyRoute from "./components/PublicOnlyRoute.jsx";
+import ProtectedRoute from "./components/auth/ProtectedRoute.jsx";
+import { AuthProvider } from "./context/AuthProvider.jsx";
+import PublicOnlyRoute from "./components/auth/PublicOnlyRoute.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
+
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
               </PublicOnlyRoute>
             }
           />
+
 
           <Route
             path="/forgot-password"

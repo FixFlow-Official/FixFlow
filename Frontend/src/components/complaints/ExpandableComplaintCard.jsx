@@ -1,21 +1,7 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Download, X } from "lucide-react";
-
-const statusStyles = {
-  Submitted: "bg-sky-50 text-sky-700",
-  Under_Review: "bg-amber-50 text-amber-800",
-  Assigned: "bg-indigo-50 text-indigo-700",
-  In_Progress: "bg-blue-50 text-blue-700",
-  On_Hold: "bg-orange-50 text-orange-800",
-  Resolved: "bg-emerald-50 text-emerald-700",
-  Rejected: "bg-rose-50 text-rose-700",
-  Closed: "bg-slate-100 text-slate-700",
-  Withdrawn: "bg-slate-100 text-slate-700",
-};
-
-function formatStatus(status = "") {
-  return status.replaceAll("_", " ");
-}
+import ComplaintStatusBadge from "./ComplaintStatusBadge.jsx";
 
 function formatDate(date) {
   if (!date) return "Date unavailable";
@@ -38,8 +24,6 @@ export default function ExpandableComplaintCard({
   children,
 }) {
   const status = complaint.status || "Submitted";
-  const statusClass =
-    statusStyles[status] || "bg-slate-100 text-slate-700";
 
   const location = [
     complaint.location?.building,
@@ -68,7 +52,7 @@ export default function ExpandableComplaintCard({
 
   return (
     <>
-      {/* Hide the scrollbar visually while keeping the dialog scrollable. */}
+      {/* Hide scrollbars visually while keeping content scrollable. */}
       <style>
         {`
           .complaint-dialog-scrollbar {
@@ -111,11 +95,7 @@ export default function ExpandableComplaintCard({
                     {complaint.complaintTitle || "Untitled complaint"}
                   </span>
 
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}
-                  >
-                    {formatStatus(status)}
-                  </span>
+                  <ComplaintStatusBadge status={status} />
                 </span>
 
                 <span className="mt-1 block break-words text-sm text-muted">
@@ -161,108 +141,113 @@ export default function ExpandableComplaintCard({
         </div>
       </article>
 
-      {/* Complaint details dialog with a blurred dashboard backdrop */}
-      {expanded && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-3 backdrop-blur-sm sm:p-6"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) onToggle();
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`complaint-dialog-title-${complaint._id}`}
-            className="complaint-dialog-scrollbar max-h-[92dvh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/50 bg-white shadow-2xl"
+      {/* Dialog is portaled above dashboard headers and stacking contexts. */}
+      {expanded &&
+        createPortal(
+          <div
+            className="complaint-dialog-scrollbar fixed inset-0 z-[99999] flex items-start justify-center overflow-y-auto bg-slate-950/40 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+4.5rem)] backdrop-blur-sm sm:items-center sm:p-6"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) onToggle();
+            }}
           >
-            <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-white/95 p-4 backdrop-blur sm:p-6">
-              <div className="min-w-0">
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}
-                >
-                  {formatStatus(status)}
-                </span>
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={`complaint-dialog-title-${complaint._id}`}
+              className="complaint-dialog-scrollbar max-h-[calc(100dvh-5.25rem)] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/50 bg-white shadow-2xl sm:max-h-[92dvh]"
+            >
+              {/* Dialog heading and action buttons */}
+              <header className="sticky top-0 z-20 flex items-start justify-between gap-2 border-b border-line bg-white/95 p-3 backdrop-blur sm:gap-4 sm:p-6">
+                <div className="min-w-0 flex-1">
+                  <ComplaintStatusBadge status={status} />
 
-                <h2
-                  id={`complaint-dialog-title-${complaint._id}`}
-                  className="mt-2 break-words font-display text-xl font-bold text-ink sm:text-2xl"
-                >
-                  {complaint.complaintTitle || "Untitled complaint"}
-                </h2>
+                  <h2
+                    id={`complaint-dialog-title-${complaint._id}`}
+                    className="mt-2 break-words font-display text-xl font-bold text-ink sm:text-2xl"
+                  >
+                    {complaint.complaintTitle || "Untitled complaint"}
+                  </h2>
 
-                <p className="mt-1 text-sm text-muted">
-                  Submitted {formatDate(complaint.createdAt)}
-                </p>
-              </div>
+                  <p className="mt-1 text-sm text-muted">
+                    Submitted {formatDate(complaint.createdAt)}
+                  </p>
+                </div>
 
-              <div className="flex shrink-0 items-center gap-2">
-                {onDownloadPdf && (
+                <div className="flex shrink-0 items-center gap-2">
+                  {onDownloadPdf && (
+                    <button
+                      type="button"
+                      onClick={() => onDownloadPdf(complaint)}
+                      aria-label="Download complaint PDF"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 text-sm font-semibold text-ink transition hover:border-brand hover:bg-brand-soft"
+                    >
+                      <Download size={16} />
+                      <span className="hidden sm:inline">Download PDF</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    onClick={() => onDownloadPdf(complaint)}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 text-sm font-semibold text-ink transition hover:border-brand hover:bg-brand-soft"
+                    onClick={onToggle}
+                    aria-label="Close complaint details"
+                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-muted transition hover:border-brand hover:bg-brand-soft hover:text-brand focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/10"
                   >
-                    <Download size={16} />
-                    <span className="hidden sm:inline">Download PDF</span>
+                    <X size={18} />
                   </button>
+                </div>
+              </header>
+
+              <div className="p-4 sm:p-6">
+                {/* Submitted proof photo */}
+                {complaint.complaintPictureUrl && (
+                  <a
+                    href={complaint.complaintPictureUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mb-5 block overflow-hidden rounded-xl border border-line bg-stone-50"
+                    aria-label="Open submitted proof photo"
+                  >
+                    <img
+                      src={complaint.complaintPictureUrl}
+                      alt={`Submitted proof for ${complaint.complaintTitle || "complaint"}`}
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                      className="max-h-[420px] w-full object-contain sm:max-h-[240px]"
+                    />
+                  </a>
                 )}
 
-                <button
-                  type="button"
-                  onClick={onToggle}
-                  aria-label="Close complaint details"
-                  className="inline-flex size-10 items-center justify-center rounded-xl border border-line bg-white text-muted transition hover:border-brand hover:bg-brand-soft hover:text-brand focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/10"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </header>
+                {/* Complaint description and summary */}
+                <div className="mb-5 rounded-xl bg-stone-50 p-4">
+                  <h3 className="text-sm font-semibold text-ink">
+                    Description
+                  </h3>
 
-            <div className="p-4 sm:p-6">
-              {/* Submitted proof photo */}
-              {complaint.complaintPictureUrl && (
-                <a
-                  href={complaint.complaintPictureUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mb-5 block overflow-hidden rounded-xl border border-line bg-stone-50"
-                  aria-label="Open submitted proof photo"
-                >
-                  <img
-                    src={complaint.complaintPictureUrl}
-                    alt={`Submitted proof for ${complaint.complaintTitle || "complaint"}`}
-                    onError={(event) => {
-                      event.currentTarget.style.display = "none";
-                    }}
-                    className="max-h-[420px] w-full object-contain sm:max-h-[240px]"
-                  />
-                </a>
-              )}
-
-              <div className="mb-5 rounded-xl bg-stone-50 p-4">
-                <h3 className="text-sm font-semibold text-ink">Description</h3>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-ink">
-                  {complaint.complaintDescription ||
-                    "No description provided."}
-                </p>
-
-                <p className="mt-3 break-words text-xs text-muted">
-                  {[complaint.category, location].filter(Boolean).join(" · ") ||
-                    "Category or location unavailable"}
-                </p>
-
-                {summary && (
-                  <p className="mt-2 break-words text-xs text-muted">
-                    {summary}
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-ink">
+                    {complaint.complaintDescription ||
+                      "No description provided."}
                   </p>
-                )}
-              </div>
 
-              {children}
-            </div>
-          </section>
-        </div>
-      )}
+                  <p className="mt-3 break-words text-xs text-muted">
+                    {[complaint.category, location].filter(Boolean).join(" · ") ||
+                      "Category or location unavailable"}
+                  </p>
+
+                  {summary && (
+                    <p className="mt-2 break-words text-xs text-muted">
+                      {summary}
+                    </p>
+                  )}
+                </div>
+
+                {/* Dashboard-specific details and controls */}
+                {children}
+              </div>
+            </section>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
