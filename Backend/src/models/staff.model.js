@@ -23,6 +23,14 @@ const staffSchema = new mongoose.Schema({
     type: String,
     required: [true, "Password is required"],
   },
+  termsAcceptedAt: {
+    type: Date,
+    required: [true, "Terms acceptance is required"],
+  },
+  termsVersion: {
+    type: String,
+    required: [true, "Terms version is required"],
+  },
   role: {
     type: String,
     enum: ["student", "staff", "admin"],

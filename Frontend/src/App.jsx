@@ -10,6 +10,7 @@ import { AuthProvider } from "./context/AuthContext.jsx";
 import PublicOnlyRoute from "./components/PublicOnlyRoute.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
 
+
 export default function App() {
   return (
     <AuthProvider>
@@ -33,6 +34,7 @@ export default function App() {
               </PublicOnlyRoute>
             }
           />
+
 
           <Route
             path="/forgot-password"

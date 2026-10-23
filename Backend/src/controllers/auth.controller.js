@@ -202,7 +202,13 @@ async function verifyEmail(req, res) {
  */
 
 async function createUser(req, res) {
-  const { password, type } = req.body;
+  const { password, type, termsAccepted } = req.body;
+
+  if (termsAccepted !== true) {
+    return res.status(400).json({
+      message: "You must accept the Terms and Conditions to create an account.",
+    });
+  }
   const token = req.cookies.token;
 
   if (!token) {
@@ -257,6 +263,8 @@ async function createUser(req, res) {
       [dep]: userFound[dep],
       password: passwordHash,
       role: type,
+      termsAcceptedAt: new Date(),
+      termsVersion: "1.0",
     });
 
     res.clearCookie("token");

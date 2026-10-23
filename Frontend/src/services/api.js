@@ -177,9 +177,7 @@ export async function verifyUserRequest({ id, type }) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const error = new Error(
-      data.message || "Could not verify this campus ID.",
-    );
+    const error = new Error(data.message || "Could not verify this campus ID.");
     error.retryAfterSeconds = data.retryAfterSeconds;
     throw error;
   }
@@ -277,7 +275,7 @@ export async function resetPasswordRequest({ password, id, type }) {
   return data;
 }
 
-export async function createAccountRequest({ password, type }) {
+export async function createAccountRequest({ password, type, termsAccepted }) {
   let response;
 
   try {
@@ -287,7 +285,7 @@ export async function createAccountRequest({ password, type }) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ password, type }),
+      body: JSON.stringify({ password, type, termsAccepted }),
     });
   } catch {
     throw new Error(
@@ -400,9 +398,6 @@ export async function createComplaintRequest(
   );
 }
 
-
-
-
 export async function getUnassignedComplaintsRequest(accessToken) {
   return complaintRequest(
     "/api/admin/complaints/unassigned",
@@ -470,9 +465,6 @@ export async function reassignComplaintRequest(
     accessToken,
   );
 }
-
-
-
 
 export async function updateComplaintStatusRequest(
   { complaintId, status, note = "", resolutionProof = null },
