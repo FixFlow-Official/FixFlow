@@ -1,16 +1,40 @@
-# React + Vite
+# FixFlow frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This archive contains the frontend only. It does not include or modify the FixFlow backend.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Install Node.js and npm.
+2. From this directory, run `npm install`.
+3. Start the backend separately on `http://localhost:3000`.
+4. Run `npm run dev` and open the Vite URL printed in the terminal.
 
-## React Compiler
+Vite forwards `/api` requests to `http://localhost:3000` using `vite.config.js`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Verify the frontend
 
-## Expanding the ESLint configuration
+- `npm run build` creates the production bundle.
+- `npm run lint` checks the source with ESLint.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Source structure
+
+```text
+src/
+  components/
+    auth/             Role selection and route guards
+    complaints/       Shared complaint card, toolbar, timeline, image,
+                      status badge, and empty state
+    layout/           Dashboard shell, app header, and sign-out dialog
+    registration/     Registration terms modal
+  context/            Auth provider, context, and auth hook
+  features/
+    admin/            Unassigned/assigned complaint cards and assignment controls
+    staff/            Staff complaint card, status, and resolution-proof form
+    student/          Complaint submission, history panel, card, and detail view
+  layouts/            Application-level route layout
+  pages/              Route-level pages for student, staff, admin, and auth
+  services/           API requests
+  utils/              Complaint configuration and PDF generation
+```
+
+The dashboard pages use shared complaint components and role-specific feature components. Pages retain API requests and workflow state; extracted components render the existing UI and call page-owned handlers. The existing styles and interactions are retained.

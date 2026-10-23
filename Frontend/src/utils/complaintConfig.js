@@ -35,7 +35,7 @@ export const statusStyles = {
   Submitted: "bg-sky-50 text-sky-700",
   Under_Review: "bg-amber-50 text-amber-800",
   Assigned: "bg-indigo-50 text-indigo-700",
-  In_Progress: "bg-violet-50 text-violet-700",
+  In_Progress: "bg-blue-50 text-blue-700",
   On_Hold: "bg-orange-50 text-orange-800",
   Resolved: "bg-emerald-50 text-emerald-700",
   Rejected: "bg-rose-50 text-rose-700",

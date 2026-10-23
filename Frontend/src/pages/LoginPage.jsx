@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { loginRequest } from "../services/api.js";
-import { useAuth } from "../context/AuthContext.jsx";
-import RoleSelect from "../components/RoleSelect.jsx";
+import { useAuth } from "../context/useAuth.js";
+import RoleSelect from "../components/auth/RoleSelect.jsx";
 
 const dashboardPaths = {
   student: "/student/dashboard",

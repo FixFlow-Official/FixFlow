@@ -1,22 +1,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Download, X } from "lucide-react";
-
-const statusStyles = {
-  Submitted: "bg-sky-50 text-sky-700",
-  Under_Review: "bg-amber-50 text-amber-800",
-  Assigned: "bg-indigo-50 text-indigo-700",
-  In_Progress: "bg-blue-50 text-blue-700",
-  On_Hold: "bg-orange-50 text-orange-800",
-  Resolved: "bg-emerald-50 text-emerald-700",
-  Rejected: "bg-rose-50 text-rose-700",
-  Closed: "bg-slate-100 text-slate-700",
-  Withdrawn: "bg-slate-100 text-slate-700",
-};
-
-function formatStatus(status = "") {
-  return status.replaceAll("_", " ");
-}
+import ComplaintStatusBadge from "./ComplaintStatusBadge.jsx";
 
 function formatDate(date) {
   if (!date) return "Date unavailable";
@@ -39,8 +24,6 @@ export default function ExpandableComplaintCard({
   children,
 }) {
   const status = complaint.status || "Submitted";
-  const statusClass =
-    statusStyles[status] || "bg-slate-100 text-slate-700";
 
   const location = [
     complaint.location?.building,
@@ -112,11 +95,7 @@ export default function ExpandableComplaintCard({
                     {complaint.complaintTitle || "Untitled complaint"}
                   </span>
 
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}
-                  >
-                    {formatStatus(status)}
-                  </span>
+                  <ComplaintStatusBadge status={status} />
                 </span>
 
                 <span className="mt-1 block break-words text-sm text-muted">
@@ -180,11 +159,7 @@ export default function ExpandableComplaintCard({
               {/* Dialog heading and action buttons */}
               <header className="sticky top-0 z-20 flex items-start justify-between gap-2 border-b border-line bg-white/95 p-3 backdrop-blur sm:gap-4 sm:p-6">
                 <div className="min-w-0 flex-1">
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}
-                  >
-                    {formatStatus(status)}
-                  </span>
+                  <ComplaintStatusBadge status={status} />
 
                   <h2
                     id={`complaint-dialog-title-${complaint._id}`}

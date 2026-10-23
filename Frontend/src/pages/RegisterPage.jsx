@@ -6,8 +6,8 @@ import {
   createAccountRequest,
 } from "../services/api.js";
 import { Link, useNavigate } from "react-router-dom";
-import RoleSelect from "../components/RoleSelect.jsx";
-import TermsModal from "../components/TermsModal.jsx";
+import RoleSelect from "../components/auth/RoleSelect.jsx";
+import TermsModal from "../components/registration/TermsModal.jsx";
 
 const steps = ["Verify ID", "Check email", "Set password"];
 

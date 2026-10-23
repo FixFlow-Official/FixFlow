@@ -1,25 +1,23 @@
 import { useEffect, useState } from "react";
+import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
+import UnassignedComplaintCard from "../features/admin/UnassignedComplaintCard.jsx";
+import AdminAssignedComplaintCard from "../features/admin/AdminAssignedComplaintCard.jsx";
 import {
   AlertCircle,
   ChartNoAxesColumn,
   CheckCircle2,
   ClipboardList,
   LoaderCircle,
-  UserCheck,
   Users,
 } from "lucide-react";
-import DashboardShell from "../components/DashboardShell.jsx";
+import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
-import ExpandableComplaintCard from "../components/complaints/ExpandableComplaintCard.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../context/useAuth.js";
 import {
   ASSIGNED_PAGE_SIZE,
   assignedFilterStatuses,
   assignedFilters,
   categoryDepartments,
-  departments,
-  formatDate,
-  formatStatus,
 } from "../utils/complaintConfig.js";
 import { downloadComplaintPdf } from "../utils/complaintPdf.js";
 import {
@@ -164,7 +162,9 @@ export default function AdminDashboardPage() {
         }
       } catch (requestError) {
         if (active) {
-          setError(requestError.message || "Could not load the complaint queue.");
+          setError(
+            requestError.message || "Could not load the complaint queue.",
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -524,155 +524,35 @@ export default function AdminDashboardPage() {
                 Loading complaints…
               </div>
             ) : complaints.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center">
-                <h3 className="font-display font-bold">
-                  No unassigned complaints
-                </h3>
-                <p className="mt-1 text-sm text-muted">
-                  New student complaints will appear here.
-                </p>
-              </div>
+              <ComplaintEmptyState
+                title="No unassigned complaints"
+                description="New student complaints will appear here."
+                className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center"
+                titleClassName="font-display font-bold"
+                descriptionClassName="mt-1 text-sm text-muted"
+              />
             ) : (
               <div className="space-y-4">
                 {complaints.map((complaint) => {
                   const department = selectedDepartments[complaint._id] || "";
                   const staff = staffByDepartment[department] ?? [];
                   const isExpanded = expandedUnassignedId === complaint._id;
-                  const studentSummary = [
-                    `Submitted by ${complaint.user?.username || "Student"}`,
-                    complaint.user?.rollno
-                      ? `Roll no. ${complaint.user.rollno}`
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
 
                   return (
-                    <ExpandableComplaintCard
+                    <UnassignedComplaintCard
                       key={complaint._id}
                       complaint={complaint}
+                      department={department}
+                      staff={staff}
+                      selectedStaffId={selectedStaffIds[complaint._id] || ""}
+                      assigning={assigningId === complaint._id}
                       expanded={isExpanded}
-                      onToggle={() =>
-                        setExpandedUnassignedId((currentId) =>
-                          currentId === complaint._id ? null : complaint._id,
-                        )
-                      }
+                      onToggle={() => setExpandedUnassignedId((currentId) => currentId === complaint._id ? null : complaint._id)}
+                      onDepartmentChange={(value) => handleDepartmentChange(complaint._id, value)}
+                      onStaffChange={(value) => setSelectedStaffIds((current) => ({ ...current, [complaint._id]: value }))}
+                      onAssign={() => handleAssign(complaint._id)}
                       onDownloadPdf={downloadComplaintPdf}
-                      summary={studentSummary}
-                    >
-                      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-                        <div className="min-w-0">
-                          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                            <div>
-                              <dt className="text-xs text-muted">Student</dt>
-                              <dd className="mt-1 font-semibold">
-                                {complaint.user?.username || "Student"}
-                                {complaint.user?.rollno
-                                  ? ` · ${complaint.user.rollno}`
-                                  : ""}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-xs text-muted">Location</dt>
-                              <dd className="mt-1 font-semibold">
-                                {complaint.location?.building ||
-                                  "Building unavailable"}
-                                {complaint.location?.room
-                                  ? ` · Room ${complaint.location.room}`
-                                  : ""}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-xs text-muted">Submitted</dt>
-                              <dd className="mt-1 font-semibold">
-                                {formatDate(complaint.createdAt)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-xs text-muted">Category</dt>
-                              <dd className="mt-1 font-semibold">
-                                {complaint.category || "Not provided"}
-                              </dd>
-                            </div>
-                          </dl>
-                        </div>
-
-                        <div className="grid min-w-0 gap-3">
-                          <label className="block min-w-0 space-y-1.5">
-                            <span className="text-sm font-semibold">
-                              Department
-                            </span>
-                            <select
-                              value={department}
-                              onChange={(event) =>
-                                handleDepartmentChange(
-                                  complaint._id,
-                                  event.target.value,
-                                )
-                              }
-                              className="min-h-11 w-full min-w-0 rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
-                            >
-                              <option value="">Choose department</option>
-                              {departments.map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label className="block min-w-0 space-y-1.5">
-                            <span className="text-sm font-semibold">
-                              Staff member
-                            </span>
-                            <select
-                              value={selectedStaffIds[complaint._id] || ""}
-                              onChange={(event) =>
-                                setSelectedStaffIds((current) => ({
-                                  ...current,
-                                  [complaint._id]: event.target.value,
-                                }))
-                              }
-                              disabled={!department || staff.length === 0}
-                              className="min-h-11 w-full min-w-0 rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-50"
-                            >
-                              <option value="">
-                                {!department
-                                  ? "Choose a department first"
-                                  : staff.length === 0
-                                    ? "No staff in this department"
-                                    : "Choose staff member"}
-                              </option>
-                              {staff.map((person) => (
-                                <option
-                                  key={person._id || person.staffId}
-                                  value={person.staffId}
-                                >
-                                  {person.username} · ID {person.staffId}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <button
-                            type="button"
-                            onClick={() => handleAssign(complaint._id)}
-                            disabled={assigningId === complaint._id}
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {assigningId === complaint._id ? (
-                              <LoaderCircle
-                                size={16}
-                                className="animate-spin"
-                              />
-                            ) : (
-                              <UserCheck size={16} />
-                            )}
-                            Assign complaint
-                          </button>
-                        </div>
-                      </div>
-                    </ExpandableComplaintCard>
+                    />
                   );
                 })}
               </div>
@@ -690,263 +570,48 @@ export default function AdminDashboardPage() {
               {assignedError}
             </p>
           ) : assignedComplaints.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center">
-              <h3 className="font-display font-bold">
-                No assigned complaints
-              </h3>
-              <p className="mt-1 text-sm text-muted">
-                Complaints will appear here after you assign them to staff.
-              </p>
-            </div>
+            <ComplaintEmptyState
+              title="No assigned complaints"
+              description="Complaints will appear here after you assign them to staff."
+              className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center"
+              titleClassName="font-display font-bold"
+              descriptionClassName="mt-1 text-sm text-muted"
+            />
           ) : filteredAssignedComplaints.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center">
-              <h3 className="font-display font-bold">
-                {assignedSearch.trim()
+            <ComplaintEmptyState
+              title={
+                assignedSearch.trim()
                   ? "No complaints match your search"
-                  : `No ${assignedFilter} complaints`}
-              </h3>
-              <p className="mt-1 text-sm text-muted">
-                {assignedSearch.trim()
+                  : `No ${assignedFilter} complaints`
+              }
+              description={
+                assignedSearch.trim()
                   ? "Try a different title, student, roll number, category, or location."
-                  : `There are no complaints in the ${assignedFilter} filter.`}
-              </p>
-            </div>
+                  : `There are no complaints in the ${assignedFilter} filter.`
+              }
+              className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center"
+              titleClassName="font-display font-bold"
+              descriptionClassName="mt-1 text-sm text-muted"
+            />
           ) : (
             <div className="space-y-4">
-              {visibleAssignedComplaints.map((complaint) => {
-                const isExpanded =
-                  selectedAssignedComplaintId === complaint._id;
-
-                const studentSummary = [
-                  `Submitted by ${complaint.user?.username || "Student"}`,
-                  complaint.user?.rollno
-                    ? `Roll no. ${complaint.user.rollno}`
-                    : "",
-                  complaint.assignedStaff?.username
-                    ? `Assigned to ${complaint.assignedStaff.username}`
-                    : "",
-                  complaint.assignedDepartment || "",
-                ]
-                  .filter(Boolean)
-                  .join(" · ");
-
-                return (
-                  <ExpandableComplaintCard
-                    key={complaint._id}
-                    complaint={complaint}
-                    expanded={isExpanded}
-                    onToggle={() => toggleAssignedComplaint(complaint)}
-                    onDownloadPdf={downloadComplaintPdf}
-                    summary={studentSummary}
-                  >
-                    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-                      <div className="min-w-0">
-                        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                          <div>
-                            <dt className="text-xs text-muted">Student</dt>
-                            <dd className="mt-1 font-semibold">
-                              {complaint.user?.username || "Student"}
-                              {complaint.user?.rollno
-                                ? ` · ${complaint.user.rollno}`
-                                : ""}
-                            </dd>
-                          </div>
-
-                          <div>
-                            <dt className="text-xs text-muted">Assigned staff</dt>
-                            <dd className="mt-1 font-semibold">
-                              {complaint.assignedStaff?.username ||
-                                "Staff member"}
-                            </dd>
-                          </div>
-
-                          <div>
-                            <dt className="text-xs text-muted">Department</dt>
-                            <dd className="mt-1 font-semibold">
-                              {complaint.assignedDepartment ||
-                                "Not provided"}
-                            </dd>
-                          </div>
-
-                          <div>
-                            <dt className="text-xs text-muted">Location</dt>
-                            <dd className="mt-1 font-semibold">
-                              {complaint.location?.building ||
-                                "Building unavailable"}
-                              {complaint.location?.room
-                                ? ` · Room ${complaint.location.room}`
-                                : ""}
-                            </dd>
-                          </div>
-
-                          <div>
-                            <dt className="text-xs text-muted">Submitted</dt>
-                            <dd className="mt-1 font-semibold">
-                              {formatDate(complaint.createdAt)}
-                            </dd>
-                          </div>
-
-                          <div>
-                            <dt className="text-xs text-muted">Last updated</dt>
-                            <dd className="mt-1 font-semibold">
-                              {formatDate(complaint.updatedAt)}
-                            </dd>
-                          </div>
-                        </dl>
-
-                        {complaint.complaintPictureUrl && (
-                          <div className="mt-5">
-                            <h3 className="text-sm font-semibold">
-                              Submitted proof
-                            </h3>
-                            <a
-                              href={complaint.complaintPictureUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-2 inline-flex overflow-hidden rounded-xl border border-line"
-                            >
-                              <img
-                                src={complaint.complaintPictureUrl}
-                                alt={`Proof for ${complaint.complaintTitle}`}
-                                className="h-36 w-48 object-cover"
-                              />
-                            </a>
-                          </div>
-                        )}
-
-                        {Array.isArray(complaint.statusHistory) &&
-                          complaint.statusHistory.length > 0 && (
-                            <div className="mt-5">
-                              <h3 className="text-sm font-semibold">
-                                Status history
-                              </h3>
-                              <ol className="mt-3 space-y-3 border-l border-line pl-4">
-                                {complaint.statusHistory.map((item, index) => (
-                                  <li
-                                    key={`${item.changedAt || item.status}-${index}`}
-                                    className="relative"
-                                  >
-                                    <span className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-brand" />
-                                    <p className="text-sm font-semibold">
-                                      {formatStatus(item.status)}
-                                    </p>
-                                    <p className="mt-0.5 text-xs text-muted">
-                                      {formatDate(item.changedAt)}
-                                      {item.changedByRole
-                                        ? ` · ${item.changedByRole}`
-                                        : ""}
-                                    </p>
-                                    {item.note && (
-                                      <p className="mt-1 whitespace-pre-wrap text-sm leading-5 text-muted">
-                                        {item.note}
-                                      </p>
-                                    )}
-                                  </li>
-                                ))}
-                              </ol>
-                            </div>
-                          )}
-                      </div>
-
-                      <div className="rounded-2xl bg-stone-50 p-4">
-                        <h3 className="font-semibold">Reassign complaint</h3>
-                        <p className="mt-1 text-sm leading-5 text-muted">
-                          Choose the department and staff member who should
-                          handle this complaint.
-                        </p>
-
-                        <label className="mt-4 block space-y-1.5">
-                          <span className="text-sm font-semibold">
-                            Department
-                          </span>
-                          <select
-                            value={
-                              isExpanded
-                                ? reassignDepartment
-                                : complaint.assignedDepartment || ""
-                            }
-                            onChange={(event) =>
-                              handleReassignDepartmentChange(
-                                event.target.value,
-                              )
-                            }
-                            disabled={!isExpanded || reassigning}
-                            className="min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-100"
-                          >
-                            <option value="">Choose department</option>
-                            {departments.map((department) => (
-                              <option key={department} value={department}>
-                                {department}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <label className="mt-4 block space-y-1.5">
-                          <span className="text-sm font-semibold">
-                            Staff member
-                          </span>
-                          <select
-                            value={isExpanded ? reassignStaffId : ""}
-                            onChange={(event) =>
-                              setReassignStaffId(event.target.value)
-                            }
-                            disabled={
-                              !isExpanded ||
-                              loadingReassignStaff ||
-                              !reassignDepartment ||
-                              reassignStaffList.length === 0 ||
-                              reassigning
-                            }
-                            className="min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-100"
-                          >
-                            <option value="">
-                              {loadingReassignStaff
-                                ? "Loading staff…"
-                                : !reassignDepartment
-                                  ? "Choose a department first"
-                                  : reassignStaffList.length === 0
-                                    ? "No staff in this department"
-                                    : "Choose staff member"}
-                            </option>
-                            {reassignStaffList.map((person) => (
-                              <option
-                                key={person._id || person.staffId}
-                                value={person.staffId}
-                              >
-                                {person.username} · ID {person.staffId}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <button
-                          type="button"
-                          onClick={handleReassign}
-                          disabled={
-                            !isExpanded ||
-                            reassigning ||
-                            loadingReassignStaff ||
-                            !reassignDepartment ||
-                            !reassignStaffId
-                          }
-                          className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {reassigning ? (
-                            <LoaderCircle
-                              size={16}
-                              className="animate-spin"
-                            />
-                          ) : (
-                            <UserCheck size={16} />
-                          )}
-                          Reassign complaint
-                        </button>
-                      </div>
-                    </div>
-                  </ExpandableComplaintCard>
-                );
-              })}
+              {visibleAssignedComplaints.map((complaint) => (
+                <AdminAssignedComplaintCard
+                  key={complaint._id}
+                  complaint={complaint}
+                  expanded={selectedAssignedComplaintId === complaint._id}
+                  onToggle={() => toggleAssignedComplaint(complaint)}
+                  onDownloadPdf={downloadComplaintPdf}
+                  reassignDepartment={reassignDepartment}
+                  reassignStaffId={reassignStaffId}
+                  reassignStaffList={reassignStaffList}
+                  loadingReassignStaff={loadingReassignStaff}
+                  reassigning={reassigning}
+                  onDepartmentChange={handleReassignDepartmentChange}
+                  onStaffChange={setReassignStaffId}
+                  onReassign={handleReassign}
+                />
+              ))}
             </div>
           )}
 

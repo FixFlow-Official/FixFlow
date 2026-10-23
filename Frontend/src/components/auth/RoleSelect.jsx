@@ -33,19 +33,14 @@ export default function RoleSelect({ value, onChange }) {
       return;
     }
 
-    let nextIndex = index;
-
-    if (event.key === "ArrowDown") {
-      nextIndex = (index + 1) % roles.length;
-    } else if (event.key === "ArrowUp") {
-      nextIndex = (index - 1 + roles.length) % roles.length;
-    } else if (event.key === "Home") {
-      nextIndex = 0;
-    } else if (event.key === "End") {
-      nextIndex = roles.length - 1;
-    } else {
-      return;
-    }
+    const nextIndexByKey = {
+      ArrowDown: (index + 1) % roles.length,
+      ArrowUp: (index - 1 + roles.length) % roles.length,
+      Home: 0,
+      End: roles.length - 1,
+    };
+    const nextIndex = nextIndexByKey[event.key];
+    if (nextIndex === undefined) return;
 
     event.preventDefault();
     optionRefs.current[nextIndex]?.focus();
