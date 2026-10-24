@@ -4,6 +4,7 @@ import { useAuth } from "../context/useAuth.js"
 import { logoutRequest, logoutAllRequest } from "../services/api.js"
 import AppHeader from "../components/layout/AppHeader.jsx"
 import SignOutDialog from "../components/layout/SignOutDialog.jsx"
+import OfflineExperience from "../features/offline/OfflineExperience.jsx"
 
 
 export default function AppLayout() {
@@ -86,6 +87,8 @@ export default function AppLayout() {
         onClose={() => setShowSignOutDialog(false)}
         onConfirm={handleConfirmSignOut}
       />
+
+      <OfflineExperience />
     </div>
   )
 }
