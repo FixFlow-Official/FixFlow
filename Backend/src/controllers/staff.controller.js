@@ -9,6 +9,20 @@ const staffStatuses = [
   "Resolved",
 ];
 
+const terminalStatuses = new Set([
+  "Resolved",
+  "Rejected",
+  "Closed",
+  "Withdrawn",
+]);
+
+const allowedStatusTransitions = {
+  Assigned: ["Under_Review", "In_Progress", "On_Hold", "Resolved"],
+  Under_Review: ["In_Progress", "On_Hold", "Resolved"],
+  In_Progress: ["On_Hold", "Resolved"],
+  On_Hold: ["In_Progress", "Resolved"],
+};
+
 async function getAssignedComplaints(req, res) {
   if (req.auth?.role !== "staff") {
     return res.status(403).json({
@@ -80,12 +94,25 @@ async function updateComplaintStatus(req, res) {
       _id: complaintId,
       userRef: "student",
       assignedStaff: req.auth.id,
-      
     });
 
     if (!complaint) {
       return res.status(404).json({
         message: "Active assigned complaint not found.",
+      });
+    }
+
+    if (terminalStatuses.has(complaint.status)) {
+      return res.status(409).json({
+        message: "This complaint is already closed and cannot be updated.",
+      });
+    }
+
+    const nextStatuses = allowedStatusTransitions[complaint.status] || [];
+
+    if (!nextStatuses.includes(status)) {
+      return res.status(409).json({
+        message: `Cannot change complaint status from ${complaint.status} to ${status}.`,
       });
     }
 
