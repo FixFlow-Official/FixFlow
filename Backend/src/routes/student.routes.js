@@ -1,5 +1,8 @@
 const express = require("express");
-const  upload  = require("../middlewares/multer.middleware");
+const {
+  uploadSingleImage,
+  validateImageSignature,
+} = require("../middlewares/multer.middleware");
 const {
   registerMiddleware,
   verifyAccessToken,
@@ -18,9 +21,10 @@ const router = express.Router();
 
 router.post(
   "/create-complaint",
-  upload.single("complaintImage"),
   verifyAccessToken,
-  studentController.createComplaint
+  uploadSingleImage("complaintImage"),
+  validateImageSignature,
+  studentController.createComplaint,
 );
 
 /**
