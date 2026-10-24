@@ -1,47 +1,6 @@
 const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const staffModel = require("../models/staff.model");
-const studentModel = require("../models/student.model");
-const {
-  findStudentIdsBySearch,
-  getPageMetadata,
-  getPageOptions,
-  makeSearchRegex,
-} = require("../utils/complaintPagination");
-
-const currentAssignedStatuses = [
-  "Assigned",
-  "Under_Review",
-  "In_Progress",
-  "On_Hold",
-];
-const resolvedAssignedStatuses = ["Resolved"];
-const closedAssignedStatuses = ["Rejected", "Closed", "Withdrawn"];
-
-function getAssignedViewStatuses(view) {
-  if (view === "current") return currentAssignedStatuses;
-  if (view === "resolved") return resolvedAssignedStatuses;
-  if (view === "closed") return closedAssignedStatuses;
-  return null;
-}
-
-async function buildComplaintSearchFilter(search) {
-  const searchRegex = makeSearchRegex(search);
-  if (!searchRegex) return {};
-
-  const studentIds = await findStudentIdsBySearch(search, studentModel);
-
-  return {
-    $or: [
-      { complaintTitle: searchRegex },
-      { complaintDescription: searchRegex },
-      { category: searchRegex },
-      { "location.building": searchRegex },
-      { "location.room": searchRegex },
-      { user: { $in: studentIds } },
-    ],
-  };
-}
 
 async function getUnassignedComplaints(req, res) {
   if (req.auth?.role !== "admin") {
@@ -366,10 +325,128 @@ async function reassignComplaint(req, res) {
   }
 }
 
+async function createUserByAdmin(req, res) {
+  try {
+    if (req.auth?.role !== "admin") {
+      return res.status(403).json({
+        message: "Only admins can create users",
+      });
+    }
+
+    const { id, name, email, course, type } = req.body;
+
+    if (!id || !name || !email || !course || !type) {
+      return res.status(400).json({
+        message: "Please enter all the fields for creating a user",
+      });
+    }
+
+    const userData = req.userData;
+    const idField = req.idField;
+
+    const user = userData.find((s) => s[idField] === id || s.email === email);
+
+    if (user) {
+      return res.status(400).json({
+        message: "User already exists with id or email",
+      });
+    }
+
+    if (type === "student") {
+      studentData.push({
+        rollno: id,
+        name: name,
+        course: course,
+        email: email,
+      });
+      fs.writeFileSync(studentFilePath, JSON.stringify(studentData, null, 2));
+    }
+
+    if (type === "staff") {
+      staffData.push({
+        staffId: id,
+        name: name,
+        department: course,
+        email: email,
+      });
+      fs.writeFileSync(staffFilePath, JSON.stringify(staffData, null, 2));
+    }
+
+    res.status(201).json({
+      message: "User created successfully",
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "something went wrong",
+      error: err.message,
+    });
+  }
+}
+
+async function deleteUserByAdmin(req, res) {
+  try {
+    if (req.auth?.role !== "admin") {
+      return res.status(400).json({
+        message: "Only admins can delete a user",
+      });
+    }
+
+    const { id, type } = req.body;
+
+    if (!id || !type) {
+      return res.status(400).json({
+        message: "Id and type is required",
+      });
+    }
+
+    const model = req.model;
+    const idField = req.idField;
+
+    await model.findOneAndDelete({ [idField]: id });
+
+    if (type === "student") {
+      const index = studentData.findIndex((s) => s.rollno === Number(id));
+
+      if (index === -1) {
+        return res.status(404).json({
+          message: "Student not found",
+        });
+      }
+
+      studentData.splice(index, 1);
+
+      fs.writeFileSync(studentFilePath, JSON.stringify(studentData, null, 2));
+    } else if (type === "staff") {
+      const index = staffData.findIndex((s) => s.staffId === Number(id));
+
+      if (index === -1) {
+        return res.status(404).json({
+          message: "Staff not found",
+        });
+      }
+
+      staffData.splice(index, 1);
+
+      fs.writeFileSync(staffFilePath, JSON.stringify(staffData, null, 2));
+    }
+
+    return res.status(200).json({
+      message: "User deleted and file updated successfully",
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Something went wrong",
+      error: err.message,
+    });
+  }
+}
+
 module.exports = {
   getUnassignedComplaints,
   getStaffByDepartment,
   getAssignedComplaints,
   assignComplaint,
   reassignComplaint,
+  createUserByAdmin,
+  deleteUserByAdmin,
 };
