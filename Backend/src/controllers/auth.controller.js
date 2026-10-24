@@ -297,18 +297,17 @@ async function loginController(req, res) {
   const model = req.model;
 
   const user = await model.findOne({ email, role: type });
+  // Keep password verification work similar for known and unknown accounts.
+  const dummyPasswordHash =
+    "$2b$10$eByht8xocCeuHHt8b/WIfOUO5cOTqaPMHdrwbKbPrQWJKXdlwT3vi";
+  const isPasswordCorrect = await bcrypt.compare(
+    password,
+    user?.password || dummyPasswordHash,
+  );
 
-  if (!user) {
+  if (!user || !isPasswordCorrect) {
     return res.status(401).json({
-      message: "User not found",
-    });
-  }
-
-  const isPasswordCorrect = await bcrypt.compare(password, user.password);
-
-  if (!isPasswordCorrect) {
-    return res.status(401).json({
-      message: "Incorrect email or password",
+      message: "Invalid email or password.",
     });
   }
 

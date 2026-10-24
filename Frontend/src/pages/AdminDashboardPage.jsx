@@ -12,10 +12,10 @@ import {
 } from "lucide-react";
 import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
+import ComplaintPagination from "../components/complaints/ComplaintPagination.jsx";
 import { useAuth } from "../context/useAuth.js";
 import {
   ASSIGNED_PAGE_SIZE,
-  assignedFilterStatuses,
   assignedFilters,
   categoryDepartments,
 } from "../utils/complaintConfig.js";
@@ -41,6 +41,13 @@ export default function AdminDashboardPage() {
   const [assignedSearch, setAssignedSearch] = useState("");
   const [assignedSort, setAssignedSort] = useState("newest");
   const [assignedPage, setAssignedPage] = useState(1);
+  const [unassignedPage, setUnassignedPage] = useState(1);
+  const [unassignedPagination, setUnassignedPagination] = useState(null);
+  const [assignedPagination, setAssignedPagination] = useState(null);
+  const [assignedCounts, setAssignedCounts] = useState({ current: 0, resolved: 0, closed: 0 });
+  const [queueRefreshKey, setQueueRefreshKey] = useState(0);
+  const [assignedRefreshKey, setAssignedRefreshKey] = useState(0);
+  const [debouncedAssignedSearch, setDebouncedAssignedSearch] = useState("");
 
   const [complaints, setComplaints] = useState([]);
   const [staffByDepartment, setStaffByDepartment] = useState({});
@@ -65,60 +72,21 @@ export default function AdminDashboardPage() {
     (complaint) => complaint._id === selectedAssignedComplaintId,
   );
 
-  const filteredAssignedComplaints = assignedComplaints
-    .filter((complaint) =>
-      assignedFilterStatuses[assignedFilter].includes(
-        complaint.status || "Assigned",
-      ),
-    )
-    .filter((complaint) => {
-      const query = assignedSearch.trim().toLowerCase();
-      if (!query) return true;
-
-      const searchableText = [
-        complaint.complaintTitle,
-        complaint.complaintDescription,
-        complaint.user?.username,
-        complaint.user?.rollno,
-        complaint.category,
-        complaint.location?.building,
-        complaint.location?.room,
-        complaint.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return searchableText.includes(query);
-    })
-    .sort((first, second) => {
-      const firstDate = new Date(
-        assignedSort === "updated" ? first.updatedAt : first.createdAt,
-      ).getTime();
-      const secondDate = new Date(
-        assignedSort === "updated" ? second.updatedAt : second.createdAt,
-      ).getTime();
-
-      if (assignedSort === "oldest") return firstDate - secondDate;
-      return secondDate - firstDate;
-    });
-
-  const assignedPageCount = Math.max(
-    1,
-    Math.ceil(filteredAssignedComplaints.length / ASSIGNED_PAGE_SIZE),
-  );
-  const currentAssignedPage = Math.min(assignedPage, assignedPageCount);
-  const firstVisibleComplaintIndex =
-    (currentAssignedPage - 1) * ASSIGNED_PAGE_SIZE;
-  const visibleAssignedComplaints = filteredAssignedComplaints.slice(
-    firstVisibleComplaintIndex,
-    firstVisibleComplaintIndex + ASSIGNED_PAGE_SIZE,
-  );
+  const filteredAssignedComplaints = assignedComplaints;
+  const visibleAssignedComplaints = assignedComplaints;
 
   const queueCount =
     activeQueue === "unassigned"
-      ? complaints.length
-      : assignedComplaints.length;
+      ? unassignedPagination?.total ?? 0
+      : assignedPagination?.total ?? 0;
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedAssignedSearch(assignedSearch.trim());
+      setAssignedPage(1);
+    }, 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [assignedSearch]);
 
   // Load the unassigned queue and staff options for suggested departments.
   useEffect(() => {
@@ -129,12 +97,19 @@ export default function AdminDashboardPage() {
       setError("");
 
       try {
-        const data = await getUnassignedComplaintsRequest(accessToken);
+        const data = await getUnassignedComplaintsRequest(accessToken, {
+          page: unassignedPage,
+          limit: ASSIGNED_PAGE_SIZE,
+        });
         const queue = data.complaints ?? [];
 
         if (!active) return;
 
         setComplaints(queue);
+        setUnassignedPagination(data.pagination ?? null);
+        if (data.pagination && unassignedPage > Math.max(1, data.pagination.totalPages)) {
+          setUnassignedPage(Math.max(1, data.pagination.totalPages));
+        }
 
         const departmentSelections = {};
         queue.forEach((complaint) => {
@@ -176,7 +151,7 @@ export default function AdminDashboardPage() {
     return () => {
       active = false;
     };
-  }, [accessToken]);
+  }, [accessToken, unassignedPage, queueRefreshKey]);
 
   // Load assigned complaints for the filters, search, sort, and detail cards.
   useEffect(() => {
@@ -187,10 +162,24 @@ export default function AdminDashboardPage() {
       setAssignedError("");
 
       try {
-        const data = await getAssignedComplaintsRequest(accessToken);
+        const sortOptions = assignedSort === "updated"
+          ? { sort: "updated", order: "desc" }
+          : { sort: "created", order: assignedSort === "oldest" ? "asc" : "desc" };
+        const data = await getAssignedComplaintsRequest(accessToken, {
+          view: assignedFilter,
+          search: debouncedAssignedSearch,
+          page: assignedPage,
+          limit: ASSIGNED_PAGE_SIZE,
+          ...sortOptions,
+        });
 
         if (active) {
           setAssignedComplaints(data.complaints ?? []);
+          setAssignedPagination(data.pagination ?? null);
+          setAssignedCounts(data.counts ?? { current: 0, resolved: 0, closed: 0 });
+          if (data.pagination && assignedPage > Math.max(1, data.pagination.totalPages)) {
+            setAssignedPage(Math.max(1, data.pagination.totalPages));
+          }
         }
       } catch (requestError) {
         if (active) {
@@ -208,7 +197,7 @@ export default function AdminDashboardPage() {
     return () => {
       active = false;
     };
-  }, [accessToken]);
+  }, [accessToken, assignedFilter, debouncedAssignedSearch, assignedSort, assignedPage, assignedRefreshKey]);
 
   // Load staff when an unassigned complaint's department is changed.
   async function handleDepartmentChange(complaintId, department) {
@@ -266,9 +255,8 @@ export default function AdminDashboardPage() {
         current.filter((complaint) => complaint._id !== complaintId),
       );
       setExpandedUnassignedId(null);
-
-      const assignedData = await getAssignedComplaintsRequest(accessToken);
-      setAssignedComplaints(assignedData.complaints ?? []);
+      setQueueRefreshKey((key) => key + 1);
+      setAssignedRefreshKey((key) => key + 1);
       setSuccessMessage(result.message || "Complaint assigned successfully.");
     } catch (requestError) {
       setError(requestError.message || "Could not assign this complaint.");
@@ -363,8 +351,7 @@ export default function AdminDashboardPage() {
         accessToken,
       );
 
-      const data = await getAssignedComplaintsRequest(accessToken);
-      setAssignedComplaints(data.complaints ?? []);
+      setAssignedRefreshKey((key) => key + 1);
       setSuccessMessage(result.message || "Complaint reassigned successfully.");
     } catch (requestError) {
       setError(requestError.message || "Could not reassign the complaint.");
@@ -463,21 +450,19 @@ export default function AdminDashboardPage() {
               <ComplaintToolbar
                 filters={assignedFilters.map((filter) => ({
                   ...filter,
-                  count: assignedComplaints.filter((complaint) =>
-                    assignedFilterStatuses[filter.id].includes(
-                      complaint.status || "Assigned",
-                    ),
-                  ).length,
+                  count: assignedCounts[filter.id] ?? 0,
                 }))}
                 activeFilter={assignedFilter}
                 onFilterChange={(value) => {
                   setAssignedFilter(value);
                   setAssignedPage(1);
+                  setSelectedAssignedComplaintId(null);
                 }}
                 searchValue={assignedSearch}
                 onSearchChange={(value) => {
                   setAssignedSearch(value);
                   setAssignedPage(1);
+                  setSelectedAssignedComplaintId(null);
                 }}
                 searchLabel="Search assigned complaints"
                 searchPlaceholder="Search title, student, roll number, category, or location"
@@ -485,6 +470,7 @@ export default function AdminDashboardPage() {
                 onSortChange={(value) => {
                   setAssignedSort(value);
                   setAssignedPage(1);
+                  setSelectedAssignedComplaintId(null);
                 }}
                 sortOptions={[
                   { value: "newest", label: "Newest first" },
@@ -569,7 +555,7 @@ export default function AdminDashboardPage() {
             >
               {assignedError}
             </p>
-          ) : assignedComplaints.length === 0 ? (
+          ) : (assignedPagination?.total ?? 0) === 0 ? (
             <ComplaintEmptyState
               title="No assigned complaints"
               description="Complaints will appear here after you assign them to staff."
@@ -577,7 +563,7 @@ export default function AdminDashboardPage() {
               titleClassName="font-display font-bold"
               descriptionClassName="mt-1 text-sm text-muted"
             />
-          ) : filteredAssignedComplaints.length === 0 ? (
+            ) : filteredAssignedComplaints.length === 0 ? (
             <ComplaintEmptyState
               title={
                 assignedSearch.trim()
@@ -615,57 +601,17 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
-          {/* Assigned complaint pagination */}
-          {activeQueue === "assigned" &&
-            filteredAssignedComplaints.length > 0 &&
-            assignedPageCount > 1 && (
-              <nav
-                aria-label="Assigned complaint pages"
-                className="mt-5 flex flex-col items-center justify-between gap-3 border-t border-line pt-4 sm:flex-row"
-              >
-                <p className="text-sm text-muted">
-                  Showing {firstVisibleComplaintIndex + 1}–
-                  {Math.min(
-                    firstVisibleComplaintIndex + ASSIGNED_PAGE_SIZE,
-                    filteredAssignedComplaints.length,
-                  )}{" "}
-                  of {filteredAssignedComplaints.length} complaints
-                </p>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAssignedPage((page) => Math.max(1, page - 1))
-                    }
-                    disabled={currentAssignedPage === 1}
-                    className="min-h-10 rounded-xl border border-line bg-white px-3.5 text-sm font-semibold text-ink transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-
-                  <span
-                    aria-live="polite"
-                    className="min-w-20 text-center text-sm font-medium text-muted"
-                  >
-                    Page {currentAssignedPage} of {assignedPageCount}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAssignedPage((page) =>
-                        Math.min(assignedPageCount, page + 1),
-                      )
-                    }
-                    disabled={currentAssignedPage === assignedPageCount}
-                    className="min-h-10 rounded-xl border border-line bg-white px-3.5 text-sm font-semibold text-ink transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </nav>
-            )}
+          {activeQueue === "assigned" ? (
+            <ComplaintPagination
+              pagination={assignedPagination}
+              onPageChange={setAssignedPage}
+            />
+          ) : (
+            <ComplaintPagination
+              pagination={unassignedPagination}
+              onPageChange={setUnassignedPage}
+            />
+          )}
         </section>
       </main>
     </DashboardShell>

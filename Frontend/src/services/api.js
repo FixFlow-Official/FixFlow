@@ -368,9 +368,22 @@ async function complaintRequest(url, options, accessToken) {
   return data;
 }
 
-export async function getComplaintsRequest(accessToken) {
+function buildComplaintQuery(options = {}) {
+  const query = new URLSearchParams();
+
+  Object.entries(options).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+
+  const serialized = query.toString();
+  return serialized ? `?${serialized}` : "";
+}
+
+export async function getComplaintsRequest(accessToken, options = {}) {
   return complaintRequest(
-    "/api/student/get-complaint",
+    `/api/student/get-complaint${buildComplaintQuery(options)}`,
     { method: "GET" },
     accessToken,
   );
@@ -398,25 +411,25 @@ export async function createComplaintRequest(
   );
 }
 
-export async function getUnassignedComplaintsRequest(accessToken) {
+export async function getUnassignedComplaintsRequest(accessToken, options = {}) {
   return complaintRequest(
-    "/api/admin/complaints/unassigned",
+    `/api/admin/complaints/unassigned${buildComplaintQuery(options)}`,
     { method: "GET" },
     accessToken,
   );
 }
 
-export async function getAssignedComplaintsRequest(accessToken) {
+export async function getAssignedComplaintsRequest(accessToken, options = {}) {
   return complaintRequest(
-    "/api/admin/complaints/assigned",
+    `/api/admin/complaints/assigned${buildComplaintQuery(options)}`,
     { method: "GET" },
     accessToken,
   );
 }
 
-export async function getStaffAssignedComplaintsRequest(accessToken) {
+export async function getStaffAssignedComplaintsRequest(accessToken, options = {}) {
   return complaintRequest(
-    "/api/staff/assigned-complaints",
+    `/api/staff/assigned-complaints${buildComplaintQuery(options)}`,
     { method: "GET" },
     accessToken,
   );

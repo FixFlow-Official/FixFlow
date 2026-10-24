@@ -35,6 +35,8 @@ export default function DashboardPage() {
   const { user, accessToken } = useAuth();
 
   const [complaints, setComplaints] = useState([]);
+  const [complaintPagination, setComplaintPagination] = useState(null);
+  const [complaintCounts, setComplaintCounts] = useState({ current: 0, resolved: 0 });
   const [loadingComplaints, setLoadingComplaints] = useState(true);
   const [complaintError, setComplaintError] = useState("");
   const [formError, setFormError] = useState("");
@@ -44,7 +46,9 @@ export default function DashboardPage() {
   const [complaintSearch, setComplaintSearch] = useState("");
   const [page, setPage] = useState("create");
   const [complaintFilter, setComplaintFilter] = useState("current");
-  const [selectedComplaintId, setSelectedComplaintId] = useState(null);
+  const [selectedComplaint, setSelectedComplaint] = useState(null);
+  const [complaintPage, setComplaintPage] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -53,8 +57,19 @@ export default function DashboardPage() {
   const [room, setRoom] = useState("");
   const [image, setImage] = useState(null);
 
-  // Load the student's complaints.
+  // Debounce text search so each keystroke does not trigger a database query.
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(complaintSearch.trim());
+      setComplaintPage(1);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [complaintSearch]);
+
+  // Fetch only the current server page. The home view requests its newest active item.
+  useEffect(() => {
+    if (page === "detail") return undefined;
     let active = true;
 
     async function loadComplaints() {
@@ -62,10 +77,24 @@ export default function DashboardPage() {
       setComplaintError("");
 
       try {
-        const data = await getComplaintsRequest(accessToken);
+        const data = await getComplaintsRequest(accessToken, {
+          view: page === "mine" ? complaintFilter : "active",
+          page: page === "mine" ? complaintPage : 1,
+          limit: 8,
+          search: page === "mine" ? debouncedSearch : "",
+        });
 
         if (active) {
           setComplaints(data.complaints ?? []);
+          setComplaintPagination(data.pagination ?? null);
+          setComplaintCounts(data.counts ?? { current: 0, resolved: 0 });
+          if (
+            page === "mine" &&
+            data.pagination &&
+            complaintPage > Math.max(1, data.pagination.totalPages)
+          ) {
+            setComplaintPage(Math.max(1, data.pagination.totalPages));
+          }
         }
       } catch (error) {
         if (active) {
@@ -83,64 +112,28 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [accessToken]);
+  }, [accessToken, page, complaintFilter, complaintPage, debouncedSearch]);
 
-  // Prepare sorted complaint lists and the active complaint for the home view.
-  const newestFirst = [...complaints].sort(
-    (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-  );
-
-  const newestActiveComplaint = newestFirst.find((complaint) =>
+  const newestActiveComplaint = complaints.find((complaint) =>
     activeComplaintStatuses.includes(complaint.status),
   );
-
-  const currentComplaints = newestFirst.filter(
-    (complaint) => complaint.status !== "Resolved",
-  );
-
-  const resolvedComplaints = newestFirst.filter(
-    (complaint) => complaint.status === "Resolved",
-  );
-
-  const complaintsForSelectedFilter =
-    complaintFilter === "resolved" ? resolvedComplaints : currentComplaints;
-
-  const searchTerm = complaintSearch.trim().toLowerCase();
-
-  const filteredComplaints = complaintsForSelectedFilter.filter((complaint) => {
-    const searchableText = [
-      complaint.complaintTitle,
-      complaint.complaintDescription,
-      complaint.category,
-      complaint.location?.building,
-      complaint.location?.room,
-      complaint.status,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return searchableText.includes(searchTerm);
-  });
-
-  const selectedComplaint = complaints.find(
-    (complaint) => complaint._id === selectedComplaintId,
-  );
+  const filteredComplaints = complaints;
 
   // Student navigation handlers.
   function openMyComplaints() {
     setComplaintFilter("current");
-    setSelectedComplaintId(null);
+    setComplaintPage(1);
+    setSelectedComplaint(null);
     setPage("mine");
   }
 
   function openCreateComplaint() {
-    setSelectedComplaintId(null);
+    setSelectedComplaint(null);
     setPage("create");
   }
 
   function openComplaintDetails(complaint) {
-    setSelectedComplaintId(complaint._id);
+    setSelectedComplaint(complaint);
     setPage("detail");
   }
 
@@ -219,8 +212,14 @@ export default function DashboardPage() {
       form.reset();
 
       try {
-        const updatedData = await getComplaintsRequest(accessToken);
+        const updatedData = await getComplaintsRequest(accessToken, {
+          view: "active",
+          page: 1,
+          limit: 8,
+        });
         setComplaints(updatedData.complaints ?? []);
+        setComplaintPagination(updatedData.pagination ?? null);
+        setComplaintCounts(updatedData.counts ?? { current: 0, resolved: 0 });
         setComplaintError("");
       } catch (error) {
         setComplaintError(
@@ -346,10 +345,13 @@ export default function DashboardPage() {
         ) : page === "mine" ? (
           <StudentComplaintsPanel
             openCreateComplaint={openCreateComplaint}
-            currentComplaints={currentComplaints}
-            resolvedComplaints={resolvedComplaints}
+            currentCount={complaintCounts.current}
+            resolvedCount={complaintCounts.resolved}
             complaintFilter={complaintFilter}
-            setComplaintFilter={setComplaintFilter}
+            setComplaintFilter={(filter) => {
+              setComplaintFilter(filter);
+              setComplaintPage(1);
+            }}
             complaintSearch={complaintSearch}
             setComplaintSearch={setComplaintSearch}
             loadingComplaints={loadingComplaints}
@@ -357,6 +359,8 @@ export default function DashboardPage() {
             filteredComplaints={filteredComplaints}
             openComplaintDetails={openComplaintDetails}
             downloadComplaintPdf={downloadComplaintPdf}
+            pagination={complaintPagination}
+            onPageChange={setComplaintPage}
           />
         ) : selectedComplaint ? (
           <ExpandableComplaintCard

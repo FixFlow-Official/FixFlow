@@ -5,6 +5,25 @@ const studentModel = require("../models/student.model");
 const staffModel = require("../models/staff.model");
 const adminModel = require("../models/admin.model");
 const jwt = require("jsonwebtoken");
+const {
+  getPageMetadata,
+  getPageOptions,
+  makeSearchRegex,
+} = require("../utils/complaintPagination");
+
+const activeComplaintStatuses = [
+  "Submitted",
+  "Under_Review",
+  "Assigned",
+  "In_Progress",
+  "On_Hold",
+];
+const currentComplaintStatuses = [
+  ...activeComplaintStatuses,
+  "Rejected",
+  "Closed",
+  "Withdrawn",
+];
 
  /**
  *
@@ -133,19 +152,72 @@ async function getComplaint(req, res) {
   try {
     const decoded = jwt.verify(accessToken, config.JWT_SECRET);
 
-    const complaints = await complaintModel
-      .find({
-        user: decoded.id,
-        userRef: decoded.role,
-      })
-      .populate("resolvedBy", "username staffId department")
-      .sort({ createdAt: -1 });
+    const pageOptions = getPageOptions(req.query);
+    if (pageOptions.error) {
+      return res.status(400).json({ message: pageOptions.error });
+    }
 
-    return res.status(200).json({ complaints });
+    const view = req.query.view || "all";
+    if (!["all", "active", "current", "resolved"].includes(view)) {
+      return res.status(400).json({
+        message: "Choose a valid complaint view.",
+      });
+    }
+
+    const baseFilter = {
+      user: decoded.id,
+      userRef: decoded.role,
+    };
+    const filter = { ...baseFilter };
+
+    if (view === "active") {
+      filter.status = { $in: activeComplaintStatuses };
+    } else if (view === "current") {
+      filter.status = { $in: currentComplaintStatuses };
+    } else if (view === "resolved") {
+      filter.status = "Resolved";
+    }
+
+    const searchRegex = makeSearchRegex(req.query.search);
+    if (searchRegex) {
+      filter.$or = [
+        { complaintTitle: searchRegex },
+        { complaintDescription: searchRegex },
+        { category: searchRegex },
+        { "location.building": searchRegex },
+        { "location.room": searchRegex },
+      ];
+    }
+
+    const countFilters = searchRegex ? { $or: filter.$or } : {};
+    const [complaints, total, currentCount, resolvedCount] = await Promise.all([
+      complaintModel
+        .find(filter)
+        .populate("resolvedBy", "username staffId department")
+        .sort({ createdAt: -1 })
+        .skip(pageOptions.skip)
+        .limit(pageOptions.limit),
+      complaintModel.countDocuments(filter),
+      complaintModel.countDocuments({
+        ...baseFilter,
+        ...countFilters,
+        status: { $in: currentComplaintStatuses },
+      }),
+      complaintModel.countDocuments({
+        ...baseFilter,
+        ...countFilters,
+        status: "Resolved",
+      }),
+    ]);
+
+    return res.status(200).json({
+      complaints,
+      pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
+      counts: { current: currentCount, resolved: resolvedCount },
+    });
   } catch (err) {
-    return res.status(401).json({
-      message: "Unauthorized",
-      error: err.message,
+    return res.status(500).json({
+      message: "Could not load your complaints.",
     });
   }
 }

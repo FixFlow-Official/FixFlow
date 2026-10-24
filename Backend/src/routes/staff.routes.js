@@ -1,7 +1,10 @@
 const express = require("express");
 const { verifyAccessToken } = require("../middlewares/auth.middleware");
 const staffController = require("../controllers/staff.controller");
-const multerMiddleware = require("../middlewares/multer.middleware");
+const {
+  uploadSingleImage,
+  validateImageSignature,
+} = require("../middlewares/multer.middleware");
 
 const router = express.Router();
 
@@ -14,7 +17,8 @@ router.get(
 router.patch(
   "/complaints/:complaintId/status",
   verifyAccessToken,
-  multerMiddleware.single("resolutionProof"),
+  uploadSingleImage("resolutionProof"),
+  validateImageSignature,
   staffController.updateComplaintStatus,
 );
 

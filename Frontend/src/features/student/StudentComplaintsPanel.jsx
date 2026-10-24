@@ -1,13 +1,14 @@
 import { ArrowLeft, Inbox, LoaderCircle, Plus } from "lucide-react";
 import ComplaintEmptyState from "../../components/complaints/ComplaintEmptyState.jsx";
 import ComplaintToolbar from "../../components/complaints/ComplaintToolbar.jsx";
+import ComplaintPagination from "../../components/complaints/ComplaintPagination.jsx";
 import StudentComplaintCard from "./StudentComplaintCard.jsx";
 
 // Student complaint history screen; data loading and filtering remain in DashboardPage.
 export default function StudentComplaintsPanel({
   openCreateComplaint,
-  currentComplaints,
-  resolvedComplaints,
+  currentCount,
+  resolvedCount,
   complaintFilter,
   setComplaintFilter,
   complaintSearch,
@@ -17,6 +18,8 @@ export default function StudentComplaintsPanel({
   filteredComplaints,
   openComplaintDetails,
   downloadComplaintPdf,
+  pagination,
+  onPageChange,
 }) {
   return (
           <section className="w-full rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_18px_55px_-36px_rgba(24,35,45,0.38)] ring-1 ring-line/70 sm:rounded-[1.75rem] sm:p-7">
@@ -53,12 +56,12 @@ export default function StudentComplaintsPanel({
                 {
                   id: "current",
                   label: "Current",
-                  count: currentComplaints.length,
+                  count: currentCount,
                 },
                 {
                   id: "resolved",
                   label: "Resolved",
-                  count: resolvedComplaints.length,
+                  count: resolvedCount,
                 },
               ]}
               activeFilter={complaintFilter}
@@ -114,6 +117,10 @@ export default function StudentComplaintsPanel({
                 ))}
               </div>
             )}
+            <ComplaintPagination
+              pagination={pagination}
+              onPageChange={onPageChange}
+            />
           </section>
 
   );

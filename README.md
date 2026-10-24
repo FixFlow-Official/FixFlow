@@ -1,190 +1,83 @@
 <div align="center">
 
-# 🎓 FixFlow
+# FixFlow
 
-### A smarter campus support experience
+### Campus support, made simpler
 
-**One secure portal for students, staff, and administrators.**
+**A campus complaint workflow for students, staff, and administrators.**
 
-![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
-![Express](https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?style=for-the-badge&logo=express&logoColor=white)
 ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
 
-[Features](#-what-fixflow-offers) · [Tech Stack](#-built-with) · [Getting Started](#-getting-started) · [Project Layout](#-project-layout) · [Roadmap](#-roadmap)
+[Features](#features) · [Stack](#technology-stack) · [Setup](#local-development) · [Structure](#project-structure)
 
 </div>
 
 ---
 
-## 📖 About
+## About
 
-**FixFlow** is a role-based college portal that brings account access and campus support tools together in one place. Students, staff, and administrators each get a tailored experience after signing in, backed by verified identities and secure sessions.
+FixFlow is a role-based campus support application. Students submit maintenance complaints with photo evidence, administrators route each complaint to the right department and staff member, and staff record progress and resolution evidence.
 
-> 🚧 **Current focus:** secure authentication and role-based dashboards. More campus services are planned as the project grows.
+## Features
 
----
+- **Campus account registration:** verifies an institution-issued ID, verifies email with an OTP, and records acceptance of the terms before creating an account.
+- **Role-based access:** separate student, staff, and administrator dashboards with protected routes.
+- **Student complaint tracking:** submit complaints with required photo proof, view current and resolved complaints, search and paginate results, and download a complaint report as a PDF.
+- **Administrator workflow:** review unassigned complaints, assign and reassign staff by department, and search, filter, and paginate complaint queues.
+- **Staff workflow:** view current and previously resolved assigned complaints, update status with notes, and submit a resolution note and photo proof when resolving a complaint.
+- **Account security:** password hashing, JWT-based authentication, password recovery, sign-out across sessions, and rate limits for login and OTP endpoints.
+- **Offline experience:** a production service worker caches frontend resources and provides the Campus Dash runner game. Complaint data and account actions still require the backend to be online.
 
-## ✨ What FixFlow offers
+## Project structure
 
-| | Feature | Description |
-| --- | --- | --- |
-| 🎓 | **Role-based access** | Separate experiences for students, staff, and administrators |
-| 🪪 | **Campus ID verification** | Sign-ups are checked against institution-provided records |
-| ✉️ | **Email verification** | One-time passcodes (OTP) confirm email ownership |
-| 🔐 | **Secure authentication** | bcrypt password hashing and JWT-based sessions |
-| 🔄 | **Session management** | Includes sign-out from all devices |
-| 🔑 | **Password recovery** | Reset passwords through email verification |
-| 🔓 | **Google sign-in** | Google OAuth support |
-| 📱 | **Responsive interface** | Works smoothly on phones, tablets, and desktops |
-
----
-
-## 🧰 Built with
-
-| Frontend | Backend | Data & Services |
-| --- | --- | --- |
-| React | Node.js | MongoDB |
-| Vite | Express | Nodemailer |
-| React Router | Mongoose | Google OAuth |
-| Tailwind CSS | | |
-
----
-
-## 🗂️ Project layout
-
-```text
 FixFlow/
 ├── Backend/
 │   ├── server.js
+│   ├── test/                 # Backend regression tests
 │   └── src/
-│       ├── config/         # Environment & database configuration
-│       ├── controllers/    # Request handlers
-│       ├── data/           # Institution-provided records
-│       ├── middlewares/    # Auth, role checks, error handling
-│       ├── models/         # Mongoose schemas
-│       ├── routes/         # API route definitions
-│       ├── services/       # Email, OTP, and other services
-│       └── utils/          # Helpers
+│       ├── config/           # MongoDB and environment configuration
+│       ├── controllers/      # Authentication and complaint workflows
+│       ├── data/             # Institution-provided account directories
+│       ├── middlewares/      # Authentication, validation, upload, and rate limits
+│       ├── models/           # Mongoose models
+│       ├── routes/           # Auth, student, staff, and admin APIs
+│       ├── services/         # Email and image storage
+│       └── utils/            # Shared server helpers
 ├── Frontend/
+│   ├── public/               # Static assets and service worker
 │   └── src/
-│       ├── components/     # Reusable UI components
-│       ├── context/        # Auth and app state
-│       ├── layouts/        # Role-based layouts
-│       ├── pages/          # Route pages
-│       └── services/       # API clients
+│       ├── components/       # Shared auth, layout, and complaint UI
+│       ├── context/          # Authentication state
+│       ├── features/         # Role-specific and offline experiences
+│       ├── layouts/          # Application shell
+│       ├── pages/            # Route-level pages
+│       ├── services/         # API client
+│       └── utils/            # Complaint formatting and PDF generation
 └── README.md
-```
 
----
+## Technology stack
 
-## 🚀 Getting started
+| Frontend | Backend | Storage and services |
+| --- | --- | --- |
+| React 19, React Router 7 | Node.js, Express 5 | MongoDB, Mongoose |
+| Vite 8, Tailwind CSS 4 | JSON API | ImageKit for complaint images |
+| html2pdf.js, lucide-react | Nodemailer | Gmail OAuth2 for email delivery |
+
+## Local development
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18 or newer
-- A [MongoDB](https://www.mongodb.com/) database (local or Atlas)
-- An SMTP account for Nodemailer
-- Google OAuth credentials
+- Node.js and npm
+- A MongoDB database, local or hosted
+- Gmail OAuth2 credentials for registration, verification, and password recovery emails
+- An ImageKit private key for complaint and resolution photo uploads
 
-### 1. Clone the repository
 
-```bash
-git clone https://github.com/<your-username>/FixFlow.git
-cd FixFlow
-```
-
-### 2. Set up the backend
-
-```bash
-cd Backend
-npm install
-```
-
-Create a `.env` file in `Backend/`:
-
-```env
-PORT=5000
-MONGODB_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret
-CLIENT_URL=http://localhost:5173
-
-# Email (Nodemailer)
-EMAIL_USER=your_email@example.com
-EMAIL_PASS=your_email_app_password
-
-# Google OAuth
-GOOGLE_CLIENT_ID=your_google_client_id
-```
-
-Start the server:
-
-```bash
-npm run dev
-```
-
-### 3. Set up the frontend
-
-```bash
-cd ../Frontend
-npm install
-```
-
-Create a `.env` file in `Frontend/`:
-
-```env
-VITE_API_URL=http://localhost:5000
-VITE_GOOGLE_CLIENT_ID=your_google_client_id
-```
-
-Start the app:
-
-```bash
-npm run dev
-```
-
-Open **http://localhost:5173** in your browser.
-
-> 💡 Environment variable names above are examples; match them to the ones used in your code.
-
----
-
-## 🔒 Security
-
-- Passwords are hashed with **bcrypt** and never stored in plain text
-- Sessions use **JWT**, with support for signing out of all devices
-- Email ownership is confirmed through **one-time passcodes**
-- Sign-ups are validated against **institution-provided campus records**
-- Never commit `.env` files or secrets to version control
-
----
-
-## 🗺️ Roadmap
-
-- [x] Role-based authentication
-- [x] Campus ID and email verification
-- [x] Password recovery
-- [x] Session management
-- [ ] Role-based dashboards (in progress)
-- [ ] Campus support requests
-- [ ] Notifications
-- [ ] Admin analytics
-
----
-
-## 🤝 Contributing
-
-Contributions, ideas, and bug reports are welcome.
-
-1. Fork the project
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit your changes: `git commit -m "Add your feature"`
-4. Push to the branch: `git push origin feature/your-feature`
-5. Open a pull request
-
----
 
 ## 📄 License
 
