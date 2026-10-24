@@ -1,6 +1,47 @@
 const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const staffModel = require("../models/staff.model");
+const studentModel = require("../models/student.model");
+const {
+  findStudentIdsBySearch,
+  getPageMetadata,
+  getPageOptions,
+  makeSearchRegex,
+} = require("../utils/complaintPagination");
+
+const currentAssignedStatuses = [
+  "Assigned",
+  "Under_Review",
+  "In_Progress",
+  "On_Hold",
+];
+const resolvedAssignedStatuses = ["Resolved"];
+const closedAssignedStatuses = ["Rejected", "Closed", "Withdrawn"];
+
+function getAssignedViewStatuses(view) {
+  if (view === "current") return currentAssignedStatuses;
+  if (view === "resolved") return resolvedAssignedStatuses;
+  if (view === "closed") return closedAssignedStatuses;
+  return null;
+}
+
+async function buildComplaintSearchFilter(search) {
+  const searchRegex = makeSearchRegex(search);
+  if (!searchRegex) return {};
+
+  const studentIds = await findStudentIdsBySearch(search, studentModel);
+
+  return {
+    $or: [
+      { complaintTitle: searchRegex },
+      { complaintDescription: searchRegex },
+      { category: searchRegex },
+      { "location.building": searchRegex },
+      { "location.room": searchRegex },
+      { user: { $in: studentIds } },
+    ],
+  };
+}
 
 async function getUnassignedComplaints(req, res) {
   if (req.auth?.role !== "admin") {
@@ -10,16 +51,32 @@ async function getUnassignedComplaints(req, res) {
   }
 
   try {
-    const complaints = await complaintModel
-      .find({
-        userRef: "student",
-        assignedStaff: null,
-        status: { $in: ["Submitted", "Under_Review"] },
-      })
-      .populate("user", "username rollno email")
-      .sort({ createdAt: -1 });
+    const pageOptions = getPageOptions(req.query);
+    if (pageOptions.error) {
+      return res.status(400).json({ message: pageOptions.error });
+    }
 
-    return res.status(200).json({ complaints });
+    const baseFilter = {
+      userRef: "student",
+      assignedStaff: null,
+      status: { $in: ["Submitted", "Under_Review"] },
+    };
+    const searchFilter = await buildComplaintSearchFilter(req.query.search);
+    const filter = { ...baseFilter, ...searchFilter };
+    const [complaints, total] = await Promise.all([
+      complaintModel
+        .find(filter)
+        .populate("user", "username rollno email")
+        .sort({ createdAt: -1 })
+        .skip(pageOptions.skip)
+        .limit(pageOptions.limit),
+      complaintModel.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      complaints,
+      pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
+    });
   } catch (err) {
     console.error("getUnassignedComplaints failed:", err);
 
@@ -68,17 +125,75 @@ async function getAssignedComplaints(req, res) {
   }
 
   try {
-    const complaints = await complaintModel
-      .find({
-        userRef: "student",
-        assignedStaff: { $ne: null },
-      })
-      .populate("user", "username rollno email")
-      .populate("assignedStaff", "staffId username department")
-      .populate("resolvedBy", "staffId username department")
-      .sort({ updatedAt: -1 });
+    const pageOptions = getPageOptions(req.query);
+    if (pageOptions.error) {
+      return res.status(400).json({ message: pageOptions.error });
+    }
 
-    return res.status(200).json({ complaints });
+    const view = req.query.view || "all";
+    const viewStatuses = getAssignedViewStatuses(view);
+    if (view !== "all" && !viewStatuses) {
+      return res.status(400).json({
+        message: "Choose a valid assigned complaint view.",
+      });
+    }
+
+    const sort = req.query.sort || "updated";
+    if (!["created", "updated"].includes(sort)) {
+      return res.status(400).json({
+        message: "Choose a valid complaint sort order.",
+      });
+    }
+
+    const order = req.query.order || "desc";
+    if (!["asc", "desc"].includes(order)) {
+      return res.status(400).json({
+        message: "Choose a valid complaint sort direction.",
+      });
+    }
+
+    const baseFilter = {
+      userRef: "student",
+      assignedStaff: { $ne: null },
+    };
+    const searchFilter = await buildComplaintSearchFilter(req.query.search);
+    const filter = {
+      ...baseFilter,
+      ...searchFilter,
+      ...(viewStatuses ? { status: { $in: viewStatuses } } : {}),
+    };
+    const countForView = (statuses) =>
+      complaintModel.countDocuments({
+        ...baseFilter,
+        ...searchFilter,
+        status: { $in: statuses },
+      });
+
+    const [complaints, total, currentCount, resolvedCount, closedCount] =
+      await Promise.all([
+        complaintModel
+          .find(filter)
+          .populate("user", "username rollno email")
+          .populate("assignedStaff", "staffId username department")
+          .populate("resolvedBy", "staffId username department")
+          .sort({ [sort === "created" ? "createdAt" : "updatedAt"]: order === "asc" ? 1 : -1 })
+          .skip(pageOptions.skip)
+          .limit(pageOptions.limit),
+        complaintModel.countDocuments(filter),
+        countForView(currentAssignedStatuses),
+        countForView(resolvedAssignedStatuses),
+        countForView(closedAssignedStatuses),
+      ]);
+
+    return res.status(200).json({
+      complaints,
+      pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
+      counts: {
+        current: currentCount,
+        resolved: resolvedCount,
+        closed: closedCount,
+      },
+    });
   } catch (err) {
     console.error("getAssignedComplaints failed:", err);
 

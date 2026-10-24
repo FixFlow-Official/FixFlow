@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import StaffComplaintCard from "../features/staff/StaffComplaintCard.jsx";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
 import {
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
+import ComplaintPagination from "../components/complaints/ComplaintPagination.jsx";
 import { useAuth } from "../context/useAuth.js";
 import {
   getStaffAssignedComplaintsRequest,
@@ -51,6 +52,10 @@ export default function StaffDashboardPage() {
   const { user, accessToken } = useAuth();
 
   const [complaints, setComplaints] = useState([]);
+  const [pagination, setPagination] = useState(null);
+  const [counts, setCounts] = useState({ current: 0, resolved: 0, statuses: {} });
+  const [page, setPage] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [complaintView, setComplaintView] = useState("current");
   const [complaintFilter, setComplaintFilter] = useState("all");
   const [complaintSearch, setComplaintSearch] = useState("");
@@ -63,25 +68,32 @@ export default function StaffDashboardPage() {
   const [actionError, setActionError] = useState({});
   const [successMessage, setSuccessMessage] = useState({});
   const [savingId, setSavingId] = useState("");
-
-  const currentComplaints = complaints.filter(
-    (complaint) => complaint.status !== "Resolved",
-  );
-
-  const resolvedComplaints = complaints.filter(
-    (complaint) => complaint.status === "Resolved",
-  );
+  const latestRequestId = useRef(0);
 
   const loadComplaints = useCallback(async () => {
+    const requestId = ++latestRequestId.current;
     setLoading(true);
     setLoadError("");
 
     try {
-      // This request must return both current and resolved complaints.
-      const data = await getStaffAssignedComplaintsRequest(accessToken);
+      const data = await getStaffAssignedComplaintsRequest(accessToken, {
+        view: complaintView,
+        ...(complaintView === "current" && complaintFilter !== "all"
+          ? { status: complaintFilter }
+          : {}),
+        search: debouncedSearch,
+        page,
+        limit: 8,
+      });
+      if (requestId !== latestRequestId.current) return;
       const assignedComplaints = data.complaints ?? [];
 
       setComplaints(assignedComplaints);
+      setPagination(data.pagination ?? null);
+      setCounts(data.counts ?? { current: 0, resolved: 0, statuses: {} });
+      if (data.pagination && page > Math.max(1, data.pagination.totalPages)) {
+        setPage(Math.max(1, data.pagination.totalPages));
+      }
       setSelectedStatuses(
         Object.fromEntries(
           assignedComplaints.map((complaint) => [
@@ -91,49 +103,36 @@ export default function StaffDashboardPage() {
         ),
       );
     } catch (error) {
-      setLoadError(error.message || "Could not load assigned complaints.");
+      if (requestId === latestRequestId.current) {
+        setLoadError(error.message || "Could not load assigned complaints.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestId.current) setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, complaintView, complaintFilter, debouncedSearch, page]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(complaintSearch.trim());
+      setPage(1);
+    }, 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [complaintSearch]);
 
   useEffect(() => {
     loadComplaints();
   }, [loadComplaints]);
 
   // Filter by view, status, and search query.
-  const complaintsForView =
-    complaintView === "resolved" ? resolvedComplaints : currentComplaints;
-  const searchTerm = complaintSearch.trim().toLowerCase();
-
-  const filteredComplaints = complaintsForView.filter((complaint) => {
-    const matchesStatus =
-      complaintView === "resolved" ||
-      complaintFilter === "all" ||
-      complaint.status === complaintFilter;
-
-    const searchableText = [
-      complaint.complaintTitle,
-      complaint.complaintDescription,
-      complaint.category,
-      complaint.user?.username,
-      complaint.user?.rollno,
-      complaint.location?.building,
-      complaint.location?.room,
-      complaint.status,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return matchesStatus && searchableText.includes(searchTerm);
-  });
+  const complaintsForView = complaints;
+  const filteredComplaints = complaints;
 
   function handleViewChange(view) {
     setComplaintView(view);
     setComplaintFilter("all");
     setComplaintSearch("");
     setExpandedComplaintId(null);
+    setPage(1);
   }
 
   function toggleComplaint(complaintId) {
@@ -285,13 +284,13 @@ export default function StaffDashboardPage() {
                 </h2>
                 <p className="text-sm text-muted">
                   {complaintView === "current"
-                    ? `${currentComplaints.length} active ${
-                        currentComplaints.length === 1
+                    ? `${counts.current} active ${
+                        counts.current === 1
                           ? "complaint"
                           : "complaints"
                       }`
-                    : `${resolvedComplaints.length} resolved ${
-                        resolvedComplaints.length === 1
+                    : `${counts.resolved} resolved ${
+                        counts.resolved === 1
                           ? "complaint"
                           : "complaints"
                       }`}
@@ -315,7 +314,7 @@ export default function StaffDashboardPage() {
                     : "border border-line bg-white text-muted hover:bg-brand-soft hover:text-brand-dark"
                 }`}
               >
-                Current ({currentComplaints.length})
+                Current ({counts.current})
               </button>
 
               <button
@@ -329,13 +328,13 @@ export default function StaffDashboardPage() {
                     : "border border-line bg-white text-muted hover:bg-brand-soft hover:text-brand-dark"
                 }`}
               >
-                Resolved ({resolvedComplaints.length})
+                Resolved ({counts.resolved})
               </button>
             </div>
           </div>
 
           {/* Search and status filters for the selected view */}
-          {!loading && complaintsForView.length > 0 && (
+          {!loading && (counts.current > 0 || counts.resolved > 0) && (
             <div className="mt-5">
               <ComplaintToolbar
                 filters={
@@ -344,23 +343,25 @@ export default function StaffDashboardPage() {
                         ...filter,
                         count:
                           filter.id === "all"
-                            ? currentComplaints.length
-                            : currentComplaints.filter(
-                                (complaint) => complaint.status === filter.id,
-                              ).length,
+                          ? counts.current
+                          : counts.statuses?.[filter.id] ?? 0,
                       }))
                     : [
                         {
                           id: "all",
                           label: "All",
-                          count: resolvedComplaints.length,
+                          count: counts.resolved,
                         },
                       ]
                 }
                 activeFilter={
                   complaintView === "current" ? complaintFilter : "all"
                 }
-                onFilterChange={setComplaintFilter}
+                onFilterChange={(value) => {
+                  setComplaintFilter(value);
+                  setPage(1);
+                  setExpandedComplaintId(null);
+                }}
                 searchValue={complaintSearch}
                 onSearchChange={setComplaintSearch}
                 searchLabel={`Search ${complaintView} complaints`}
@@ -435,6 +436,9 @@ export default function StaffDashboardPage() {
                 />
               ))}
             </div>
+          )}
+          {!loading && !loadError && (
+            <ComplaintPagination pagination={pagination} onPageChange={setPage} />
           )}
         </section>
       </main>

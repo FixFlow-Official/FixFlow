@@ -1,6 +1,13 @@
 const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
+const studentModel = require("../models/student.model");
 const uploadFile = require("../services/storage.service");
+const {
+  findStudentIdsBySearch,
+  getPageMetadata,
+  getPageOptions,
+  makeSearchRegex,
+} = require("../utils/complaintPagination");
 
 const staffStatuses = [
   "Under_Review",
@@ -15,6 +22,15 @@ const terminalStatuses = new Set([
   "Closed",
   "Withdrawn",
 ]);
+const currentStaffStatuses = [
+  "Assigned",
+  "Under_Review",
+  "In_Progress",
+  "On_Hold",
+  "Rejected",
+  "Closed",
+  "Withdrawn",
+];
 
 const allowedStatusTransitions = {
   Assigned: ["Under_Review", "In_Progress", "On_Hold", "Resolved"],
@@ -31,16 +47,108 @@ async function getAssignedComplaints(req, res) {
   }
 
   try {
-    const complaints = await complaintModel
-      .find({
-        userRef: "student",
-        assignedStaff: req.auth.id,
-        status: { $ne: "Resolved" },
-      })
-      .populate("user", "username rollno")
-      .sort({ updatedAt: -1 });
+    const pageOptions = getPageOptions(req.query);
+    if (pageOptions.error) {
+      return res.status(400).json({ message: pageOptions.error });
+    }
 
-    return res.status(200).json({ complaints });
+    const view = req.query.view || "all";
+    if (!["all", "current", "resolved"].includes(view)) {
+      return res.status(400).json({
+        message: "Choose a valid complaint view.",
+      });
+    }
+
+    const allowedCurrentStatuses = [
+      "Assigned",
+      "Under_Review",
+      "In_Progress",
+      "On_Hold",
+    ];
+    const requestedStatus = req.query.status;
+    if (
+      requestedStatus &&
+      (view !== "current" || !allowedCurrentStatuses.includes(requestedStatus))
+    ) {
+      return res.status(400).json({
+        message: "Choose a valid current complaint status.",
+      });
+    }
+
+    const baseFilter = {
+      userRef: "student",
+      assignedStaff: req.auth.id,
+    };
+    const searchRegex = makeSearchRegex(req.query.search);
+    let searchFilter = {};
+
+    if (searchRegex) {
+      const studentIds = await findStudentIdsBySearch(
+        req.query.search,
+        studentModel,
+      );
+      searchFilter = {
+        $or: [
+          { complaintTitle: searchRegex },
+          { complaintDescription: searchRegex },
+          { category: searchRegex },
+          { "location.building": searchRegex },
+          { "location.room": searchRegex },
+          { user: { $in: studentIds } },
+        ],
+      };
+    }
+
+    const statusFilter =
+      requestedStatus
+        ? { status: requestedStatus }
+        : view === "current"
+          ? { status: { $in: currentStaffStatuses } }
+          : view === "resolved"
+            ? { status: "Resolved" }
+            : {};
+    const filter = { ...baseFilter, ...searchFilter, ...statusFilter };
+    const countFilter = searchFilter;
+    const statusCountQueries = allowedCurrentStatuses.map((status) =>
+      complaintModel.countDocuments({
+        ...baseFilter,
+        ...countFilter,
+        status,
+      }),
+    );
+    const [complaints, total, currentCount, resolvedCount, ...statusCounts] = await Promise.all([
+      complaintModel
+        .find(filter)
+        .populate("user", "username rollno")
+        .populate("resolvedBy", "username staffId department")
+        .sort({ updatedAt: -1 })
+        .skip(pageOptions.skip)
+        .limit(pageOptions.limit),
+      complaintModel.countDocuments(filter),
+      complaintModel.countDocuments({
+        ...baseFilter,
+        ...countFilter,
+        status: { $in: currentStaffStatuses },
+      }),
+      complaintModel.countDocuments({
+        ...baseFilter,
+        ...countFilter,
+        status: "Resolved",
+      }),
+      ...statusCountQueries,
+    ]);
+
+    return res.status(200).json({
+      complaints,
+      pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
+      counts: {
+        current: currentCount,
+        resolved: resolvedCount,
+        statuses: Object.fromEntries(
+          allowedCurrentStatuses.map((status, index) => [status, statusCounts[index]]),
+        ),
+      },
+    });
   } catch {
     return res.status(500).json({
       message: "Could not load your assigned complaints.",

@@ -159,6 +159,23 @@ const complaintSchema = new mongoose.Schema(
   },
 );
 
+// Support student complaint history, admin queues, and staff workload lists.
+complaintSchema.index({ userRef: 1, user: 1, createdAt: -1 });
+complaintSchema.index({ userRef: 1, user: 1, status: 1, createdAt: -1 });
+complaintSchema.index({
+  userRef: 1,
+  assignedStaff: 1,
+  status: 1,
+  createdAt: -1,
+});
+complaintSchema.index({ userRef: 1, assignedStaff: 1, updatedAt: -1 });
+complaintSchema.index({
+  userRef: 1,
+  assignedStaff: 1,
+  status: 1,
+  updatedAt: -1,
+});
+
 const complaintModel = mongoose.model("complaint", complaintSchema);
 
 module.exports = complaintModel;
