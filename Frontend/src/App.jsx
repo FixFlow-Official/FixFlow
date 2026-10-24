@@ -72,8 +72,15 @@ export default function App() {
             }
           />
 
-          {/* Keep the old URL working until we update login routing next. */}
-          <Route path="/app" element={<DashboardPage />} />
+          {/* Keep the legacy student URL available behind the same access check. */}
+          <Route
+            path="/app"
+            element={
+              <ProtectedRoute allowedRole="student">
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
         </Route>
       </Routes>
     </AuthProvider>

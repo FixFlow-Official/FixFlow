@@ -6,6 +6,7 @@ const {
   otpRequestLimiter,
   otpVerifyLimiter,
 } = require("../middlewares/otpRateLimit.middleware");
+const { loginLimiter } = require("../middlewares/loginRateLimit.middleware");
 
 const router = express.Router();
 
@@ -62,6 +63,7 @@ router.post(
 
 router.post(
   "/login",
+  loginLimiter,
   authMiddleWare.registerMiddleware,
   authController.loginController,
 );
