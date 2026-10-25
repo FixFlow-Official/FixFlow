@@ -396,6 +396,26 @@ export async function getComplaintsRequest(accessToken, options = {}) {
   );
 }
 
+export async function getComplaintCommentsRequest(complaintId, accessToken) {
+  return complaintRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}/comments`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function addComplaintCommentRequest(complaintId, message, accessToken) {
+  return complaintRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}/comments`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+    accessToken,
+  );
+}
+
 export async function createComplaintRequest(
   { title, description, category, building, room, image },
   accessToken,

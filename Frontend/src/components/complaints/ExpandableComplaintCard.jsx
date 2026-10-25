@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Download, X } from "lucide-react";
 import ComplaintStatusBadge from "./ComplaintStatusBadge.jsx";
+import ComplaintConversation from "./ComplaintConversation.jsx";
 
 function formatDate(date) {
   if (!date) return "Date unavailable";
@@ -243,6 +244,9 @@ export default function ExpandableComplaintCard({
 
                 {/* Dashboard-specific details and controls */}
                 {children}
+
+                {/* Shared conversation for student, staff, and admin complaint views. */}
+                <ComplaintConversation complaint={complaint} />
               </div>
             </section>
           </div>,
