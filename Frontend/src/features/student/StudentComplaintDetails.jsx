@@ -116,13 +116,13 @@ export default function StudentComplaintDetails({ complaint }) {
                     </div>
                   )}
 
-                  {complaint.resolvedBy && (
+                  {(complaint.resolvedBy || complaint.resolvedBySnapshot) && (
                     <div>
                       <dt className="inline font-semibold">Resolved by: </dt>
                       <dd className="inline">
-                        {complaint.resolvedBy.username || "Staff member"}
-                        {complaint.resolvedBy.department
-                          ? ` · ${complaint.resolvedBy.department}`
+                        {complaint.resolvedBy?.username || complaint.resolvedBySnapshot?.name || "Staff member"}
+                        {(complaint.resolvedBy?.department || complaint.resolvedBySnapshot?.department)
+                          ? ` · ${complaint.resolvedBy?.department || complaint.resolvedBySnapshot?.department}`
                           : ""}
                       </dd>
                     </div>

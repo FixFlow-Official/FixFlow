@@ -2,10 +2,9 @@ const express = require("express");
 const { verifyAccessToken } = require("../middlewares/auth.middleware");
 const adminController = require("../controllers/admin.controller");
 const {
-  idValidatorRule,
+  directoryIdValidatorRule,
   typeValidatorRule,
 } = require("../middlewares/validator.middleware");
-const { registerMiddleware } = require("../middlewares/auth.middleware");
 const router = express.Router();
 
 router.get(
@@ -35,21 +34,19 @@ router.patch(
 );
 
 router.post(
-  "/create-user-by-admin",
+  "/directory/users",
   verifyAccessToken,
-  idValidatorRule,
+  directoryIdValidatorRule,
   typeValidatorRule,
-  registerMiddleware,
-  adminController.createUserByAdmin,
+  adminController.addUserToDirectoryByAdmin,
 );
 
 router.post(
   "/delete-user-by-admin",
   verifyAccessToken,
-  idValidatorRule,
+  directoryIdValidatorRule,
   typeValidatorRule,
-  registerMiddleware,
-  adminController.deleteUserByAdmin
+  adminController.deleteUserByAdmin,
 );
 
 module.exports = router;

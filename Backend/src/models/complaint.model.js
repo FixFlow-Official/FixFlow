@@ -24,6 +24,23 @@ const complaintSchema = new mongoose.Schema(
       enum: ["student", "staff", "admin"],
       required: [true, "UserRef is required"],
     },
+    // Keep report ownership visible if an administrator later removes the account.
+    userSnapshot: {
+      name: { type: String, default: null },
+      campusId: { type: String, default: null },
+      email: { type: String, default: null },
+      role: { type: String, enum: ["student", "staff", "admin"], default: null },
+    },
+    assignedStaffSnapshot: {
+      name: { type: String, default: null },
+      campusId: { type: String, default: null },
+      department: { type: String, default: null },
+    },
+    resolvedBySnapshot: {
+      name: { type: String, default: null },
+      campusId: { type: String, default: null },
+      department: { type: String, default: null },
+    },
     complaintPictureUrl: {
       type: String,
       required: [true, "ComplaintPictureUrl is required"],
@@ -116,6 +133,10 @@ const complaintSchema = new mongoose.Schema(
           enum: ["student", "staff", "admin"],
           default: null,
         },
+        changedBySnapshot: {
+          name: { type: String, default: null },
+          campusId: { type: String, default: null },
+        },
         changedAt: {
           type: Date,
           default: Date.now,
@@ -132,6 +153,10 @@ const complaintSchema = new mongoose.Schema(
           type: String,
           enum: ["student", "staff", "admin"],
           required: true,
+        },
+        authorSnapshot: {
+          name: { type: String, default: null },
+          campusId: { type: String, default: null },
         },
         message: {
           type: String,

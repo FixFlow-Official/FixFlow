@@ -57,7 +57,7 @@ export async function downloadComplaintPdf(complaint) {
       ? '<section class="resolution"><h2>Resolution details</h2><p>' +
         escapeHtml(complaint.resolutionNote || "No resolution note available.") +
         "</p><p><strong>Resolved by:</strong> " +
-        escapeHtml(complaint.resolvedBy?.username || "Staff member") +
+        escapeHtml(complaint.resolvedBy?.username || complaint.resolvedBySnapshot?.name || "Staff member") +
         "</p><p><strong>Resolved at:</strong> " +
         escapeHtml(formatDate(complaint.resolvedAt)) +
         "</p>" +
@@ -114,13 +114,13 @@ export async function downloadComplaintPdf(complaint) {
       escapeHtml(formatDate(complaint.createdAt)) +
       "</span></div>",
     '<div><span class="label">Student</span><span class="value">' +
-      escapeHtml(complaint.user?.username || "Student") +
-      (complaint.user?.rollno
-        ? " · " + escapeHtml(complaint.user.rollno)
+      escapeHtml(complaint.user?.username || complaint.userSnapshot?.name || "Student") +
+      (complaint.user?.rollno || complaint.userSnapshot?.campusId
+        ? " · " + escapeHtml(complaint.user?.rollno || complaint.userSnapshot?.campusId)
         : "") +
       "</span></div>",
     '<div><span class="label">Assigned staff</span><span class="value">' +
-      escapeHtml(complaint.assignedStaff?.username || "Staff member") +
+      escapeHtml(complaint.assignedStaff?.username || complaint.assignedStaffSnapshot?.name || "Staff member") +
       "</span></div>",
     '<div><span class="label">Department</span><span class="value">' +
       escapeHtml(complaint.assignedDepartment || "Not assigned") +

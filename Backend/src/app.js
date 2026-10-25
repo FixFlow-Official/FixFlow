@@ -1,6 +1,7 @@
 const express = require("express");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
+const mongoose = require("mongoose");
 const authRouter = require("./routes/auth.routes");
 const studentRouter = require("./routes/student.routes");
 const adminRouter = require("./routes/admin.routes");
@@ -13,6 +14,18 @@ const app = express();
 app.use(express.json());
 app.use(morgan("dev"));
 app.use(cookieParser());
+
+// Return an actionable API response while MongoDB is connecting instead of
+// leaving Mongoose queries buffered until the Vite proxy times out.
+app.use("/api", (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      message: "The database is still connecting. Please retry in a moment.",
+    });
+  }
+
+  return next();
+});
 
 //Routes used with prefix
 

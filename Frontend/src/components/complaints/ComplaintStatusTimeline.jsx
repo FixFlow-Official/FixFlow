@@ -66,7 +66,7 @@ export default function ComplaintStatusTimeline({
                   <p className="mt-0.5 text-xs text-muted">
                     {formatDate(entry.changedAt)}
                     {includeActorRole && entry.changedByRole
-                      ? ` · ${entry.changedByRole}`
+                      ? ` · ${entry.changedByRole}${entry.changedBySnapshot?.name ? ` · ${entry.changedBySnapshot.name}` : ""}${entry.changedBySnapshot?.campusId ? ` (ID ${entry.changedBySnapshot.campusId})` : ""}`
                       : ""}
                   </p>
 

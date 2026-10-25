@@ -16,9 +16,11 @@ export default function UnassignedComplaintCard({
   onAssign,
   onDownloadPdf,
 }) {
+  const studentName = complaint.user?.username || complaint.userSnapshot?.name || "Student";
+  const studentId = complaint.user?.rollno || complaint.userSnapshot?.campusId;
   const studentSummary = [
-    `Submitted by ${complaint.user?.username || "Student"}`,
-    complaint.user?.rollno ? `Roll no. ${complaint.user.rollno}` : "",
+    `Submitted by ${studentName}`,
+    studentId ? `Roll no. ${studentId}` : "",
   ].filter(Boolean).join(" · ");
 
   return (
@@ -35,8 +37,8 @@ export default function UnassignedComplaintCard({
             <div>
               <dt className="text-xs text-muted">Student</dt>
               <dd className="mt-1 font-semibold">
-                {complaint.user?.username || "Student"}
-                {complaint.user?.rollno ? ` · ${complaint.user.rollno}` : ""}
+                {studentName}
+                {studentId ? ` · ${studentId}` : ""}
               </dd>
             </div>
             <div>

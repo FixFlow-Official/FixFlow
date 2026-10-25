@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
 import UnassignedComplaintCard from "../features/admin/UnassignedComplaintCard.jsx";
 import AdminAssignedComplaintCard from "../features/admin/AdminAssignedComplaintCard.jsx";
+import AdminUserManagement from "../features/admin/AdminUserManagement.jsx";
 import {
   AlertCircle,
   ChartNoAxesColumn,
@@ -32,6 +33,7 @@ import {
 export default function AdminDashboardPage() {
   const { user, accessToken } = useAuth();
 
+  const [activeSection, setActiveSection] = useState("complaints");
   const [activeQueue, setActiveQueue] = useState("unassigned");
   const [expandedUnassignedId, setExpandedUnassignedId] = useState(null);
   const [selectedAssignedComplaintId, setSelectedAssignedComplaintId] =
@@ -372,9 +374,11 @@ export default function AdminDashboardPage() {
   return (
     <DashboardShell
       workspaceLabel="Administrator"
-      activeSection="complaints"
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
       navItems={[
         { id: "complaints", label: "Complaints", icon: ClipboardList },
+        { id: "users", label: "User access", icon: Users },
         { id: "staff", label: "Staff", icon: Users, disabled: true },
         {
           id: "reports",
@@ -384,6 +388,9 @@ export default function AdminDashboardPage() {
         },
       ]}
     >
+      {activeSection === "users" ? (
+        <AdminUserManagement accessToken={accessToken} />
+      ) : (
       <main className="w-full min-w-0">
         <span className="inline-flex rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand-dark">
           Administrator workspace
@@ -614,6 +621,7 @@ export default function AdminDashboardPage() {
           )}
         </section>
       </main>
+      )}
     </DashboardShell>
   );
 }

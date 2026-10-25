@@ -362,7 +362,14 @@ async function complaintRequest(url, options, accessToken) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || "The complaint request failed.");
+    const validationMessage = Array.isArray(data.error)
+      ? data.error.map((item) => item.msg).filter(Boolean).join(" ")
+      : "";
+    throw new Error(
+      data.message ||
+        validationMessage ||
+        `Request failed with status ${response.status}.`,
+    );
   }
 
   return data;
@@ -474,6 +481,46 @@ export async function reassignComplaintRequest(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ staffId, department }),
+    },
+    accessToken,
+  );
+}
+
+// Remove a student or staff member from the campus directory and, if registered,
+// delete the account and revoke its sessions through the admin endpoint.
+export async function deleteUserByAdminRequest({ id, type }, accessToken) {
+  return complaintRequest(
+    "/api/admin/delete-user-by-admin",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id, type }),
+    },
+    accessToken,
+  );
+}
+
+// Add an approved person to the campus directory. They still register via email OTP.
+export async function addUserToDirectoryByAdminRequest(
+  { id, name, email, course, type },
+  accessToken,
+) {
+  return complaintRequest(
+    "/api/admin/directory/users",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id,
+        name,
+        email,
+        course,
+        type,
+      }),
     },
     accessToken,
   );

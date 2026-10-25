@@ -27,9 +27,11 @@ export default function StaffComplaintCard({
   const selectedStatus = selectedStatuses[complaintId] ?? complaint.status;
   const isSaving = savingId === complaintId;
   const isExpanded = expanded;
+  const studentName = complaint.user?.username || complaint.userSnapshot?.name || "Student";
+  const studentId = complaint.user?.rollno || complaint.userSnapshot?.campusId;
   const studentSummary = [
-    complaint.user?.username ?? "Student",
-    complaint.user?.rollno ? `Roll no. ${complaint.user.rollno}` : "",
+    studentName,
+    studentId ? `Roll no. ${studentId}` : "",
   ].filter(Boolean).join(" · ");
 
   return (
@@ -50,9 +52,9 @@ export default function StaffComplaintCard({
                           <div>
                             <dt className="inline text-muted">Student: </dt>
                             <dd className="inline font-semibold">
-                              {complaint.user?.username ?? "Student"}
-                              {complaint.user?.rollno
-                                ? ` · ${complaint.user.rollno}`
+                              {studentName}
+                              {studentId
+                                ? ` · ${studentId}`
                                 : ""}
                             </dd>
                           </div>
