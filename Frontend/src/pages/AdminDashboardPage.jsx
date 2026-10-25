@@ -3,6 +3,7 @@ import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.js
 import UnassignedComplaintCard from "../features/admin/UnassignedComplaintCard.jsx";
 import AdminAssignedComplaintCard from "../features/admin/AdminAssignedComplaintCard.jsx";
 import AdminUserManagement from "../features/admin/AdminUserManagement.jsx";
+import AdminAccountsPage from "../features/admin/AdminAccountsPage.jsx";
 import {
   AlertCircle,
   ChartNoAxesColumn,
@@ -379,6 +380,7 @@ export default function AdminDashboardPage() {
       navItems={[
         { id: "complaints", label: "Complaints", icon: ClipboardList },
         { id: "users", label: "User access", icon: Users },
+        { id: "accounts", label: "Accounts", icon: Users },
         { id: "staff", label: "Staff", icon: Users, disabled: true },
         {
           id: "reports",
@@ -390,6 +392,8 @@ export default function AdminDashboardPage() {
     >
       {activeSection === "users" ? (
         <AdminUserManagement accessToken={accessToken} />
+      ) : activeSection === "accounts" ? (
+        <AdminAccountsPage accessToken={accessToken} />
       ) : (
       <main className="w-full min-w-0">
         <span className="inline-flex rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand-dark">

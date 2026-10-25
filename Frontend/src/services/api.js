@@ -452,6 +452,21 @@ export async function getStaffByDepartmentRequest(department, accessToken) {
   );
 }
 
+export async function getRegisteredAccountsRequest(accessToken, options = {}) {
+  const query = new URLSearchParams({
+    type: options.type || "student",
+    page: String(options.page || 1),
+    limit: String(options.limit || 20),
+  });
+  if (options.search?.trim()) query.set("search", options.search.trim());
+
+  return complaintRequest(
+    `/api/admin/accounts?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function assignComplaintRequest(
   { complaintId, staffId, department },
   accessToken,

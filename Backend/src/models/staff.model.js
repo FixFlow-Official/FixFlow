@@ -38,6 +38,8 @@ const staffSchema = new mongoose.Schema({
   },
 });
 
+staffSchema.index({ username: 1, _id: 1 });
+
 const staffModel = mongoose.model("staff", staffSchema);
 
 module.exports = staffModel;

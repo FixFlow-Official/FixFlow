@@ -21,6 +21,8 @@ router.get(
 
 router.get("/staff", verifyAccessToken, adminController.getStaffByDepartment);
 
+router.get("/accounts", verifyAccessToken, adminController.getRegisteredAccounts);
+
 router.patch(
   "/complaints/:complaintId/assign",
   verifyAccessToken,

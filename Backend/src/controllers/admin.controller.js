@@ -139,6 +139,70 @@ async function getStaffByDepartment(req, res) {
   }
 }
 
+// List registered student or staff accounts for the admin account directory.
+async function getRegisteredAccounts(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({
+      message: "Only administrators can view registered accounts.",
+    });
+  }
+
+  const type = req.query.type || "student";
+  if (!["student", "staff"].includes(type)) {
+    return res.status(400).json({ message: "Choose student or staff accounts." });
+  }
+
+  try {
+    const pageOptions = getPageOptions(req.query);
+    if (pageOptions.error) {
+      return res.status(400).json({ message: pageOptions.error });
+    }
+
+    const searchRegex = makeSearchRegex(req.query.search);
+    const model = type === "student" ? studentModel : staffModel;
+    const idField = type === "student" ? "rollno" : "staffId";
+    const detailField = type === "student" ? "course" : "department";
+    const filter = searchRegex
+      ? {
+          $or: [
+            { username: searchRegex },
+            { email: searchRegex },
+            { [detailField]: searchRegex },
+            ...(typeof req.query.search === "string" && /^\d+$/.test(req.query.search.trim())
+              ? [{ [idField]: Number(req.query.search.trim()) }]
+              : []),
+          ],
+        }
+      : {};
+
+    const [accounts, total] = await Promise.all([
+      model
+        .find(filter)
+        .select(`username ${idField} email ${detailField}`)
+        .sort({ username: 1, _id: 1 })
+        .skip(pageOptions.skip)
+        .limit(pageOptions.limit)
+        .lean(),
+      model.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      type,
+      accounts: accounts.map((account) => ({
+        id: String(account._id),
+        campusId: account[idField],
+        name: account.username,
+        email: account.email,
+        detail: account[detailField],
+      })),
+      pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
+    });
+  } catch (err) {
+    console.error("getRegisteredAccounts failed:", err);
+    return res.status(500).json({ message: "Could not load registered accounts." });
+  }
+}
+
 async function getAssignedComplaints(req, res) {
   if (req.auth?.role !== "admin") {
     return res.status(403).json({
@@ -661,6 +725,7 @@ async function deleteUserByAdmin(req, res) {
 module.exports = {
   getUnassignedComplaints,
   getStaffByDepartment,
+  getRegisteredAccounts,
   getAssignedComplaints,
   assignComplaint,
   reassignComplaint,
