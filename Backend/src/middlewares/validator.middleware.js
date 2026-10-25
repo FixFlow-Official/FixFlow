@@ -39,6 +39,19 @@ const idValidatorRule = [
   validateResult,
 ];
 
+// Campus directory IDs differ by role: staff IDs may be shorter than student IDs.
+const directoryIdValidatorRule = [
+  body("id")
+    .isString()
+    .withMessage("ID must be a string of digits")
+    .isNumeric()
+    .withMessage("ID must contain only digits")
+    .isLength({ min: 1, max: 10 })
+    .withMessage("ID must be between 1 and 10 digits"),
+
+  validateResult,
+];
+
 const typeValidatorRule = [
   body("type")
     .isString()
@@ -63,6 +76,7 @@ module.exports = {
   typeValidatorRule,
   passwordValidatorRule,
   idValidatorRule,
+  directoryIdValidatorRule,
   otpValidatorRule,
   otpPurposeValidatorRule,
 };

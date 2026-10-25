@@ -19,10 +19,13 @@ export default function AdminAssignedComplaintCard({
   onStaffChange,
   onReassign,
 }) {
+  const studentName = complaint.user?.username || complaint.userSnapshot?.name || "Student";
+  const studentId = complaint.user?.rollno || complaint.userSnapshot?.campusId;
+  const staffName = complaint.assignedStaff?.username || complaint.assignedStaffSnapshot?.name;
   const studentSummary = [
-    `Submitted by ${complaint.user?.username || "Student"}`,
-    complaint.user?.rollno ? `Roll no. ${complaint.user.rollno}` : "",
-    complaint.assignedStaff?.username ? `Assigned to ${complaint.assignedStaff.username}` : "",
+    `Submitted by ${studentName}`,
+    studentId ? `Roll no. ${studentId}` : "",
+    staffName ? `Assigned to ${staffName}` : "",
     complaint.assignedDepartment || "",
   ].filter(Boolean).join(" · ");
 
@@ -42,9 +45,9 @@ export default function AdminAssignedComplaintCard({
                           <div>
                             <dt className="text-xs text-muted">Student</dt>
                             <dd className="mt-1 font-semibold">
-                              {complaint.user?.username || "Student"}
-                              {complaint.user?.rollno
-                                ? ` · ${complaint.user.rollno}`
+                              {studentName}
+                              {studentId
+                                ? ` · ${studentId}`
                                 : ""}
                             </dd>
                           </div>
@@ -54,7 +57,7 @@ export default function AdminAssignedComplaintCard({
                               Assigned staff
                             </dt>
                             <dd className="mt-1 font-semibold">
-                              {complaint.assignedStaff?.username ||
+                              {staffName ||
                                 "Staff member"}
                             </dd>
                           </div>

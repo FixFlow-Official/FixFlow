@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const studentModel = require("../models/student.model");
 const uploadFile = require("../services/storage.service");
+const { createNotifications, complaintNotification } = require("../services/notification.service");
 const {
   findStudentIdsBySearch,
   getPageMetadata,
@@ -264,6 +265,18 @@ async function updateComplaintStatus(req, res) {
     });
 
     await complaint.save();
+
+    const statusLabel = status.replaceAll("_", " ");
+    await createNotifications([
+      complaintNotification({
+        recipient: complaint.user,
+        recipientRef: "student",
+        complaint,
+        type: "status",
+        title: "Complaint status updated",
+        message: `Your complaint is now ${statusLabel}.${trimmedNote ? ` ${trimmedNote}` : ""}`.slice(0, 300),
+      }),
+    ]);
 
     return res.status(200).json({
       message: "Complaint status updated.",

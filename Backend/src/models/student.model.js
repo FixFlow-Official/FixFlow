@@ -38,6 +38,8 @@ const studentSchema = new mongoose.Schema({
   },
 });
 
+studentSchema.index({ username: 1, _id: 1 });
+
 const studentModel = mongoose.model("student", studentSchema);
 
 module.exports = studentModel;

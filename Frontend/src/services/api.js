@@ -362,7 +362,14 @@ async function complaintRequest(url, options, accessToken) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || "The complaint request failed.");
+    const validationMessage = Array.isArray(data.error)
+      ? data.error.map((item) => item.msg).filter(Boolean).join(" ")
+      : "";
+    throw new Error(
+      data.message ||
+        validationMessage ||
+        `Request failed with status ${response.status}.`,
+    );
   }
 
   return data;
@@ -385,6 +392,82 @@ export async function getComplaintsRequest(accessToken, options = {}) {
   return complaintRequest(
     `/api/student/get-complaint${buildComplaintQuery(options)}`,
     { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function getComplaintCommentsRequest(complaintId, accessToken) {
+  return complaintRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}/comments`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function getComplaintDetailsRequest(complaintId, accessToken) {
+  return complaintRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function addComplaintCommentRequest(complaintId, message, accessToken) {
+  return complaintRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}/comments`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+    accessToken,
+  );
+}
+
+export async function getNotificationsRequest(accessToken) {
+  return complaintRequest("/api/notifications", { method: "GET" }, accessToken);
+}
+
+export async function markNotificationReadRequest(notificationId, accessToken) {
+  return complaintRequest(
+    `/api/notifications/${encodeURIComponent(notificationId)}/read`,
+    { method: "PATCH" },
+    accessToken,
+  );
+}
+
+export async function markAllNotificationsReadRequest(accessToken) {
+  return complaintRequest(
+    "/api/notifications/read-all",
+    { method: "PATCH" },
+    accessToken,
+  );
+}
+
+export async function getPushConfigRequest(accessToken) {
+  return complaintRequest("/api/notifications/push-config", { method: "GET" }, accessToken);
+}
+
+export async function savePushSubscriptionRequest(subscription, accessToken) {
+  return complaintRequest(
+    "/api/notifications/push-subscription",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription),
+    },
+    accessToken,
+  );
+}
+
+export async function removePushSubscriptionRequest(endpoint, accessToken) {
+  return complaintRequest(
+    "/api/notifications/push-subscription",
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint }),
+    },
     accessToken,
   );
 }
@@ -445,6 +528,21 @@ export async function getStaffByDepartmentRequest(department, accessToken) {
   );
 }
 
+export async function getRegisteredAccountsRequest(accessToken, options = {}) {
+  const query = new URLSearchParams({
+    type: options.type || "student",
+    page: String(options.page || 1),
+    limit: String(options.limit || 20),
+  });
+  if (options.search?.trim()) query.set("search", options.search.trim());
+
+  return complaintRequest(
+    `/api/admin/accounts?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function assignComplaintRequest(
   { complaintId, staffId, department },
   accessToken,
@@ -474,6 +572,46 @@ export async function reassignComplaintRequest(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ staffId, department }),
+    },
+    accessToken,
+  );
+}
+
+// Remove a student or staff member from the campus directory and, if registered,
+// delete the account and revoke its sessions through the admin endpoint.
+export async function deleteUserByAdminRequest({ id, type }, accessToken) {
+  return complaintRequest(
+    "/api/admin/delete-user-by-admin",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id, type }),
+    },
+    accessToken,
+  );
+}
+
+// Add an approved person to the campus directory. They still register via email OTP.
+export async function addUserToDirectoryByAdminRequest(
+  { id, name, email, course, type },
+  accessToken,
+) {
+  return complaintRequest(
+    "/api/admin/directory/users",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id,
+        name,
+        email,
+        course,
+        type,
+      }),
     },
     accessToken,
   );

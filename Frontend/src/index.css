@@ -7,6 +7,17 @@
   }
 }
 
+@keyframes account-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @theme {
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Manrope', ui-sans-serif, system-ui, sans-serif;

@@ -9,6 +9,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute.jsx";
 import { AuthProvider } from "./context/AuthProvider.jsx";
 import PublicOnlyRoute from "./components/auth/PublicOnlyRoute.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
+import ComplaintDetailsPage from "./pages/ComplaintDetailsPage.jsx";
 
 
 export default function App() {
@@ -70,6 +71,19 @@ export default function App() {
                 <AdminDashboardPage />
               </ProtectedRoute>
             }
+          />
+
+          <Route
+            path="/student/complaints/:complaintId"
+            element={<ProtectedRoute allowedRole="student"><ComplaintDetailsPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/staff/complaints/:complaintId"
+            element={<ProtectedRoute allowedRole="staff"><ComplaintDetailsPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/complaints/:complaintId"
+            element={<ProtectedRoute allowedRole="admin"><ComplaintDetailsPage /></ProtectedRoute>}
           />
 
           {/* Keep the legacy student URL available behind the same access check. */}

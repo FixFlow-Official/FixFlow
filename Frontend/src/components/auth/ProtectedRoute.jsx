@@ -18,7 +18,7 @@ export default function ProtectedRoute({ allowedRole, children }) {
     return <Navigate to="/login" replace />
   }
 
-  if (user.role !== allowedRole) {
+  if (allowedRole && user.role !== allowedRole) {
     return (
       <Navigate
         to={dashboardPaths[user.role] || "/login"}
@@ -28,4 +28,4 @@ export default function ProtectedRoute({ allowedRole, children }) {
   }
 
   return children
-}                           
+}
