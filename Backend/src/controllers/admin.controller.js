@@ -6,6 +6,7 @@ const staffModel = require("../models/staff.model");
 const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
 const sessionModel = require("../models/session.model");
+const { createNotifications, complaintNotification } = require("../services/notification.service");
 const studentData = require("../data/officialStudentData.json");
 const staffData = require("../data/staffData.json");
 const {
@@ -350,6 +351,25 @@ async function assignComplaint(req, res) {
 
     await complaint.save();
 
+    await createNotifications([
+      complaintNotification({
+        recipient: complaint.user,
+        recipientRef: "student",
+        complaint,
+        type: "assigned",
+        title: "Your complaint was assigned",
+        message: `Your complaint is assigned to ${staff.username} (${staff.department}).`,
+      }),
+      complaintNotification({
+        recipient: staff._id,
+        recipientRef: "staff",
+        complaint,
+        type: "assigned",
+        title: "New complaint assigned",
+        message: `A complaint has been assigned to you in ${staff.department}.`,
+      }),
+    ]);
+
     return res.status(200).json({
       message: "Complaint assigned successfully.",
       complaint,
@@ -438,6 +458,37 @@ async function reassignComplaint(req, res) {
     });
 
     await complaint.save();
+
+    await createNotifications([
+      complaintNotification({
+        recipient: complaint.user,
+        recipientRef: "student",
+        complaint,
+        type: "reassigned",
+        title: "Your complaint was reassigned",
+        message: `Your complaint is now assigned to ${staff.username} (${staff.department}).`,
+      }),
+      complaintNotification({
+        recipient: staff._id,
+        recipientRef: "staff",
+        complaint,
+        type: "assigned",
+        title: "Complaint assigned to you",
+        message: `A complaint has been assigned to you in ${staff.department}.`,
+      }),
+      ...(previousStaff
+        ? [
+            complaintNotification({
+              recipient: previousStaff._id,
+              recipientRef: "staff",
+              complaint,
+              type: "reassigned",
+              title: "Complaint reassigned",
+              message: "This complaint has been reassigned to another staff member.",
+            }),
+          ]
+        : []),
+    ]);
 
     return res.status(200).json({
       message: "Complaint reassigned successfully.",

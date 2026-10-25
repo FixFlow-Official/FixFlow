@@ -3,6 +3,7 @@ const complaintModel = require("../models/complaint.model");
 const studentModel = require("../models/student.model");
 const staffModel = require("../models/staff.model");
 const adminModel = require("../models/admin.model");
+const { createNotifications, complaintNotification } = require("../services/notification.service");
 
 const accountModels = {
   student: studentModel,
@@ -49,6 +50,24 @@ async function getComplaintComments(req, res) {
   }
 }
 
+async function getComplaintDetails(req, res) {
+  try {
+    const complaint = await findAccessibleComplaint(req, res);
+    if (!complaint) return;
+
+    await complaint.populate([
+      { path: "user", select: "username rollno staffId" },
+      { path: "assignedStaff", select: "username staffId department" },
+      { path: "resolvedBy", select: "username staffId department" },
+    ]);
+
+    return res.status(200).json({ complaint });
+  } catch (error) {
+    console.error("getComplaintDetails failed:", error);
+    return res.status(500).json({ message: "Could not load complaint details." });
+  }
+}
+
 async function addComplaintComment(req, res) {
   if (req.auth?.role === "admin") {
     return res.status(403).json({
@@ -86,6 +105,30 @@ async function addComplaintComment(req, res) {
     complaint.comments.push(comment);
     await complaint.save();
 
+    if (role === "student" && complaint.assignedStaff) {
+      await createNotifications([
+        complaintNotification({
+          recipient: complaint.assignedStaff,
+          recipientRef: "staff",
+          complaint,
+          type: "message",
+          title: "New complaint message",
+          message: `${account.username} sent a message about this complaint.`,
+        }),
+      ]);
+    } else if (role === "staff") {
+      await createNotifications([
+        complaintNotification({
+          recipient: complaint.user,
+          recipientRef: "student",
+          complaint,
+          type: "message",
+          title: "Staff replied to your complaint",
+          message: `${account.username} sent you a message.`,
+        }),
+      ]);
+    }
+
     return res.status(201).json({
       message: "Message added to the complaint.",
       comment: complaint.comments[complaint.comments.length - 1],
@@ -96,4 +139,4 @@ async function addComplaintComment(req, res) {
   }
 }
 
-module.exports = { getComplaintComments, addComplaintComment };
+module.exports = { getComplaintDetails, getComplaintComments, addComplaintComment };

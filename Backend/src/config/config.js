@@ -36,6 +36,9 @@ const config = {
   GOOGLE_REFRESH_TOKEN:process.env.GOOGLE_REFRESH_TOKEN,
   GOOGLE_USER:process.env.GOOGLE_USER,
   IMAGEKIT_PRIVATE_KEY:process.env.IMAGEKIT_PRIVATE_KEY,
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT,
 };
 
 module.exports = config;

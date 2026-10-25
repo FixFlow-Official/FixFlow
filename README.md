@@ -30,6 +30,8 @@ FixFlow is a role-based campus support application. Students submit maintenance 
 - **Student complaint tracking:** submit complaints with required photo proof, view current and resolved complaints, search and paginate results, and download a complaint report as a PDF.
 - **Administrator workflow:** review unassigned complaints, assign and reassign staff by department, and search, filter, and paginate complaint queues.
 - **Staff workflow:** view current and previously resolved assigned complaints, update status with notes, and submit a resolution note and photo proof when resolving a complaint.
+- **Complaint conversations and notifications:** students and assigned staff can exchange messages; dashboard notifications track assignment, status, and message updates.
+- **Device push notifications:** users can opt in to receive privacy-conscious browser notifications while FixFlow is closed, with a PWA install option for supported devices.
 - **Account security:** password hashing, JWT-based authentication, password recovery, sign-out across sessions, and rate limits for login and OTP endpoints.
 - **Offline experience:** a production service worker caches frontend resources and provides the Campus Dash runner game. Complaint data and account actions still require the backend to be online.
 
@@ -66,7 +68,7 @@ FixFlow/
 | --- | --- | --- |
 | React 19, React Router 7 | Node.js, Express 5 | MongoDB, Mongoose |
 | Vite 8, Tailwind CSS 4 | JSON API | ImageKit for complaint images |
-| html2pdf.js, lucide-react | Nodemailer | Gmail OAuth2 for email delivery |
+| html2pdf.js, lucide-react | Nodemailer, web-push | MongoDB, ImageKit, Gmail OAuth2 |
 
 ## Local development
 
@@ -76,6 +78,25 @@ FixFlow/
 - A MongoDB database, local or hosted
 - Gmail OAuth2 credentials for registration, verification, and password recovery emails
 - An ImageKit private key for complaint and resolution photo uploads
+- VAPID keys for opt-in device push notifications (see below)
+
+### Push notification setup
+
+Generate a VAPID key pair from the `Backend` folder:
+
+```bash
+node -e "const { publicKey, privateKey } = require('web-push').generateVAPIDKeys(); console.log('VAPID_PUBLIC_KEY=' + publicKey); console.log('VAPID_PRIVATE_KEY=' + privateKey);"
+```
+
+Add both generated values and a real support contact to `Backend/.env`:
+
+```env
+VAPID_PUBLIC_KEY=your_public_key
+VAPID_PRIVATE_KEY=your_private_key
+VAPID_SUBJECT=mailto:admin@your-college.edu
+```
+
+Restart the backend. Device push requires HTTPS in deployment (localhost is allowed for development), a supported browser, and the user's permission. On iPhone or iPad, install FixFlow from the browser's Share menu using **Add to Home Screen**, open the installed app, then enable device notifications from the bell menu. Push notifications use generic lock-screen text and open the user's dashboard when tapped.
 
 
 

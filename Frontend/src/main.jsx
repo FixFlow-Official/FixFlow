@@ -4,11 +4,13 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import './index.css'
 
-// Register the app-shell cache only in production; Vite dev mode should stay uncached.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+// Register the service worker for push in development and production. Its dev mode
+// bypasses fetch caching so it does not interfere with Vite's module hot reload.
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('/sw.js')
+      const workerUrl = import.meta.env.DEV ? '/sw.js?dev=1' : '/sw.js'
+      const registration = await navigator.serviceWorker.register(workerUrl)
       const readyRegistration = await navigator.serviceWorker.ready
 
       const cacheLoadedFrontendFiles = () => {
@@ -29,8 +31,10 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
         worker?.postMessage({ type: 'PRECACHE_FRONTEND_RESOURCES', urls })
       }
 
-      cacheLoadedFrontendFiles()
-      window.setTimeout(cacheLoadedFrontendFiles, 1500)
+      if (import.meta.env.PROD) {
+        cacheLoadedFrontendFiles()
+        window.setTimeout(cacheLoadedFrontendFiles, 1500)
+      }
     } catch (error) {
       console.warn('FixFlow offline support could not be enabled.', error)
     }

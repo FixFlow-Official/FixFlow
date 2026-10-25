@@ -404,6 +404,14 @@ export async function getComplaintCommentsRequest(complaintId, accessToken) {
   );
 }
 
+export async function getComplaintDetailsRequest(complaintId, accessToken) {
+  return complaintRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function addComplaintCommentRequest(complaintId, message, accessToken) {
   return complaintRequest(
     `/api/complaints/${encodeURIComponent(complaintId)}/comments`,
@@ -411,6 +419,54 @@ export async function addComplaintCommentRequest(complaintId, message, accessTok
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),
+    },
+    accessToken,
+  );
+}
+
+export async function getNotificationsRequest(accessToken) {
+  return complaintRequest("/api/notifications", { method: "GET" }, accessToken);
+}
+
+export async function markNotificationReadRequest(notificationId, accessToken) {
+  return complaintRequest(
+    `/api/notifications/${encodeURIComponent(notificationId)}/read`,
+    { method: "PATCH" },
+    accessToken,
+  );
+}
+
+export async function markAllNotificationsReadRequest(accessToken) {
+  return complaintRequest(
+    "/api/notifications/read-all",
+    { method: "PATCH" },
+    accessToken,
+  );
+}
+
+export async function getPushConfigRequest(accessToken) {
+  return complaintRequest("/api/notifications/push-config", { method: "GET" }, accessToken);
+}
+
+export async function savePushSubscriptionRequest(subscription, accessToken) {
+  return complaintRequest(
+    "/api/notifications/push-subscription",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription),
+    },
+    accessToken,
+  );
+}
+
+export async function removePushSubscriptionRequest(endpoint, accessToken) {
+  return complaintRequest(
+    "/api/notifications/push-subscription",
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint }),
     },
     accessToken,
   );

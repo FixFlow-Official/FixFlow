@@ -18,7 +18,9 @@ export default function AppLayout() {
   const [signOutError, setSignOutError] = useState("")
 
   const isDashboard =
-    location.pathname === "/app" || location.pathname.endsWith("/dashboard")
+    location.pathname === "/app" ||
+    location.pathname.endsWith("/dashboard") ||
+    location.pathname.includes("/complaints/")
   const isLogin = location.pathname === "/login"
   const isRegister = location.pathname === "/register"
 

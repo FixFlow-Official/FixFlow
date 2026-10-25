@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, LogOut, Wrench } from "lucide-react";
+import NotificationCenter from "./NotificationCenter.jsx";
 
 const dashboardPaths = {
   student: "/student/dashboard",
@@ -36,6 +37,8 @@ export default function AppHeader({ isDashboard, isLogin, isRegister, user, onSi
                 <span className="hidden text-sm font-medium sm:inline">
                   {user?.username ?? "Account"}
                 </span>
+
+                <NotificationCenter />
 
                 <button
                   type="button"

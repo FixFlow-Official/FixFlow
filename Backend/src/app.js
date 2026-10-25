@@ -7,6 +7,7 @@ const studentRouter = require("./routes/student.routes");
 const adminRouter = require("./routes/admin.routes");
 const staffRouter = require("./routes/staff.routes");
 const complaintConversationRouter = require("./routes/complaintConversation.routes");
+const notificationRouter = require("./routes/notification.routes");
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use("/api/admin", adminRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/student", studentRouter);
 app.use("/api/complaints", complaintConversationRouter);
+app.use("/api/notifications", notificationRouter);
 
 
 module.exports = app;
