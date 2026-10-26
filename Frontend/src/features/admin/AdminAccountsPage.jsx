@@ -5,13 +5,17 @@ import {
   ChevronLeft,
   ChevronRight,
   GraduationCap,
+  KeyRound,
   LoaderCircle,
   RefreshCw,
   Search,
   Users,
   X,
 } from "lucide-react";
-import { getRegisteredAccountsRequest } from "../../services/api.js";
+import {
+  getRegisteredAccountsRequest,
+  resetAccountPasswordByAdminRequest,
+} from "../../services/api.js";
 
 const PAGE_SIZE = 50;
 
@@ -67,6 +71,49 @@ export default function AdminAccountsPage({ accessToken }) {
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+
+  function selectAccount(account) {
+    setSelectedAccount(account);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError("");
+    setPasswordSuccess("");
+  }
+
+  async function handlePasswordReset(event) {
+    event.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (newPassword.length < 8 || newPassword.length > 20) {
+      setPasswordError("Password must be between 8 and 20 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("The passwords do not match.");
+      return;
+    }
+
+    setPasswordBusy(true);
+    try {
+      const result = await resetAccountPasswordByAdminRequest(
+        { accountId: selectedAccount.id, type, newPassword },
+        accessToken,
+      );
+      setPasswordSuccess(result.message || "Password reset successfully.");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (requestError) {
+      setPasswordError(requestError.message || "Could not reset this password.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!selectedAccount) return undefined;
@@ -221,7 +268,7 @@ export default function AdminAccountsPage({ accessToken }) {
                 key={account.id}
                 account={account}
                 type={type}
-                onSelect={setSelectedAccount}
+                onSelect={selectAccount}
               />
             ))}
           </div>
@@ -310,6 +357,32 @@ export default function AdminAccountsPage({ accessToken }) {
                 <p className="mt-2 break-all font-semibold text-ink">{selectedAccount.email || "Not provided"}</p>
               </div>
             </div>
+
+            <form onSubmit={handlePasswordReset} className="border-t border-line bg-canvas/40 p-5 sm:p-7">
+              <div className="flex items-start gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700"><KeyRound size={18} aria-hidden="true" /></span>
+                <div>
+                  <h3 className="font-display font-bold text-ink">Set a new password</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted">Admin reset does not use OTP. The account will be signed out on all devices, and you must share the new password with the account owner securely.</p>
+                </div>
+              </div>
+              {passwordError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800">{passwordError}</p>}
+              {passwordSuccess && <p role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">{passwordSuccess}</p>}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs font-semibold text-ink">
+                  New password
+                  <input type="password" autoComplete="new-password" minLength={8} maxLength={20} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm font-normal outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="8–20 characters" />
+                </label>
+                <label className="block text-xs font-semibold text-ink">
+                  Confirm password
+                  <input type="password" autoComplete="new-password" minLength={8} maxLength={20} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm font-normal outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="Enter it again" />
+                </label>
+              </div>
+              <button type="submit" disabled={passwordBusy || !newPassword || !confirmPassword} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto">
+                {passwordBusy ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <KeyRound size={16} aria-hidden="true" />}
+                {passwordBusy ? "Updating password…" : "Set new password"}
+              </button>
+            </form>
           </section>
         </div>
       )}

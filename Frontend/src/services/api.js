@@ -552,6 +552,21 @@ export async function getRegisteredAccountsRequest(accessToken, options = {}) {
   );
 }
 
+export async function resetAccountPasswordByAdminRequest(
+  { accountId, type, newPassword },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/admin/accounts/${encodeURIComponent(accountId)}/password`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, newPassword }),
+    },
+    accessToken,
+  );
+}
+
 export async function assignComplaintRequest(
   { complaintId, staffId, department },
   accessToken,

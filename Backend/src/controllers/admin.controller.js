@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
 const fs = require("node:fs");
 const path = require("node:path");
 const complaintModel = require("../models/complaint.model");
@@ -202,6 +203,51 @@ async function getRegisteredAccounts(req, res) {
   } catch (err) {
     console.error("getRegisteredAccounts failed:", err);
     return res.status(500).json({ message: "Could not load registered accounts." });
+  }
+}
+
+// Admin-set password reset for registered student or staff accounts (no OTP).
+async function resetAccountPasswordByAdmin(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({ message: "Only administrators can reset account passwords." });
+  }
+
+  const { type, newPassword } = req.body;
+  const { accountId } = req.params;
+
+  if (!mongoose.isValidObjectId(accountId)) {
+    return res.status(400).json({ message: "Invalid account ID." });
+  }
+  if (!["student", "staff"].includes(type)) {
+    return res.status(400).json({ message: "Only student and staff passwords can be reset here." });
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 20) {
+    return res.status(400).json({ message: "Password must be between 8 and 20 characters." });
+  }
+
+  try {
+    const model = type === "student" ? studentModel : staffModel;
+    const account = await model.findById(accountId).select("_id");
+    if (!account) {
+      return res.status(404).json({ message: "Registered account not found." });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    account.password = passwordHash;
+    await account.save();
+
+    // Require the account owner to sign in again on every device.
+    await sessionModel.updateMany(
+      { user: account._id, userRef: type, revoked: false },
+      { $set: { revoked: true } },
+    );
+
+    return res.status(200).json({
+      message: "Password reset successfully. All active sessions have been signed out.",
+    });
+  } catch (err) {
+    console.error("resetAccountPasswordByAdmin failed:", err);
+    return res.status(500).json({ message: "Could not reset the account password." });
   }
 }
 
@@ -898,6 +944,7 @@ module.exports = {
   getUnassignedComplaints,
   getStaffByDepartment,
   getRegisteredAccounts,
+  resetAccountPasswordByAdmin,
   getAssignedComplaints,
   getComplaintReports,
   assignComplaint,

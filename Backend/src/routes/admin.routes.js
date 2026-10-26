@@ -22,6 +22,11 @@ router.get(
 router.get("/staff", verifyAccessToken, adminController.getStaffByDepartment);
 
 router.get("/accounts", verifyAccessToken, adminController.getRegisteredAccounts);
+router.patch(
+  "/accounts/:accountId/password",
+  verifyAccessToken,
+  adminController.resetAccountPasswordByAdmin,
+);
 
 router.get("/reports/complaints", verifyAccessToken, adminController.getComplaintReports);
 
