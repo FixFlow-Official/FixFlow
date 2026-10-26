@@ -510,6 +510,15 @@ export async function getAssignedComplaintsRequest(accessToken, options = {}) {
   );
 }
 
+export async function getAdminComplaintReportsRequest(period, accessToken) {
+  const query = new URLSearchParams({ period });
+  return complaintRequest(
+    `/api/admin/reports/complaints?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function getStaffAssignedComplaintsRequest(accessToken, options = {}) {
   return complaintRequest(
     `/api/staff/assigned-complaints${buildComplaintQuery(options)}`,

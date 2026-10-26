@@ -19,6 +19,10 @@ const dashboardPaths = {
 
 export default function ComplaintDetailsPage() {
   const { complaintId } = useParams();
+  return <ComplaintDetailsContent key={complaintId} complaintId={complaintId} />;
+}
+
+function ComplaintDetailsContent({ complaintId }) {
   const navigate = useNavigate();
   const { user, accessToken } = useAuth();
   const [complaint, setComplaint] = useState(null);
@@ -27,8 +31,6 @@ export default function ComplaintDetailsPage() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError("");
     getComplaintDetailsRequest(complaintId, accessToken)
       .then((data) => {
         if (active) setComplaint(data.complaint);

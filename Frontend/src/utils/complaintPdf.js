@@ -1,4 +1,3 @@
-import html2pdf from "html2pdf.js";
 import { formatDate, formatStatus } from "./complaintConfig.js";
 
 // Escape user-controlled content before adding it to the PDF report.
@@ -151,6 +150,9 @@ export async function downloadComplaintPdf(complaint) {
   document.body.appendChild(report);
 
   try {
+    // The PDF engine is large; load it only when a user requests a PDF export.
+    const { default: html2pdf } = await import("html2pdf.js");
+
     // Wait for proof images to load before creating the PDF.
     const images = Array.from(report.querySelectorAll("img"));
 
