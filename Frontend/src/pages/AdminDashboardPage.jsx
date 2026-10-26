@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
 import UnassignedComplaintCard from "../features/admin/UnassignedComplaintCard.jsx";
 import AdminAssignedComplaintCard from "../features/admin/AdminAssignedComplaintCard.jsx";
-import AdminUserManagement from "../features/admin/AdminUserManagement.jsx";
-import AdminAccountsPage from "../features/admin/AdminAccountsPage.jsx";
+import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import {
   AlertCircle,
   ChartNoAxesColumn,
@@ -11,6 +10,7 @@ import {
   ClipboardList,
   LoaderCircle,
   Users,
+  UserRound,
 } from "lucide-react";
 import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
@@ -29,6 +29,10 @@ import {
   getUnassignedComplaintsRequest,
   reassignComplaintRequest,
 } from "../services/api.js";
+
+const AdminReports = lazy(() => import("../features/admin/AdminReports.jsx"));
+const AdminUserManagement = lazy(() => import("../features/admin/AdminUserManagement.jsx"));
+const AdminAccountsPage = lazy(() => import("../features/admin/AdminAccountsPage.jsx"));
 
 // Main admin dashboard: complaint queues, assignment actions, and reassignment.
 export default function AdminDashboardPage() {
@@ -381,19 +385,28 @@ export default function AdminDashboardPage() {
         { id: "complaints", label: "Complaints", icon: ClipboardList },
         { id: "users", label: "User access", icon: Users },
         { id: "accounts", label: "Accounts", icon: Users },
-        { id: "staff", label: "Staff", icon: Users, disabled: true },
+        { id: "profile", label: "Profile", icon: UserRound },
         {
           id: "reports",
           label: "Reports",
           icon: ChartNoAxesColumn,
-          disabled: true,
         },
       ]}
     >
-      {activeSection === "users" ? (
-        <AdminUserManagement accessToken={accessToken} />
+      {activeSection === "profile" ? (
+        <ProfileSettings />
+      ) : activeSection === "users" ? (
+        <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading user access…</div>}>
+          <AdminUserManagement accessToken={accessToken} />
+        </Suspense>
       ) : activeSection === "accounts" ? (
-        <AdminAccountsPage accessToken={accessToken} />
+        <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading accounts…</div>}>
+          <AdminAccountsPage accessToken={accessToken} />
+        </Suspense>
+      ) : activeSection === "reports" ? (
+        <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading reports…</div>}>
+          <AdminReports accessToken={accessToken} />
+        </Suspense>
       ) : (
       <main className="w-full min-w-0">
         <span className="inline-flex rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand-dark">

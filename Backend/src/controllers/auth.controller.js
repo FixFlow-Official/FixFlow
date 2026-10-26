@@ -9,6 +9,107 @@ const studentModel = require("../models/student.model");
 const staffModel = require("../models/staff.model");
 const adminModel = require("../models/admin.model");
 const blackListTokenModel = require("../models/blackListToken.model");
+const uploadFile = require("../services/storage.service");
+
+function serializeCurrentUser(user) {
+  return {
+    id: String(user._id),
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    campusId: user.rollno ?? user.staffId ?? user.adminId ?? null,
+    detail: user.course ?? user.department ?? user.designation ?? null,
+    profilePictureUrl: user.profilePictureUrl || null,
+  };
+}
+
+const accountModels = {
+  student: studentModel,
+  staff: staffModel,
+  admin: adminModel,
+};
+
+async function updateProfile(req, res) {
+  const model = accountModels[req.auth?.role];
+  if (!model) return res.status(403).json({ message: "This account cannot update a profile." });
+
+  const username = typeof req.body.username === "string" ? req.body.username.trim() : "";
+  if (username.length < 2 || username.length > 60) {
+    return res.status(400).json({ message: "Name must be between 2 and 60 characters." });
+  }
+
+  try {
+    const update = { username };
+    if (req.file) {
+      const uploadResult = await uploadFile(
+        req.file.buffer,
+        `profile-${req.auth.role}-${req.auth.id}-${Date.now()}`,
+        "/profiles",
+      );
+      if (!uploadResult?.url) {
+        return res.status(502).json({ message: "Could not upload the profile photo." });
+      }
+      update.profilePictureUrl = uploadResult.url;
+    } else if (req.body.removeProfilePicture === "true") {
+      update.profilePictureUrl = null;
+    }
+
+    // Use a targeted update so legacy accounts missing newer required fields
+    // (for example adminId/designation) can still update their profile.
+    const user = await model.findByIdAndUpdate(
+      req.auth.id,
+      { $set: update },
+      { new: true, runValidators: true },
+    );
+    if (!user) return res.status(404).json({ message: "Account not found." });
+
+    return res.status(200).json({
+      message: "Profile updated successfully.",
+      user: serializeCurrentUser(user),
+    });
+  } catch (err) {
+    console.error("updateProfile failed:", err);
+    return res.status(500).json({ message: "Could not update your profile." });
+  }
+}
+
+async function changePassword(req, res) {
+  const model = accountModels[req.auth?.role];
+  if (!model) return res.status(403).json({ message: "This account cannot change its password." });
+
+  const { currentPassword, newPassword } = req.body;
+  if (typeof currentPassword !== "string" || !currentPassword) {
+    return res.status(400).json({ message: "Enter your current password." });
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 20) {
+    return res.status(400).json({ message: "New password must be between 8 and 20 characters." });
+  }
+
+  try {
+    const user = await model.findById(req.auth.id);
+    if (!user) return res.status(404).json({ message: "Account not found." });
+
+    const currentMatches = await bcrypt.compare(currentPassword, user.password);
+    if (!currentMatches) return res.status(400).json({ message: "Current password is incorrect." });
+
+    const samePassword = await bcrypt.compare(newPassword, user.password);
+    if (samePassword) return res.status(400).json({ message: "Choose a password you have not used for this account." });
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    // Keep the current device signed in and revoke the other sessions.
+    await sessionModel.updateMany(
+      { user: user._id, userRef: req.auth.role, revoked: false, _id: { $ne: req.auth.sessionId } },
+      { $set: { revoked: true } },
+    );
+
+    return res.status(200).json({ message: "Password changed. Other active sessions have been signed out." });
+  } catch (err) {
+    console.error("changePassword failed:", err);
+    return res.status(500).json({ message: "Could not change your password." });
+  }
+}
 
 /**
  *
@@ -353,11 +454,7 @@ async function loginController(req, res) {
 
   return res.status(200).json({
     message: "User logged in successfully",
-    user: {
-      username: user.username,
-      email: user.email,
-      role: user.role,
-    },
+    user: serializeCurrentUser(user),
     accessToken,
   });
 }
@@ -420,13 +517,7 @@ async function getMe(req, res) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    return res.status(200).json({
-      user: {
-        username: user.username,
-        email: user.email,
-        role: user.role,
-      },
-    });
+    return res.status(200).json({ user: serializeCurrentUser(user) });
   } catch {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -806,6 +897,8 @@ async function forgotPasswordChange(req, res) {
 }
 
 module.exports = {
+  updateProfile,
+  changePassword,
   verifyUserAndSendEmail,
   verifyEmail,
   createUser,

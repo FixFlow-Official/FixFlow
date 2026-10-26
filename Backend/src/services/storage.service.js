@@ -5,12 +5,12 @@ const imagekit = new ImageKit({
     privateKey:config.IMAGEKIT_PRIVATE_KEY
 })
 
-async function uploadFile(buffer,title){
+async function uploadFile(buffer,title,folder = "/complaints"){
 
     const result = imagekit.files.upload({
         file:buffer.toString("base64"),
         fileName:title,
-        folder: "/complaints"
+        folder
     })
 
     return result;

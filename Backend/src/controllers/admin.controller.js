@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
 const fs = require("node:fs");
 const path = require("node:path");
 const complaintModel = require("../models/complaint.model");
@@ -24,6 +25,7 @@ const currentAssignedStatuses = [
 ];
 const resolvedAssignedStatuses = ["Resolved"];
 const closedAssignedStatuses = ["Rejected", "Closed", "Withdrawn"];
+const reportActiveStatuses = ["Submitted", "Under_Review", "Assigned", "In_Progress", "On_Hold"];
 
 function getAssignedViewStatuses(view) {
   if (view === "current") return currentAssignedStatuses;
@@ -204,6 +206,51 @@ async function getRegisteredAccounts(req, res) {
   }
 }
 
+// Admin-set password reset for registered student or staff accounts (no OTP).
+async function resetAccountPasswordByAdmin(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({ message: "Only administrators can reset account passwords." });
+  }
+
+  const { type, newPassword } = req.body;
+  const { accountId } = req.params;
+
+  if (!mongoose.isValidObjectId(accountId)) {
+    return res.status(400).json({ message: "Invalid account ID." });
+  }
+  if (!["student", "staff"].includes(type)) {
+    return res.status(400).json({ message: "Only student and staff passwords can be reset here." });
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 20) {
+    return res.status(400).json({ message: "Password must be between 8 and 20 characters." });
+  }
+
+  try {
+    const model = type === "student" ? studentModel : staffModel;
+    const account = await model.findById(accountId).select("_id");
+    if (!account) {
+      return res.status(404).json({ message: "Registered account not found." });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    account.password = passwordHash;
+    await account.save();
+
+    // Require the account owner to sign in again on every device.
+    await sessionModel.updateMany(
+      { user: account._id, userRef: type, revoked: false },
+      { $set: { revoked: true } },
+    );
+
+    return res.status(200).json({
+      message: "Password reset successfully. All active sessions have been signed out.",
+    });
+  } catch (err) {
+    console.error("resetAccountPasswordByAdmin failed:", err);
+    return res.status(500).json({ message: "Could not reset the account password." });
+  }
+}
+
 async function getAssignedComplaints(req, res) {
   if (req.auth?.role !== "admin") {
     return res.status(403).json({
@@ -287,6 +334,126 @@ async function getAssignedComplaints(req, res) {
     return res.status(500).json({
       message: "Could not load assigned complaints.",
     });
+  }
+}
+
+// Aggregate complaint workflow metrics for the admin reports page.
+async function getComplaintReports(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({ message: "Only administrators can view complaint reports." });
+  }
+
+  const period = req.query.period || "90d";
+  if (!["30d", "90d", "12m", "all"].includes(period)) {
+    return res.status(400).json({ message: "Choose a valid report period." });
+  }
+
+  const now = new Date();
+  const startDate = new Date(now);
+  if (period === "30d") startDate.setDate(startDate.getDate() - 30);
+  if (period === "90d") startDate.setDate(startDate.getDate() - 90);
+  if (period === "12m") {
+    startDate.setMonth(startDate.getMonth() - 11);
+    startDate.setDate(1);
+    startDate.setHours(0, 0, 0, 0);
+  }
+
+  const trendStart = new Date(now);
+  trendStart.setMonth(trendStart.getMonth() - 11);
+  trendStart.setDate(1);
+  trendStart.setHours(0, 0, 0, 0);
+
+  const periodStart = period === "all" ? null : startDate;
+  const dateFormat = period === "30d" ? "%Y-%m-%d" : "%Y-%m";
+  const match = { userRef: "student" };
+  if (periodStart) match.createdAt = { $gte: periodStart, $lte: now };
+
+  try {
+    const [report] = await complaintModel.aggregate([
+      { $match: match },
+      {
+        $facet: {
+          summary: [
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                current: { $sum: { $cond: [{ $in: ["$status", reportActiveStatuses] }, 1, 0] } },
+                resolved: { $sum: { $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0] } },
+                unassigned: {
+                  $sum: {
+                    $cond: [
+                      { $and: [{ $in: ["$status", ["Submitted", "Under_Review"]] }, { $eq: [{ $ifNull: ["$assignedStaff", null] }, null] }] },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                averageResolutionMs: {
+                  $avg: {
+                    $cond: [
+                      { $and: [{ $eq: ["$status", "Resolved"] }, { $ne: [{ $ifNull: ["$resolvedAt", null] }, null] }] },
+                      { $subtract: ["$resolvedAt", "$createdAt"] },
+                      null,
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+          statuses: [
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+            { $sort: { count: -1, _id: 1 } },
+          ],
+          categories: [
+            { $group: { _id: { $ifNull: ["$category", "Other"] }, count: { $sum: 1 } } },
+            { $sort: { count: -1, _id: 1 } },
+          ],
+          departments: [
+            {
+              $group: {
+                _id: { $cond: [{ $eq: [{ $ifNull: ["$assignedDepartment", ""] }, ""] }, "Unassigned", "$assignedDepartment"] },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { count: -1, _id: 1 } },
+          ],
+          trend: [
+            { $match: { createdAt: { $gte: period === "all" ? trendStart : (periodStart || trendStart), $lte: now } } },
+            {
+              $group: {
+                _id: { $dateToString: { format: dateFormat, date: "$createdAt", timezone: "UTC" } },
+                submitted: { $sum: 1 },
+                resolved: { $sum: { $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0] } },
+              },
+            },
+            { $sort: { _id: 1 } },
+          ],
+        },
+      },
+    ]);
+
+    const summary = report?.summary?.[0] || {};
+    return res.status(200).json({
+      period,
+      generatedAt: now,
+      summary: {
+        total: summary.total || 0,
+        current: summary.current || 0,
+        resolved: summary.resolved || 0,
+        unassigned: summary.unassigned || 0,
+        averageResolutionHours: Number.isFinite(summary.averageResolutionMs)
+          ? Math.round((summary.averageResolutionMs / 3600000) * 10) / 10
+          : null,
+      },
+      statuses: report?.statuses || [],
+      categories: report?.categories || [],
+      departments: report?.departments || [],
+      trend: report?.trend || [],
+    });
+  } catch (error) {
+    console.error("getComplaintReports failed:", error);
+    return res.status(500).json({ message: "Could not load complaint reports." });
   }
 }
 
@@ -777,7 +944,9 @@ module.exports = {
   getUnassignedComplaints,
   getStaffByDepartment,
   getRegisteredAccounts,
+  resetAccountPasswordByAdmin,
   getAssignedComplaints,
+  getComplaintReports,
   assignComplaint,
   reassignComplaint,
   addUserToDirectoryByAdmin,

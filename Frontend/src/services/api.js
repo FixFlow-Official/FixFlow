@@ -48,6 +48,32 @@ export async function getCurrentUserRequest() {
   return data;
 }
 
+export async function updateMyProfileRequest(
+  { username, profilePicture, removeProfilePicture = false },
+  accessToken,
+) {
+  const formData = new FormData();
+  formData.append("username", username);
+  if (profilePicture) formData.append("profilePicture", profilePicture);
+  if (removeProfilePicture) formData.append("removeProfilePicture", "true");
+  return complaintRequest("/api/auth/profile", { method: "PATCH", body: formData }, accessToken);
+}
+
+export async function changeMyPasswordRequest(
+  { currentPassword, newPassword },
+  accessToken,
+) {
+  return complaintRequest(
+    "/api/auth/change-password",
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    },
+    accessToken,
+  );
+}
+
 export async function logoutRequest(accessToken) {
   let token = accessToken;
 
@@ -510,6 +536,15 @@ export async function getAssignedComplaintsRequest(accessToken, options = {}) {
   );
 }
 
+export async function getAdminComplaintReportsRequest(period, accessToken) {
+  const query = new URLSearchParams({ period });
+  return complaintRequest(
+    `/api/admin/reports/complaints?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function getStaffAssignedComplaintsRequest(accessToken, options = {}) {
   return complaintRequest(
     `/api/staff/assigned-complaints${buildComplaintQuery(options)}`,
@@ -539,6 +574,21 @@ export async function getRegisteredAccountsRequest(accessToken, options = {}) {
   return complaintRequest(
     `/api/admin/accounts?${query.toString()}`,
     { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function resetAccountPasswordByAdminRequest(
+  { accountId, type, newPassword },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/admin/accounts/${encodeURIComponent(accountId)}/password`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, newPassword }),
+    },
     accessToken,
   );
 }

@@ -9,6 +9,10 @@ const {
 const { loginLimiter } = require("../middlewares/loginRateLimit.middleware");
 
 const router = express.Router();
+const {
+  uploadSingleImage,
+  validateImageSignature,
+} = require("../middlewares/multer.middleware");
 
 /**
  * @route api/auth/verify-user
@@ -75,6 +79,20 @@ router.post(
  */
 
 router.get("/getMe", authController.getMe);
+
+router.patch(
+  "/profile",
+  authMiddleWare.verifyAccessToken,
+  uploadSingleImage("profilePicture"),
+  validateImageSignature,
+  authController.updateProfile,
+);
+
+router.patch(
+  "/change-password",
+  authMiddleWare.verifyAccessToken,
+  authController.changePassword,
+);
 
 /**
  * @route api/auth/logout

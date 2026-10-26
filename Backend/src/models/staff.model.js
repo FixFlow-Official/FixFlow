@@ -19,6 +19,10 @@ const staffSchema = new mongoose.Schema({
     required: [true, "Email is required"],
     unique: [true, "Email should be unique"],
   },
+  profilePictureUrl: {
+    type: String,
+    default: null,
+  },
   password: {
     type: String,
     required: [true, "Password is required"],
