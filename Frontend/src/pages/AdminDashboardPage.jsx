@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
 import UnassignedComplaintCard from "../features/admin/UnassignedComplaintCard.jsx";
 import AdminAssignedComplaintCard from "../features/admin/AdminAssignedComplaintCard.jsx";
+import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import {
   AlertCircle,
   ChartNoAxesColumn,
@@ -9,6 +10,7 @@ import {
   ClipboardList,
   LoaderCircle,
   Users,
+  UserRound,
 } from "lucide-react";
 import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
@@ -383,7 +385,7 @@ export default function AdminDashboardPage() {
         { id: "complaints", label: "Complaints", icon: ClipboardList },
         { id: "users", label: "User access", icon: Users },
         { id: "accounts", label: "Accounts", icon: Users },
-        { id: "staff", label: "Staff", icon: Users, disabled: true },
+        { id: "profile", label: "Profile", icon: UserRound },
         {
           id: "reports",
           label: "Reports",
@@ -391,7 +393,9 @@ export default function AdminDashboardPage() {
         },
       ]}
     >
-      {activeSection === "users" ? (
+      {activeSection === "profile" ? (
+        <ProfileSettings />
+      ) : activeSection === "users" ? (
         <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading user access…</div>}>
           <AdminUserManagement accessToken={accessToken} />
         </Suspense>

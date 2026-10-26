@@ -6,6 +6,7 @@ import StudentComplaintCard from "../features/student/StudentComplaintCard.jsx";
 import StudentComplaintsPanel from "../features/student/StudentComplaintsPanel.jsx";
 import StudentComplaintDetails from "../features/student/StudentComplaintDetails.jsx";
 import StudentComplaintForm from "../features/student/StudentComplaintForm.jsx";
+import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -33,6 +34,7 @@ const activeComplaintStatuses = [
 
 export default function DashboardPage() {
   const { user, accessToken } = useAuth();
+  const [activeSection, setActiveSection] = useState("complaints");
 
   const [complaints, setComplaints] = useState([]);
   const [complaintPagination, setComplaintPagination] = useState(null);
@@ -241,12 +243,14 @@ export default function DashboardPage() {
   return (
     <DashboardShell
       workspaceLabel="Student"
-      activeSection="complaints"
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
       navItems={[
         { id: "complaints", label: "Complaints", icon: MessageSquareText },
-        { id: "profile", label: "Profile", icon: UserRound, disabled: true },
+        { id: "profile", label: "Profile", icon: UserRound },
       ]}
     >
+      {activeSection === "profile" ? <ProfileSettings /> : (
       <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#e8f3ef_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
         {page === "create" ? (
           <>
@@ -392,6 +396,7 @@ export default function DashboardPage() {
           </section>
         )}
       </div>
+      )}
     </DashboardShell>
   );
 }

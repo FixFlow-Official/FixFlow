@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import StaffComplaintCard from "../features/staff/StaffComplaintCard.jsx";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
+import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import {
   AlertCircle,
   CheckCircle2,
@@ -44,12 +45,12 @@ const staffNavItems = [
     id: "profile",
     label: "Profile",
     icon: UserRound,
-    disabled: true,
   },
 ];
 
 export default function StaffDashboardPage() {
   const { user, accessToken } = useAuth();
+  const [activeSection, setActiveSection] = useState("complaints");
 
   const [complaints, setComplaints] = useState([]);
   const [pagination, setPagination] = useState(null);
@@ -232,9 +233,11 @@ export default function StaffDashboardPage() {
   return (
     <DashboardShell
       workspaceLabel="Staff"
-      activeSection="complaints"
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
       navItems={staffNavItems}
     >
+      {activeSection === "profile" ? <ProfileSettings /> : (
       <main className="w-full min-w-0">
         {/* Staff dashboard welcome panel */}
         <section className="mb-7 rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">
@@ -442,6 +445,7 @@ export default function StaffDashboardPage() {
           )}
         </section>
       </main>
+      )}
     </DashboardShell>
   );
 }
