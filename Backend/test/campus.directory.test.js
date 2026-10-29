@@ -7,6 +7,9 @@ const directoryMigrationModel = require("../src/models/directoryMigration.model"
 const studentModel = require("../src/models/student.model");
 const staffModel = require("../src/models/staff.model");
 const adminModel = require("../src/models/admin.model");
+const mongoose = require("mongoose");
+const complaintModel = require("../src/models/complaint.model");
+const sessionModel = require("../src/models/session.model");
 const { registerMiddleware } = require("../src/middlewares/auth.middleware");
 const { idValidatorRule } = require("../src/middlewares/validator.middleware");
 const { validationResult } = require("express-validator");
@@ -209,5 +212,155 @@ test("admin removal deletes an unregistered user's MongoDB directory entry", asy
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(deletedFilter, { _id: "directory-record" });
+  });
+});
+
+test("admin account removal groups history, sessions, account, and directory changes in a transaction", async () => {
+  let transaction;
+  let transactionCallbackRan = false;
+  let ended = false;
+  const complaintUpdates = [];
+  const account = {
+    _id: "student-account",
+    username: "Past",
+    email: "past@example.edu",
+  };
+
+  await withStubs([
+    [mongoose, "startSession", async () => {
+      transaction = {
+        withTransaction: async (callback) => {
+          transactionCallbackRan = true;
+          await callback();
+        },
+        endSession: async () => { ended = true; },
+      };
+      return transaction;
+    }],
+    [campusDirectoryModel, "findOne", async () => ({ _id: "directory-record" })],
+    [campusDirectoryModel, "deleteOne", async (_filter, options) => {
+      assert.equal(options.session, transaction);
+      return { deletedCount: 1 };
+    }],
+    [studentModel, "findOne", async () => account],
+    [studentModel, "findById", () => ({
+      session: (value) => {
+        assert.notEqual(value, null);
+        return {
+          select: () => ({ lean: async () => ({ _id: account._id }) }),
+        };
+      },
+    })],
+    [studentModel, "deleteOne", async (_filter, options) => {
+      assert.ok(options.session);
+      return { deletedCount: 1 };
+    }],
+    [complaintModel, "updateMany", async (...args) => { complaintUpdates.push(args); }],
+    [sessionModel, "updateMany", async (_filter, _update, options) => {
+      assert.ok(options.session);
+    }],
+  ], async () => {
+    const response = makeResponse();
+    await deleteUserByAdmin(
+      { auth: { role: "admin" }, body: { id: "103", type: "student" } },
+      response,
+    );
+    assert.equal(response.statusCode, 200);
+    assert.equal(transactionCallbackRan, true);
+    assert.equal(ended, true);
+    assert.equal(complaintUpdates.length, 3);
+    assert.ok(complaintUpdates.every(([, , options]) => options.session === transaction));
+  });
+});
+
+test("account removal falls back safely when MongoDB is standalone", async () => {
+  const account = { _id: "student-account", username: "Past", email: "past@example.edu" };
+  let findByIdCount = 0;
+  let accountDeleted = false;
+  let directoryDeleted = false;
+  let historyWriteCount = 0;
+
+  await withStubs([
+    [mongoose, "startSession", async () => ({
+      withTransaction: async (callback) => callback(),
+      endSession: async () => {},
+    })],
+    [campusDirectoryModel, "findOne", async () => ({ _id: "directory-record" })],
+    [campusDirectoryModel, "deleteOne", async () => { directoryDeleted = true; }],
+    [studentModel, "findOne", async () => account],
+    [studentModel, "findById", () => ({
+      session: () => ({
+        select: () => ({
+          lean: async () => {
+            findByIdCount += 1;
+            const error = new Error("Transaction numbers are only allowed on a replica set member or mongos");
+            error.code = 20;
+            throw error;
+          },
+        }),
+      }),
+    })],
+    [studentModel, "deleteOne", async () => { accountDeleted = true; return { deletedCount: 1 }; }],
+    [complaintModel, "updateMany", async () => { historyWriteCount += 1; }],
+    [sessionModel, "updateMany", async () => {}],
+  ], async () => {
+    const response = makeResponse();
+    await deleteUserByAdmin(
+      { auth: { role: "admin" }, body: { id: "103", type: "student" } },
+      response,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(findByIdCount, 1);
+    assert.equal(historyWriteCount, 3);
+    assert.equal(accountDeleted, true);
+    assert.equal(directoryDeleted, true);
+  });
+});
+
+test("transaction errors stop the deletion sequence before account or directory removal", async () => {
+  const account = { _id: "student-account", username: "Past", email: "past@example.edu" };
+  let accountDeleted = false;
+  let directoryDeleted = false;
+  let transactionAborted = false;
+  let updateCount = 0;
+
+  await withStubs([
+    [mongoose, "startSession", async () => ({
+      withTransaction: async (callback) => {
+        try {
+          await callback();
+        } catch (error) {
+          transactionAborted = true;
+          throw error;
+        }
+      },
+      endSession: async () => {},
+    })],
+    [campusDirectoryModel, "findOne", async () => ({ _id: "directory-record" })],
+    [campusDirectoryModel, "deleteOne", async () => { directoryDeleted = true; }],
+    [studentModel, "findOne", async () => account],
+    [studentModel, "findById", () => ({
+      session: () => ({
+        select: () => ({ lean: async () => ({ _id: account._id }) }),
+      }),
+    })],
+    [studentModel, "deleteOne", async () => { accountDeleted = true; return { deletedCount: 1 }; }],
+    [complaintModel, "updateMany", async () => {
+      updateCount += 1;
+      if (updateCount === 2) throw new Error("Injected transaction failure");
+    }],
+    [sessionModel, "updateMany", async () => {}],
+  ], async () => {
+    const response = makeResponse();
+    await deleteUserByAdmin(
+      { auth: { role: "admin" }, body: { id: "103", type: "student" } },
+      response,
+    );
+
+    assert.equal(response.statusCode, 500);
+    assert.equal(transactionAborted, true);
+    assert.equal(accountDeleted, false);
+    assert.equal(directoryDeleted, false);
   });
 });

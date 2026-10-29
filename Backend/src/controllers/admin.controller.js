@@ -56,6 +56,125 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function isTransactionUnsupportedError(error) {
+  return (
+    error?.code === 20 && /transaction numbers are only allowed/i.test(error.message || "")
+  );
+}
+
+async function snapshotAccountHistory({ account, type, cleanId, isStudent, session }) {
+  const identitySnapshot = {
+    name: account.username,
+    campusId: cleanId,
+    email: account.email,
+    role: type,
+  };
+  const actorSnapshot = { name: account.username, campusId: cleanId };
+  const options = session ? { session } : {};
+
+  // Keep these writes sequential because MongoDB does not support parallel
+  // operations within a transaction session.
+  await complaintModel.updateMany(
+    { user: account._id, userRef: type },
+    { $set: { userSnapshot: identitySnapshot } },
+    options,
+  );
+  await complaintModel.updateMany(
+    {
+      statusHistory: {
+        $elemMatch: { changedBy: account._id, changedByRole: type },
+      },
+    },
+    {
+      $set: {
+        "statusHistory.$[event].changedBySnapshot": actorSnapshot,
+      },
+    },
+    {
+      ...options,
+      arrayFilters: [
+        { "event.changedBy": account._id, "event.changedByRole": type },
+      ],
+    },
+  );
+  await complaintModel.updateMany(
+    {
+      comments: {
+        $elemMatch: { author: account._id, authorRole: type },
+      },
+    },
+    { $set: { "comments.$[comment].authorSnapshot": actorSnapshot } },
+    {
+      ...options,
+      arrayFilters: [
+        { "comment.author": account._id, "comment.authorRole": type },
+      ],
+    },
+  );
+
+  if (!isStudent) {
+    const staffSnapshot = {
+      name: account.username,
+      campusId: cleanId,
+      department: account.department,
+    };
+    await complaintModel.updateMany(
+      { assignedStaff: account._id },
+      { $set: { assignedStaffSnapshot: staffSnapshot } },
+      options,
+    );
+    await complaintModel.updateMany(
+      { resolvedBy: account._id },
+      { $set: { resolvedBySnapshot: staffSnapshot } },
+      options,
+    );
+  }
+}
+
+async function removeAccountAndDirectoryEntry({
+  account,
+  directoryEntry,
+  type,
+  cleanId,
+  isStudent,
+  model,
+  session,
+}) {
+  if (session) {
+    const accountStillExists = await model
+      .findById(account._id)
+      .session(session)
+      .select("_id")
+      .lean();
+    if (!accountStillExists) {
+      throw new Error("The account changed during removal. Please retry.");
+    }
+  }
+
+  if (account) {
+    await snapshotAccountHistory({ account, type, cleanId, isStudent, session });
+    const options = session ? { session } : {};
+
+    await sessionModel.updateMany(
+      { user: account._id, userRef: type, revoked: false },
+      { $set: { revoked: true } },
+      options,
+    );
+
+    const deletion = await model.deleteOne({ _id: account._id }, options);
+    if (deletion.deletedCount !== 1) {
+      throw new Error("The account could not be removed from the database.");
+    }
+  }
+
+  if (directoryEntry) {
+    await campusDirectoryModel.deleteOne(
+      { _id: directoryEntry._id },
+      session ? { session } : {},
+    );
+  }
+}
+
 async function getUnassignedComplaints(req, res) {
   if (req.auth?.role !== "admin") {
     return res.status(403).json({
@@ -783,87 +902,44 @@ async function deleteUserByAdmin(req, res) {
       });
     }
 
-    // Store identity snapshots before deleting the account so historical
-    // complaints remain readable after their populated references disappear.
-    if (account) {
-      const identitySnapshot = {
-        name: account.username,
-        campusId: cleanId,
-        email: account.email,
-        role: type,
-      };
-      const actorSnapshot = { name: account.username, campusId: cleanId };
-      const updates = [
-        complaintModel.updateMany(
-          { user: account._id, userRef: type },
-          { $set: { userSnapshot: identitySnapshot } },
-        ),
-        complaintModel.updateMany(
-          {
-            statusHistory: {
-              $elemMatch: { changedBy: account._id, changedByRole: type },
-            },
-          },
-          {
-            $set: {
-              "statusHistory.$[event].changedBySnapshot": actorSnapshot,
-            },
-          },
-          {
-            arrayFilters: [
-              { "event.changedBy": account._id, "event.changedByRole": type },
-            ],
-          },
-        ),
-        complaintModel.updateMany(
-          {
-            comments: {
-              $elemMatch: { author: account._id, authorRole: type },
-            },
-          },
-          { $set: { "comments.$[comment].authorSnapshot": actorSnapshot } },
-          {
-            arrayFilters: [
-              { "comment.author": account._id, "comment.authorRole": type },
-            ],
-          },
-        ),
-      ];
-
-      if (!isStudent) {
-        const staffSnapshot = {
-          name: account.username,
-          campusId: cleanId,
-          department: account.department,
-        };
-        updates.push(
-          complaintModel.updateMany(
-            { assignedStaff: account._id },
-            { $set: { assignedStaffSnapshot: staffSnapshot } },
-          ),
-          complaintModel.updateMany(
-            { resolvedBy: account._id },
-            { $set: { resolvedBySnapshot: staffSnapshot } },
-          ),
-        );
+    if (!account) {
+      if (directoryEntry) {
+        await campusDirectoryModel.deleteOne({ _id: directoryEntry._id });
       }
+    } else {
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await removeAccountAndDirectoryEntry({
+            account,
+            directoryEntry,
+            type,
+            cleanId,
+            isStudent,
+            model,
+            session,
+          });
+        });
+      } catch (error) {
+        if (!isTransactionUnsupportedError(error)) throw error;
 
-      await Promise.all(updates);
-    }
-
-    if (account) {
-      await sessionModel.updateMany(
-        { user: account._id, userRef: type, revoked: false },
-        { $set: { revoked: true } },
-      );
-
-      const deletion = await model.deleteOne({ _id: account._id });
-      if (deletion.deletedCount !== 1) {
-        throw new Error("The account could not be removed from the database.");
+        // A standalone MongoDB server doesn't support transactions. The first
+        // transactional read happens before writes, so this fallback can run
+        // the same idempotent sequence without leaving a partial transaction.
+        console.warn("MongoDB transactions are unavailable; removing the account without a transaction.");
+        await removeAccountAndDirectoryEntry({
+          account,
+          directoryEntry,
+          type,
+          cleanId,
+          isStudent,
+          model,
+          session: null,
+        });
+      } finally {
+        await session.endSession();
       }
     }
-
-    if (directoryEntry) await campusDirectoryModel.deleteOne({ _id: directoryEntry._id });
 
     return res.status(200).json({
       message: account
