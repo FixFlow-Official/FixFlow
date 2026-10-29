@@ -18,6 +18,19 @@ app.use(express.json());
 app.use(morgan("dev"));
 app.use(cookieParser());
 
+// Keep health checks available while MongoDB or startup migration is unavailable.
+app.get("/api/health", (_req, res) => {
+  const databaseReady = mongoose.connection.readyState === 1;
+  const directoryReady = isCampusDirectoryReady();
+  const ready = databaseReady && directoryReady;
+
+  return res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "starting",
+    database: databaseReady ? "connected" : "disconnected",
+    campusDirectory: directoryReady ? "ready" : "initializing",
+  });
+});
+
 // Return an actionable API response while MongoDB is connecting instead of
 // leaving Mongoose queries buffered until the Vite proxy times out.
 app.use("/api", (req, res, next) => {
