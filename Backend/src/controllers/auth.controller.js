@@ -8,6 +8,7 @@ const sessionModel = require("../models/session.model");
 const studentModel = require("../models/student.model");
 const staffModel = require("../models/staff.model");
 const adminModel = require("../models/admin.model");
+const campusDirectoryModel = require("../models/campusDirectory.model");
 const blackListTokenModel = require("../models/blackListToken.model");
 const uploadFile = require("../services/storage.service");
 
@@ -121,10 +122,8 @@ async function changePassword(req, res) {
 async function verifyUserAndSendEmail(req, res) {
   const { id, type } = req.body;
 
-  const userData = req.userData;
+  const userFound = req.directoryEntry;
   const idField = req.idField;
-
-  const userFound = userData.find((s) => String(s[idField]) === String(id));
 
   if (!userFound) {
     return res.status(401).json({
@@ -220,10 +219,7 @@ async function verifyUserAndSendEmail(req, res) {
 async function verifyEmail(req, res) {
   const { otp, id, type, purpose = "registration" } = req.body;
 
-  const userData = req.userData;
-  const idField = req.idField;
-
-  const userFound = userData.find((s) => String(s[idField]) === String(id));
+  const userFound = req.directoryEntry;
 
   if (!userFound) {
     return res.status(401).json({
@@ -328,12 +324,11 @@ async function createUser(req, res) {
     }
 
     const model = req.model;
-    const userData = req.userData;
     const idField = req.idField;
-
-    const userFound = userData.find(
-      (e) => String(e[idField]) === String(decoded.id),
-    );
+    const userFound = await campusDirectoryModel.findOne({
+      type,
+      campusId: String(decoded.id),
+    }).lean();
 
     const depField = {
       student: "course",
@@ -733,12 +728,9 @@ async function tokenRecreate(req, res) {
 
 async function verifyUser(req, res) {
   const { id, type } = req.body;
-  const userData = req.userData;
   const idField = req.idField;
 
-  const userFound = userData.find(
-    (student) => String(student[idField]) === String(id),
-  );
+  const userFound = req.directoryEntry;
 
   if (!userFound) {
     return res.status(404).json({

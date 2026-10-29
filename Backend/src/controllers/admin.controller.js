@@ -1,15 +1,12 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
-const fs = require("node:fs");
-const path = require("node:path");
 const complaintModel = require("../models/complaint.model");
 const staffModel = require("../models/staff.model");
 const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
 const sessionModel = require("../models/session.model");
+const campusDirectoryModel = require("../models/campusDirectory.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
-const studentData = require("../data/officialStudentData.json");
-const staffData = require("../data/staffData.json");
 const {
   findStudentIdsBySearch,
   getPageMetadata,
@@ -53,15 +50,6 @@ async function buildComplaintSearchFilter(search) {
       { user: { $in: studentIds } },
     ],
   };
-}
-
-const studentFilePath = path.join(__dirname, "../data/officialStudentData.json");
-const staffFilePath = path.join(__dirname, "../data/staffData.json");
-
-function persistDirectory(filePath, records) {
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(temporaryPath, JSON.stringify(records, null, 2), "utf8");
-  fs.renameSync(temporaryPath, filePath);
 }
 
 function escapeRegex(value) {
@@ -710,72 +698,41 @@ async function addUserToDirectoryByAdmin(req, res) {
       return res.status(400).json({ message: "Enter a valid email address." });
     }
 
-    const userData = type === "student" ? studentData : staffData;
     const idField = type === "student" ? "rollno" : "staffId";
     const model = type === "student" ? studentModel : staffModel;
     const emailPattern = new RegExp(`^${escapeRegex(cleanEmail)}$`, "i");
     const canonicalId = String(Number(cleanId));
-    const hasSameId = (entry, field) => String(Number(entry[field])) === canonicalId;
-    const directoryIdExists = userData.some((entry) => hasSameId(entry, idField));
-    const directoryEmailExists = userData.some(
-      (entry) => String(entry.email || "").trim().toLowerCase() === cleanEmail,
-    );
-
-    // IDs and emails are unique within each account type. Historical campus
-    // data may reuse the same values across roles, so compare the selected role.
-    if (directoryIdExists) {
-      return res.status(409).json({
-        message: "That campus ID is already used by an existing account or directory entry.",
-      });
-    }
-
-    if (directoryEmailExists) {
-      return res.status(409).json({
-        message: "That email is already used by an existing account or directory entry.",
-      });
-    }
-
-    const [idAccount, emailAccount] = await Promise.all([
+    const [directoryId, directoryEmail, idAccount, emailAccount] = await Promise.all([
+      campusDirectoryModel.findOne({ type, campusId: canonicalId }).select("_id"),
+      campusDirectoryModel.findOne({ type, email: cleanEmail }).select("_id"),
       model.findOne({ [idField]: Number(cleanId) }).select("_id"),
       model.findOne({ email: emailPattern }).select("_id"),
     ]);
 
-    if (idAccount) {
+    if (directoryId || idAccount) {
       return res.status(409).json({
         message: "That campus ID is already used by an existing account or directory entry.",
       });
     }
 
-    if (emailAccount) {
+    if (directoryEmail || emailAccount) {
       return res.status(409).json({
         message: "That email is already used by an existing account or directory entry.",
       });
     }
 
     const record = type === "student"
-      ? { rollno: Number(cleanId), name: cleanName, course: cleanCourse, email: cleanEmail }
-      : { staffId: Number(cleanId), name: cleanName, department: cleanCourse, email: cleanEmail };
-    const filePath = type === "student" ? studentFilePath : staffFilePath;
-    // Recheck the in-memory directories after the database reads so concurrent
-    // admin requests cannot append the same ID or email twice in this process.
-    const idNowExists = userData.some((entry) => hasSameId(entry, idField));
-    const emailNowExists = userData.some(
-      (entry) => String(entry.email || "").trim().toLowerCase() === cleanEmail,
-    );
-    if (idNowExists || emailNowExists) {
-      return res.status(409).json({
-        message: idNowExists
-          ? "That campus ID is already used by an existing account or directory entry."
-          : "That email is already used by an existing account or directory entry.",
-      });
-    }
-
-    userData.push(record);
+      ? { type, campusId: canonicalId, name: cleanName, email: cleanEmail, course: cleanCourse }
+      : { type, campusId: canonicalId, name: cleanName, email: cleanEmail, department: cleanCourse };
 
     try {
-      persistDirectory(filePath, userData);
+      await campusDirectoryModel.create(record);
     } catch (error) {
-      userData.pop();
+      if (error?.code === 11000) {
+        return res.status(409).json({
+          message: "That campus ID is already used by an existing account or directory entry.",
+        });
+      }
       throw error;
     }
 
@@ -814,16 +771,13 @@ async function deleteUserByAdmin(req, res) {
     }
 
     const isStudent = type === "student";
-    const directory = isStudent ? studentData : staffData;
-    const filePath = isStudent ? studentFilePath : staffFilePath;
     const idField = isStudent ? "rollno" : "staffId";
     const model = isStudent ? studentModel : staffModel;
-    const directoryIndex = directory.findIndex(
-      (entry) => String(entry[idField]) === cleanId,
-    );
+    const canonicalId = String(Number(cleanId));
+    const directoryEntry = await campusDirectoryModel.findOne({ type, campusId: canonicalId });
     const account = await model.findOne({ [idField]: Number(cleanId) });
 
-    if (!account && directoryIndex === -1) {
+    if (!account && !directoryEntry) {
       return res.status(404).json({
         message: `No ${type} account or directory entry was found for that ID.`,
       });
@@ -897,35 +851,19 @@ async function deleteUserByAdmin(req, res) {
       await Promise.all(updates);
     }
 
-    const [removedDirectoryEntry] = directoryIndex >= 0
-      ? directory.splice(directoryIndex, 1)
-      : [];
+    if (account) {
+      await sessionModel.updateMany(
+        { user: account._id, userRef: type, revoked: false },
+        { $set: { revoked: true } },
+      );
 
-    try {
-      if (removedDirectoryEntry) persistDirectory(filePath, directory);
-
-      if (account) {
-        await sessionModel.updateMany(
-          { user: account._id, userRef: type, revoked: false },
-          { $set: { revoked: true } },
-        );
-
-        const deletion = await model.deleteOne({ _id: account._id });
-        if (deletion.deletedCount !== 1) {
-          throw new Error("The account could not be removed from the database.");
-        }
+      const deletion = await model.deleteOne({ _id: account._id });
+      if (deletion.deletedCount !== 1) {
+        throw new Error("The account could not be removed from the database.");
       }
-    } catch (error) {
-      if (removedDirectoryEntry) {
-        directory.splice(directoryIndex, 0, removedDirectoryEntry);
-        try {
-          persistDirectory(filePath, directory);
-        } catch (restoreError) {
-          console.error("Could not restore the user directory after a failed deletion:", restoreError);
-        }
-      }
-      throw error;
     }
+
+    if (directoryEntry) await campusDirectoryModel.deleteOne({ _id: directoryEntry._id });
 
     return res.status(200).json({
       message: account

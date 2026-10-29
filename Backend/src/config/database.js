@@ -1,15 +1,15 @@
 const mongoose = require("mongoose");
 const config = require("./config");
-const { syncRegisteredAccountsToDirectories } = require("../services/directorySync.service");
+const { migrateLegacyDirectoryFilesToMongo } = require("../services/campusDirectoryMigration.service");
 
 async function connectDB() {
   try {
     await mongoose.connect(config.MONGO_URI);
     console.log("Connected to Database");
-    await syncRegisteredAccountsToDirectories();
-    console.log("Campus directory files synchronized with registered accounts");
+    await migrateLegacyDirectoryFilesToMongo();
+    console.log("Campus directory migration is ready");
   } catch (err) {
-    console.error("Database connection or directory synchronization failed:", err);
+    console.error("Database connection or campus directory migration failed:", err);
   }
 }
 

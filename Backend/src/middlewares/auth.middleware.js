@@ -2,20 +2,12 @@ const studentModel = require("../models/student.model");
 const staffModel = require("../models/staff.model");
 const adminModel = require("../models/admin.model");
 const sessionModel = require("../models/session.model");
-const studentsData = require("../data/officialStudentData.json");
-const staffsData = require("../data/staffData.json");
-const adminsData = require("../data/adminData.json");
+const campusDirectoryModel = require("../models/campusDirectory.model");
 const config = require("../config/config");
 const jwt = require("jsonwebtoken");
 
 async function registerMiddleware(req, res, next) {
   const { type } = req.body;
-
-  const findUserData = {
-    student: studentsData,
-    staff: staffsData,
-    admin: adminsData,
-  };
 
   const findIdField = {
     student: "rollno",
@@ -29,17 +21,25 @@ async function registerMiddleware(req, res, next) {
     admin: adminModel,
   };
 
-  if (!Object.hasOwn(findUserData, type)) {
+  if (!Object.hasOwn(findIdField, type)) {
     return res.status(400).json({
       message: "Invalid user type",
     });
   }
 
-  req.userData = findUserData[type];
   req.idField = findIdField[type];
   req.model = userModels[type];
 
-  next();
+  // Login only needs the account model. Registration and password recovery
+  // also provide a campus ID, which must resolve against MongoDB's directory.
+  if (req.body.id !== undefined && req.body.id !== null) {
+    req.directoryEntry = await campusDirectoryModel.findOne({
+      type,
+      campusId: String(req.body.id).trim(),
+    }).lean();
+  }
+
+  return next();
 }
 
 async function logoutMiddleware(req,res,next){

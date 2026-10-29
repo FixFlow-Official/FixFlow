@@ -33,8 +33,8 @@ const idValidatorRule = [
   body("id")
     .isNumeric()
     .withMessage("Id must be a number")
-    .isLength({ min: 10, max: 10 })
-    .withMessage("Length must be of 10 digit long"),
+    .isLength({ min: 1, max: 10 })
+    .withMessage("Campus ID must be between 1 and 10 digits"),
 
   validateResult,
 ];

@@ -8,6 +8,7 @@ const adminRouter = require("./routes/admin.routes");
 const staffRouter = require("./routes/staff.routes");
 const complaintConversationRouter = require("./routes/complaintConversation.routes");
 const notificationRouter = require("./routes/notification.routes");
+const { isCampusDirectoryReady } = require("./services/campusDirectoryMigration.service");
 
 const app = express();
 
@@ -20,7 +21,7 @@ app.use(cookieParser());
 // Return an actionable API response while MongoDB is connecting instead of
 // leaving Mongoose queries buffered until the Vite proxy times out.
 app.use("/api", (req, res, next) => {
-  if (mongoose.connection.readyState !== 1) {
+  if (mongoose.connection.readyState !== 1 || !isCampusDirectoryReady()) {
     return res.status(503).json({
       message: "The database is still connecting. Please retry in a moment.",
     });
