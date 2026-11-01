@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken");
 const test = require("node:test");
 const config = require("../src/config/config");
 const sessionModel = require("../src/models/session.model");
-const { logoutMiddleware } = require("../src/middlewares/auth.middleware");
+const { logoutMiddleware, verifyAccessToken } = require("../src/middlewares/auth.middleware");
 const { loginController } = require("../src/controllers/auth.controller");
 const {
   MAX_ACTIVE_SESSIONS,
@@ -122,6 +122,56 @@ test("refresh authentication directly loads the session from the token claim", a
   assert.equal(req.session, session);
   assert.equal(lookup._id, sessionId);
   assert.deepEqual(lookup.expiresAt.$gt instanceof Date, true);
+});
+
+test("refresh authentication forwards database failures instead of returning unauthorized", async () => {
+  const oldSecret = config.JWT_SECRET;
+  config.JWT_SECRET = "session-test-secret";
+  const refreshToken = jwt.sign(
+    { id: "user-id", role: "student", sessionId: "507f1f77bcf86cd799439011" },
+    config.JWT_SECRET,
+    { expiresIn: "7d" },
+  );
+  const databaseError = new Error("database unavailable");
+  const req = { cookies: { refreshToken } };
+  const res = makeResponse();
+  let forwardedError;
+
+  try {
+    await withStub(sessionModel, "findOne", async () => { throw databaseError; }, async () => {
+      await logoutMiddleware(req, res, (error) => { forwardedError = error; });
+    });
+  } finally {
+    config.JWT_SECRET = oldSecret;
+  }
+
+  assert.equal(forwardedError, databaseError);
+  assert.equal(res.statusCode, null);
+});
+
+test("access-token verification forwards session lookup failures to the error handler", async () => {
+  const oldSecret = config.JWT_SECRET;
+  config.JWT_SECRET = "session-test-secret";
+  const accessToken = jwt.sign(
+    { id: "user-id", role: "student", sessionId: "507f1f77bcf86cd799439011" },
+    config.JWT_SECRET,
+    { expiresIn: "15m" },
+  );
+  const databaseError = new Error("database unavailable");
+  const req = { headers: { authorization: `Bearer ${accessToken}` } };
+  const res = makeResponse();
+  let forwardedError;
+
+  try {
+    await withStub(sessionModel, "findOne", async () => { throw databaseError; }, async () => {
+      await verifyAccessToken(req, res, (error) => { forwardedError = error; });
+    });
+  } finally {
+    config.JWT_SECRET = oldSecret;
+  }
+
+  assert.equal(forwardedError, databaseError);
+  assert.equal(res.statusCode, null);
 });
 
 test("login creates a session-bound seven-day refresh token", async () => {

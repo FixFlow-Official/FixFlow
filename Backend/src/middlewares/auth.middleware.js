@@ -43,69 +43,64 @@ async function registerMiddleware(req, res, next) {
   return next();
 }
 
-async function logoutMiddleware(req,res,next){
-  
+async function logoutMiddleware(req, res, next) {
   const refreshToken = req.cookies.refreshToken;
-  
-    if (!refreshToken) {
-      return res.status(401).json({
-        message: "Unauthorized",
+
+  if (!refreshToken) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(refreshToken, config.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const userId = decoded.id || decoded._id;
+    const activeFilter = {
+      user: userId,
+      userRef: decoded.role,
+      revoked: false,
+      expiresAt: { $gt: new Date() },
+    };
+    let matchingSession = null;
+
+    if (decoded.sessionId) {
+      matchingSession = await sessionModel.findOne({
+        ...activeFilter,
+        _id: decoded.sessionId,
       });
-    }
-  
-    try {
-      const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
-
-      const userId = decoded.id || decoded._id;
-      const activeFilter = {
-        user: userId,
-        userRef: decoded.role,
-        revoked: false,
-        expiresAt: { $gt: new Date() },
-      };
-      let matchingSession = null;
-
-      if (decoded.sessionId) {
-        matchingSession = await sessionModel.findOne({
-          ...activeFilter,
-          _id: decoded.sessionId,
-        });
-        if (
-          matchingSession &&
-          !(await bcrypt.compare(refreshToken, matchingSession.refreshTokenHash))
-        ) {
-          matchingSession = null;
-        }
-      } else {
-        // Transitional compatibility for refresh cookies issued before
-        // sessionId was added to refresh-token claims.
-        const legacySessions = await sessionModel.find(activeFilter);
-        for (const session of legacySessions) {
-          if (await bcrypt.compare(refreshToken, session.refreshTokenHash)) {
-            matchingSession = session;
-            break;
-          }
+      if (
+        matchingSession &&
+        !(await bcrypt.compare(refreshToken, matchingSession.refreshTokenHash))
+      ) {
+        matchingSession = null;
+      }
+    } else {
+      // Transitional compatibility for refresh cookies issued before
+      // sessionId was added to refresh-token claims.
+      const legacySessions = await sessionModel.find(activeFilter);
+      for (const session of legacySessions) {
+        if (await bcrypt.compare(refreshToken, session.refreshTokenHash)) {
+          matchingSession = session;
+          break;
         }
       }
-
-      if (!matchingSession) {
-        return res.status(401).json({
-          message:"Unauthorized"
-        })
-      }
-
-      req.session = matchingSession;
-      req.refreshToken = refreshToken;
-      req.decoded = decoded;
-
-      next();
-  
-    } catch (err) {
-      return res.status(401).json({
-        message: "Unauthorized",
-        err,
-      });
     }
+
+    if (!matchingSession) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    req.session = matchingSession;
+    req.refreshToken = refreshToken;
+    req.decoded = decoded;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
 }
 
 async function verifyAccessToken(req, res, next) {
@@ -118,13 +113,18 @@ async function verifyAccessToken(req, res, next) {
     return res.status(401).json({ message: "Unauthorized" })
   }
 
+  let decoded;
   try {
-    const decoded = jwt.verify(accessToken, config.JWT_SECRET)
+    decoded = jwt.verify(accessToken, config.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 
-    if (!decoded.id || !decoded.role || !decoded.sessionId) {
-      return res.status(401).json({ message: "Unauthorized" })
-    }
+  if (!decoded.id || !decoded.role || !decoded.sessionId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 
+  try {
     const activeSession = await sessionModel.findOne({
       _id: decoded.sessionId,
       user: decoded.id,
@@ -140,9 +140,9 @@ async function verifyAccessToken(req, res, next) {
     req.auth = decoded
     req.accessToken = accessToken
 
-    next()
-  } catch {
-    return res.status(401).json({ message: "Unauthorized" })
+    return next();
+  } catch (error) {
+    return next(error);
   }
 }
 

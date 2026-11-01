@@ -303,7 +303,7 @@ async function verifyEmail(req, res) {
  * @access public
  */
 
-async function createUser(req, res) {
+async function createUser(req, res, next) {
   const { password, type, termsAccepted } = req.body;
 
   if (termsAccepted !== true) {
@@ -378,11 +378,11 @@ async function createUser(req, res) {
         role: user.role,
       },
     });
-  } catch (err) {
-    return res.status(401).json({
-      message: "Invalid Token",
-      err,
-    });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    return next(error);
   }
 }
 
@@ -496,24 +496,20 @@ async function getMe(req, res) {
     admin: adminModel,
   };
 
-  try {
-    const decoded = req.decoded;
-    const model = userModels[decoded.role];
+  const decoded = req.decoded;
+  const model = userModels[decoded.role];
 
-    if (!model) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = await model.findById(decoded.id);
-
-    if (!user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    return res.status(200).json({ user: serializeCurrentUser(user) });
-  } catch {
+  if (!model) {
     return res.status(401).json({ message: "Unauthorized" });
   }
+
+  const user = await model.findById(decoded.id);
+
+  if (!user) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  return res.status(200).json({ user: serializeCurrentUser(user) });
 }
 
 /**
@@ -523,7 +519,7 @@ async function getMe(req, res) {
  * @access public
  */
 
-async function logout(req, res) {
+async function logout(req, res, next) {
   try {
     const session = req.session;
     const refreshToken = req.refreshToken;
@@ -562,11 +558,8 @@ async function logout(req, res) {
     return res.status(200).json({
       message: "User logged out successfully",
     });
-  } catch (err) {
-    return res.status(500).json({
-      message: "something went wrong",
-      error: err.message,
-    });
+  } catch (error) {
+    return next(error);
   }
 }
 
@@ -577,7 +570,7 @@ async function logout(req, res) {
  * @access public
  */
 
-async function logoutAll(req, res) {
+async function logoutAll(req, res, next) {
   try {
     const session = req.session;
     const decoded = req.decoded;
@@ -615,11 +608,8 @@ async function logoutAll(req, res) {
     return res.status(200).json({
       message: "User logged out from all devices successfully",
     });
-  } catch (err) {
-    return res.status(500).json({
-      message: "something went wrong",
-      err,
-    });
+  } catch (error) {
+    return next(error);
   }
 }
 
@@ -630,7 +620,7 @@ async function logoutAll(req, res) {
  * @access public
  */
 
-async function tokenRecreate(req, res) {
+async function tokenRecreate(req, res, next) {
   try {
     const decoded = req.decoded;
     const targetSession = req.session;
@@ -694,11 +684,8 @@ async function tokenRecreate(req, res) {
       message: "Token refreshed successfully",
       accessToken,
     });
-  } catch (err) {
-    return res.status(500).json({
-      message: "Something went wrong",
-      err,
-    });
+  } catch (error) {
+    return next(error);
   }
 }
 
@@ -807,7 +794,7 @@ async function verifyUser(req, res) {
  * @access public
  */
 
-async function forgotPasswordChange(req, res) {
+async function forgotPasswordChange(req, res, next) {
   const token = req.cookies.token;
 
   if (!token) {
@@ -863,11 +850,11 @@ async function forgotPasswordChange(req, res) {
     return res.status(200).json({
       message: "Password changed successfully",
     });
-  } catch (err) {
-    return res.status(401).json({
-      message: "Unauthorized",
-      error: err.message,
-    });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    return next(error);
   }
 }
 
