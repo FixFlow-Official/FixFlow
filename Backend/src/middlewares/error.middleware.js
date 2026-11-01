@@ -1,7 +1,10 @@
 const mongoose = require("mongoose");
 
-function notFoundHandler(_req, res) {
-  return res.status(404).json({ message: "API route not found." });
+function notFoundHandler(req, res) {
+  return res.status(404).json({
+    message: "API route not found.",
+    ...(req.requestId ? { requestId: req.requestId } : {}),
+  });
 }
 
 function errorHandler(error, req, res, next) {
@@ -34,12 +37,16 @@ function errorHandler(error, req, res, next) {
 
   // Keep implementation details in server logs only; never return them to clients.
   console.error("API request failed", {
+    requestId: req.requestId,
     method: req.method,
     path: req.path,
     error,
   });
 
-  return res.status(status).json({ message });
+  return res.status(status).json({
+    message,
+    ...(req.requestId ? { requestId: req.requestId } : {}),
+  });
 }
 
 module.exports = { notFoundHandler, errorHandler };

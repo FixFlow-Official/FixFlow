@@ -45,7 +45,7 @@ async function getComplaintComments(req, res) {
     if (!complaint) return;
     return res.status(200).json({ comments: complaint.comments || [] });
   } catch (error) {
-    console.error("getComplaintComments failed:", error);
+    console.error("getComplaintComments failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not load complaint messages." });
   }
 }
@@ -63,7 +63,7 @@ async function getComplaintDetails(req, res) {
 
     return res.status(200).json({ complaint });
   } catch (error) {
-    console.error("getComplaintDetails failed:", error);
+    console.error("getComplaintDetails failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not load complaint details." });
   }
 }
@@ -134,7 +134,7 @@ async function addComplaintComment(req, res) {
       comment: complaint.comments[complaint.comments.length - 1],
     });
   } catch (error) {
-    console.error("addComplaintComment failed:", error);
+    console.error("addComplaintComment failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not send your message." });
   }
 }

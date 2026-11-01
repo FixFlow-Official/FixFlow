@@ -74,7 +74,7 @@ async function updateProfile(req, res) {
       user: serializeCurrentUser(user),
     });
   } catch (err) {
-    console.error("updateProfile failed:", err);
+    console.error("updateProfile failed", { requestId: req.requestId, error: err });
     return res.status(500).json({ message: "Could not update your profile." });
   }
 }
@@ -112,7 +112,7 @@ async function changePassword(req, res) {
 
     return res.status(200).json({ message: "Password changed. Other active sessions have been signed out." });
   } catch (err) {
-    console.error("changePassword failed:", err);
+    console.error("changePassword failed", { requestId: req.requestId, error: err });
     return res.status(500).json({ message: "Could not change your password." });
   }
 }

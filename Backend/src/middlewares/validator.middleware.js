@@ -6,6 +6,7 @@ async function validateResult(req, res, next) {
   if (!error.isEmpty()) {
     return res.status(400).json({
       message: "Request validation failed.",
+      ...(req.requestId ? { requestId: req.requestId } : {}),
       errors: error.array().map((item) => ({
         field: item.path || item.param || "request",
         message: item.msg,

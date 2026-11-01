@@ -210,7 +210,7 @@ async function getUnassignedComplaints(req, res) {
       pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
     });
   } catch (err) {
-    console.error("getUnassignedComplaints failed:", err);
+    console.error("getUnassignedComplaints failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not load the complaint queue.",
@@ -241,7 +241,7 @@ async function getStaffByDepartment(req, res) {
 
     return res.status(200).json({ staff });
   } catch (err) {
-    console.error("getStaffByDepartment failed:", err);
+    console.error("getStaffByDepartment failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not load staff for this department.",
@@ -308,7 +308,7 @@ async function getRegisteredAccounts(req, res) {
       pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
     });
   } catch (err) {
-    console.error("getRegisteredAccounts failed:", err);
+    console.error("getRegisteredAccounts failed", { requestId: req.requestId, error: err });
     return res.status(500).json({ message: "Could not load registered accounts." });
   }
 }
@@ -353,7 +353,7 @@ async function resetAccountPasswordByAdmin(req, res) {
       message: "Password reset successfully. All active sessions have been signed out.",
     });
   } catch (err) {
-    console.error("resetAccountPasswordByAdmin failed:", err);
+    console.error("resetAccountPasswordByAdmin failed", { requestId: req.requestId, error: err });
     return res.status(500).json({ message: "Could not reset the account password." });
   }
 }
@@ -436,7 +436,7 @@ async function getAssignedComplaints(req, res) {
       },
     });
   } catch (err) {
-    console.error("getAssignedComplaints failed:", err);
+    console.error("getAssignedComplaints failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not load assigned complaints.",
@@ -559,7 +559,7 @@ async function getComplaintReports(req, res) {
       trend: report?.trend || [],
     });
   } catch (error) {
-    console.error("getComplaintReports failed:", error);
+    console.error("getComplaintReports failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not load complaint reports." });
   }
 }
@@ -649,7 +649,7 @@ async function assignComplaint(req, res) {
       complaint,
     });
   } catch (err) {
-    console.error("assignComplaint failed:", err);
+    console.error("assignComplaint failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not assign the complaint.",
@@ -769,7 +769,7 @@ async function reassignComplaint(req, res) {
       complaint,
     });
   } catch (err) {
-    console.error("reassignComplaint failed:", err);
+    console.error("reassignComplaint failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not reassign the complaint.",
@@ -859,7 +859,7 @@ async function addUserToDirectoryByAdmin(req, res) {
       message: "Campus directory entry added. The user must complete email OTP verification and set their own password before signing in.",
     });
   } catch (err) {
-    console.error("addUserToDirectoryByAdmin failed:", err);
+    console.error("addUserToDirectoryByAdmin failed", { requestId: req.requestId, error: err });
     return res.status(500).json({
       message: "Could not add the user to the campus directory.",
     });
@@ -947,7 +947,7 @@ async function deleteUserByAdmin(req, res) {
         : "User removed from the campus registration directory.",
     });
   } catch (err) {
-    console.error("deleteUserByAdmin failed:", err);
+    console.error("deleteUserByAdmin failed", { requestId: req.requestId, error: err });
     return res.status(500).json({
       message: "Could not remove the user account.",
     });
