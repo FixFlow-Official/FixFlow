@@ -2,6 +2,7 @@ const studentModel = require("../models/student.model");
 const staffModel = require("../models/staff.model");
 const adminModel = require("../models/admin.model");
 const sessionModel = require("../models/session.model");
+const bcrypt = require("bcrypt");
 const campusDirectoryModel = require("../models/campusDirectory.model");
 const config = require("../config/config");
 const jwt = require("jsonwebtoken");
@@ -54,20 +55,46 @@ async function logoutMiddleware(req,res,next){
   
     try {
       const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
-  
-      const sessions = await sessionModel.find({
-        user: decoded.id || decoded._id,
+
+      const userId = decoded.id || decoded._id;
+      const activeFilter = {
+        user: userId,
         userRef: decoded.role,
         revoked: false,
-      });
+        expiresAt: { $gt: new Date() },
+      };
+      let matchingSession = null;
 
-      if(!sessions || sessions.length === 0){
+      if (decoded.sessionId) {
+        matchingSession = await sessionModel.findOne({
+          ...activeFilter,
+          _id: decoded.sessionId,
+        });
+        if (
+          matchingSession &&
+          !(await bcrypt.compare(refreshToken, matchingSession.refreshTokenHash))
+        ) {
+          matchingSession = null;
+        }
+      } else {
+        // Transitional compatibility for refresh cookies issued before
+        // sessionId was added to refresh-token claims.
+        const legacySessions = await sessionModel.find(activeFilter);
+        for (const session of legacySessions) {
+          if (await bcrypt.compare(refreshToken, session.refreshTokenHash)) {
+            matchingSession = session;
+            break;
+          }
+        }
+      }
+
+      if (!matchingSession) {
         return res.status(401).json({
           message:"Unauthorized"
         })
       }
 
-      req.sessions = sessions;
+      req.session = matchingSession;
       req.refreshToken = refreshToken;
       req.decoded = decoded;
 
@@ -103,6 +130,7 @@ async function verifyAccessToken(req, res, next) {
       user: decoded.id,
       userRef: decoded.role,
       revoked: false,
+      expiresAt: { $gt: new Date() },
     })
 
     if (!activeSession) {

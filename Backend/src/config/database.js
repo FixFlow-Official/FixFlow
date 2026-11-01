@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const config = require("./config");
 const { migrateLegacyDirectoryFilesToMongo } = require("../services/campusDirectoryMigration.service");
+const { migrateSessionExpirations } = require("../services/session.service");
 
 function waitBeforeRetry(delayMs, signal) {
   return new Promise((resolve, reject) => {
@@ -28,6 +29,7 @@ async function connectDB({
   signal,
   mongooseClient = mongoose,
   migrate = migrateLegacyDirectoryFilesToMongo,
+  migrateSessions = migrateSessionExpirations,
   wait = waitBeforeRetry,
 } = {}) {
   let attempt = 0;
@@ -39,6 +41,7 @@ async function connectDB({
         console.log("Connected to Database");
       }
 
+      await migrateSessions();
       await migrate();
       console.log("Campus directory migration is ready");
       return;

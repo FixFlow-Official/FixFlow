@@ -5,6 +5,7 @@ const connectDB = require("../src/config/database");
 test("database startup retries connection and runs migration before becoming ready", async () => {
   let connectAttempts = 0;
   let migrationCalls = 0;
+  const startupSteps = [];
   const delays = [];
   const mongooseClient = {
     connection: { readyState: 0 },
@@ -17,12 +18,14 @@ test("database startup retries connection and runs migration before becoming rea
 
   await connectDB({
     mongooseClient,
-    migrate: async () => { migrationCalls += 1; },
+    migrate: async () => { migrationCalls += 1; startupSteps.push("directory"); },
+    migrateSessions: async () => { startupSteps.push("sessions"); },
     wait: async (delayMs) => { delays.push(delayMs); },
   });
 
   assert.equal(connectAttempts, 2);
   assert.equal(migrationCalls, 1);
+  assert.deepEqual(startupSteps, ["sessions", "directory"]);
   assert.deepEqual(delays, [1000]);
 });
 
@@ -43,6 +46,7 @@ test("database startup retries a failed directory migration without reconnecting
       migrationCalls += 1;
       if (migrationCalls === 1) throw new Error("temporary migration failure");
     },
+    migrateSessions: async () => {},
     wait: async () => {},
   });
 
@@ -65,6 +69,7 @@ test("database startup stops retrying when shutdown aborts the pending wait", as
     signal: controller.signal,
     mongooseClient,
     migrate: async () => {},
+    migrateSessions: async () => {},
     wait: async (_delayMs, signal) => {
       controller.abort();
       throw signal.reason;

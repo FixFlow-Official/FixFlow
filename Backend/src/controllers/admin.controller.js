@@ -157,7 +157,7 @@ async function removeAccountAndDirectoryEntry({
 
     await sessionModel.updateMany(
       { user: account._id, userRef: type, revoked: false },
-      { $set: { revoked: true } },
+      { $set: { revoked: true, expiresAt: new Date() } },
       options,
     );
 
@@ -346,7 +346,7 @@ async function resetAccountPasswordByAdmin(req, res) {
     // Require the account owner to sign in again on every device.
     await sessionModel.updateMany(
       { user: account._id, userRef: type, revoked: false },
-      { $set: { revoked: true } },
+      { $set: { revoked: true, expiresAt: new Date() } },
     );
 
     return res.status(200).json({

@@ -28,11 +28,20 @@ const sessionSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    expiresAt: {
+      type: Date,
+      required: true,
+    },
   },
   {
     timestamps: true,
   },
 );
+
+// Mongo's TTL monitor removes expired sessions asynchronously; auth queries
+// also enforce expiresAt so an expired session is rejected immediately.
+sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+sessionSchema.index({ userRef: 1, user: 1, revoked: 1, expiresAt: 1 });
 
 const sessionModel = mongoose.model("session", sessionSchema);
 

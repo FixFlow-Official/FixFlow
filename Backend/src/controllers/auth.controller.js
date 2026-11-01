@@ -1,5 +1,6 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const config = require("../config/config");
 const otpModel = require("../models/otp.model");
 const { getOtp, getHtml } = require("../utils/utils");
@@ -11,6 +12,10 @@ const adminModel = require("../models/admin.model");
 const campusDirectoryModel = require("../models/campusDirectory.model");
 const blackListTokenModel = require("../models/blackListToken.model");
 const uploadFile = require("../services/storage.service");
+const {
+  REFRESH_TOKEN_TTL_MS,
+  enforceActiveSessionLimit,
+} = require("../services/session.service");
 
 function serializeCurrentUser(user) {
   return {
@@ -102,7 +107,7 @@ async function changePassword(req, res) {
     // Keep the current device signed in and revoke the other sessions.
     await sessionModel.updateMany(
       { user: user._id, userRef: req.auth.role, revoked: false, _id: { $ne: req.auth.sessionId } },
-      { $set: { revoked: true } },
+      { $set: { revoked: true, expiresAt: new Date() } },
     );
 
     return res.status(200).json({ message: "Password changed. Other active sessions have been signed out." });
@@ -407,10 +412,13 @@ async function loginController(req, res) {
     });
   }
 
+  const sessionId = new mongoose.Types.ObjectId();
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
   const refreshToken = jwt.sign(
     {
       id: user.id,
       role: user.role,
+      sessionId: String(sessionId),
     },
     config.JWT_SECRET,
     {
@@ -421,12 +429,28 @@ async function loginController(req, res) {
   const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
 
   const session = await sessionModel.create({
+    _id: sessionId,
     user: user.id,
     userRef: user.role,
     refreshTokenHash,
     ip: req.ip,
-    userAgent: req.headers["user-agent"],
+    userAgent: req.headers["user-agent"] || "Unknown browser",
+    expiresAt,
   });
+
+  try {
+    await enforceActiveSessionLimit({
+      user: user.id,
+      userRef: user.role,
+      keepSessionId: session._id,
+    });
+  } catch (error) {
+    await sessionModel.updateOne(
+      { _id: session._id },
+      { $set: { revoked: true, expiresAt: new Date() } },
+    );
+    throw error;
+  }
 
   const accessToken = jwt.sign(
     {
@@ -462,9 +486,7 @@ async function loginController(req, res) {
  */
 
 async function getMe(req, res) {
-  const refreshToken = req.cookies.refreshToken;
-
-  if (!refreshToken) {
+  if (!req.session || !req.decoded) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
@@ -475,34 +497,10 @@ async function getMe(req, res) {
   };
 
   try {
-    const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
+    const decoded = req.decoded;
     const model = userModels[decoded.role];
 
     if (!model) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const activeSessions = await sessionModel.find({
-      user: decoded.id,
-      userRef: decoded.role,
-      revoked: false,
-    });
-
-    let hasMatchingSession = false;
-
-    for (const session of activeSessions) {
-      const matches = await bcrypt.compare(
-        refreshToken,
-        session.refreshTokenHash,
-      );
-
-      if (matches) {
-        hasMatchingSession = true;
-        break;
-      }
-    }
-
-    if (!hasMatchingSession) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
@@ -527,32 +525,18 @@ async function getMe(req, res) {
 
 async function logout(req, res) {
   try {
-    const sessions = req.sessions;
+    const session = req.session;
     const refreshToken = req.refreshToken;
     const decoded = req.decoded;
-
-    let targetSession = null;
-
-    for (const session of sessions) {
-      const isMatch = await bcrypt.compare(
-        refreshToken,
-        session.refreshTokenHash,
-      );
-
-      if (isMatch) {
-        targetSession = session;
-        break;
-      }
-    }
-
-    if (!targetSession) {
+    if (!session) {
       return res.status(401).json({
         message: "Unauthorized",
       });
     }
 
-    targetSession.revoked = true;
-    await targetSession.save();
+    session.revoked = true;
+    session.expiresAt = new Date();
+    await session.save();
 
     const authHeader = req.headers.authorization;
     const accessToken =
@@ -595,13 +579,17 @@ async function logout(req, res) {
 
 async function logoutAll(req, res) {
   try {
-    const sessions = req.sessions;
+    const session = req.session;
     const decoded = req.decoded;
 
-    for (const session of sessions) {
-      session.revoked = true;
-      await session.save();
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
+
+    await sessionModel.updateMany(
+      { user: decoded.id || decoded._id, userRef: decoded.role, revoked: false },
+      { $set: { revoked: true, expiresAt: new Date() } },
+    );
 
     const authHeader = req.headers.authorization;
     const accessToken =
@@ -644,23 +632,8 @@ async function logoutAll(req, res) {
 
 async function tokenRecreate(req, res) {
   try {
-    const sessions = req.sessions;
-    const refreshToken = req.refreshToken;
     const decoded = req.decoded;
-
-    let targetSession = null;
-
-    for (const session of sessions) {
-      const isMatch = await bcrypt.compare(
-        refreshToken,
-        session.refreshTokenHash,
-      );
-
-      if (isMatch) {
-        targetSession = session;
-        break;
-      }
-    }
+    const targetSession = req.session;
 
     if (!targetSession) {
       return res.status(401).json({
@@ -684,6 +657,7 @@ async function tokenRecreate(req, res) {
       {
         id: decoded.id || decoded._id,
         role: decoded.role,
+        sessionId: String(targetSession._id),
       },
       config.JWT_SECRET,
       {
@@ -692,13 +666,22 @@ async function tokenRecreate(req, res) {
     );
 
     const newRefreshTokenHash = await bcrypt.hash(newRefreshToken, 10);
-
-    await sessionModel.findOneAndUpdate(
-      { _id: targetSession._id },
-      { refreshTokenHash: newRefreshTokenHash },
+    const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+    const rotatedSession = await sessionModel.findOneAndUpdate(
+      {
+        _id: targetSession._id,
+        user: decoded.id || decoded._id,
+        userRef: decoded.role,
+        revoked: false,
+        refreshTokenHash: targetSession.refreshTokenHash,
+        expiresAt: { $gt: new Date() },
+      },
+      { $set: { refreshTokenHash: newRefreshTokenHash, expiresAt: newExpiresAt } },
+      { new: true },
     );
-
-    await targetSession.save();
+    if (!rotatedSession) {
+      return res.status(401).json({ message: "This session has already expired or been refreshed." });
+    }
 
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,

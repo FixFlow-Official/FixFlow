@@ -78,7 +78,7 @@ router.post(
  * @access public
  */
 
-router.get("/getMe", authController.getMe);
+router.get("/getMe", authMiddleWare.logoutMiddleware, authController.getMe);
 
 router.patch(
   "/profile",
