@@ -1,13 +1,18 @@
+const config = require("./src/config/config");
+const mongoose = require("mongoose");
+
+// Validate deployment configuration before loading routes and external services.
+config.validateConfig();
+
 const app = require("./src/app");
 const connectDB = require("./src/config/database");
-const mongoose = require("mongoose");
 
 const shutdownController = new AbortController();
 
 // Serve readiness responses immediately; regular API requests receive 503 until
 // MongoDB and the campus directory migration are ready.
-const server = app.listen(3000, "127.0.0.1", () => {
-  console.log("Server is running on port 3000");
+const server = app.listen(config.PORT, config.HOST, () => {
+  console.log(`FixFlow backend is listening on ${config.HOST}:${config.PORT}`);
 });
 
 connectDB({ signal: shutdownController.signal }).catch((error) => {

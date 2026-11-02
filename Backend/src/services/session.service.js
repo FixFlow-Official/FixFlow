@@ -18,6 +18,7 @@ async function migrateSessionExpirations() {
         },
       },
     ],
+    { updatePipeline: true },
   );
 }
 

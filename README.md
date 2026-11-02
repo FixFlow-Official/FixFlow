@@ -74,11 +74,49 @@ FixFlow/
 
 ### Prerequisites
 
-- Node.js and npm
+- Node.js 20.19+ or 22.12+ and npm
 - A MongoDB database, local or hosted
 - Gmail OAuth2 credentials for registration, verification, and password recovery emails
 - An ImageKit private key for complaint and resolution photo uploads
 - VAPID keys for opt-in device push notifications (see below)
+
+### Configure the backend
+
+Copy `Backend/.env.example` to `Backend/.env` and replace the placeholders with your own values. The backend validates required configuration before starting; it will report missing variable names without printing secret values. Push notifications are optional, but both VAPID keys must be configured together.
+
+For local development, the backend defaults to `127.0.0.1:3000`. `HOST` and `PORT` can be overridden when needed. Never commit `Backend/.env` or put production secrets in frontend variables.
+
+### Run locally
+
+In separate terminals:
+
+```bash
+cd Backend
+npm install
+npm run dev
+```
+
+```bash
+cd Frontend
+npm install
+npm run dev
+```
+
+Vite serves the frontend and proxies `/api` requests to the backend at `http://127.0.0.1:3000`.
+
+## Deployment
+
+FixFlow's frontend uses same-origin `/api` requests and HTTP-only cookies. Deploy it behind one HTTPS origin: serve the frontend build as static files, route `/api` to the Node backend, and configure the static host to return `index.html` for SPA routes such as `/login` and `/student/dashboard`.
+
+1. Use Node.js 20.19+ or 22.12+.
+2. Configure the backend environment variables from `Backend/.env.example` in your hosting provider's secret/configuration settings. Use `NODE_ENV=production`, `HOST=0.0.0.0`, and the `PORT` assigned by the platform.
+3. Ensure the backend can reach MongoDB, Gmail OAuth2, and ImageKit. Configure both VAPID keys only if push notifications should be enabled.
+4. Build the frontend with `cd Frontend && npm ci && npm run build`, then publish `Frontend/dist` as the static site.
+5. Install and start the API with `cd Backend && npm ci && npm start`.
+6. Configure the platform's readiness check to request `GET /api/health`. It returns HTTP 200 only after MongoDB and the campus-directory migration are ready; otherwise it returns HTTP 503.
+7. Confirm HTTPS is active before testing login, since production authentication cookies are marked `Secure`.
+
+Do not expose the backend directly to browsers on a separate origin unless you deliberately add and test an explicit CORS and cookie policy. The current frontend expects same-origin API routing.
 
 ### Push notification setup
 
