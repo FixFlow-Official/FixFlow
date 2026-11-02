@@ -12,4 +12,29 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'pdf-jspdf',
+              test: /node_modules[\\/]jspdf[\\/]/,
+              priority: 20,
+            },
+            {
+              name: 'pdf-html2canvas',
+              test: /node_modules[\\/]html2canvas[\\/]/,
+              priority: 20,
+            },
+            {
+              name: 'pdf-dompurify',
+              test: /node_modules[\\/]dompurify[\\/]/,
+              priority: 20,
+            },
+          ],
+        },
+      },
+    },
+  },
 })

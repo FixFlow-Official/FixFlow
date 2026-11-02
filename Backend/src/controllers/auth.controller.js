@@ -17,6 +17,13 @@ const {
   enforceActiveSessionLimit,
 } = require("../services/session.service");
 
+const authCookieOptions = {
+  httpOnly: true,
+  secure: config.NODE_ENV === "production",
+  sameSite: "strict",
+  path: "/",
+};
+
 function serializeCurrentUser(user) {
   return {
     id: String(user._id),
@@ -283,9 +290,7 @@ async function verifyEmail(req, res) {
   );
 
   res.cookie("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    ...authCookieOptions,
     maxAge: 1000 * 60 * 10,
   });
 
@@ -368,7 +373,7 @@ async function createUser(req, res, next) {
       termsVersion: "1.0",
     });
 
-    res.clearCookie("token");
+    res.clearCookie("token", authCookieOptions);
 
     return res.status(201).json({
       message: "User created successfully",
@@ -465,9 +470,7 @@ async function loginController(req, res) {
   );
 
   res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    ...authCookieOptions,
     maxAge: 1000 * 60 * 60 * 24 * 7,
   });
 
@@ -553,7 +556,7 @@ async function logout(req, res, next) {
       expiresAt: new Date(decoded.exp * 1000),
     });
 
-    res.clearCookie("refreshToken");
+    res.clearCookie("refreshToken", authCookieOptions);
 
     return res.status(200).json({
       message: "User logged out successfully",
@@ -603,7 +606,7 @@ async function logoutAll(req, res, next) {
       expiresAt: new Date(decoded.exp * 1000),
     });
 
-    res.clearCookie("refreshToken");
+    res.clearCookie("refreshToken", authCookieOptions);
 
     return res.status(200).json({
       message: "User logged out from all devices successfully",
@@ -674,9 +677,7 @@ async function tokenRecreate(req, res, next) {
     }
 
     res.cookie("refreshToken", newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      ...authCookieOptions,
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
@@ -845,7 +846,7 @@ async function forgotPasswordChange(req, res, next) {
       },
     );
 
-    res.clearCookie("token");
+    res.clearCookie("token", authCookieOptions);
 
     return res.status(200).json({
       message: "Password changed successfully",

@@ -47,14 +47,17 @@ function getPageMetadata(page, limit, total) {
   };
 }
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function makeSearchRegex(search) {
   if (typeof search !== "string") return null;
 
   const value = search.trim().slice(0, MAX_SEARCH_LENGTH);
   if (!value) return null;
 
-  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(escaped, "i");
+  return new RegExp(escapeRegex(value), "i");
 }
 
 async function findStudentIdsBySearch(search, studentModel) {
@@ -74,6 +77,7 @@ module.exports = {
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
   MAX_SKIP,
+  escapeRegex,
   findStudentIdsBySearch,
   getPageMetadata,
   getPageOptions,
