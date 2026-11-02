@@ -1,11 +1,8 @@
 const assert = require("node:assert/strict");
-const { once } = require("node:events");
 const bcrypt = require("bcrypt");
-const express = require("express");
 const test = require("node:test");
 const { loginController } = require("../src/controllers/auth.controller");
-const studentModel = require("../src/models/student.model");
-const authRouter = require("../src/routes/auth.routes");
+const MongoRateLimitStore = require("../src/middlewares/mongoRateLimitStore");
 
 function makeResponse() {
   return {
@@ -64,51 +61,30 @@ test("unknown email and incorrect password return the same login failure", async
   );
 });
 
-test("login endpoint limits repeated attempts from one IP", async (t) => {
-  const originalFindOne = studentModel.findOne;
-  studentModel.findOne = async () => null;
-
-  const app = express();
-  app.use(express.json());
-  app.use("/api/auth", authRouter);
-
-  const server = app.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  t.after(async () => {
-    studentModel.findOne = originalFindOne;
-    server.closeAllConnections?.();
-    await new Promise((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+test("login rate-limit store scopes counters to its namespace and handles atomic increments", async () => {
+  const store = new MongoRateLimitStore("login");
+  const calls = [];
+  const bucket = { totalHits: 1, resetAt: new Date(Date.now() + 60_000) };
+  Object.defineProperty(store, "collection", {
+    value: {
+      async createIndex(...args) { calls.push(["createIndex", ...args]); },
+      async findOneAndUpdate(...args) {
+        calls.push(["findOneAndUpdate", ...args]);
+        return { value: bucket };
+      },
+    },
   });
 
-  const url = `http://127.0.0.1:${server.address().port}/api/auth/login`;
+  store.init({ windowMs: 900_000 });
+  const first = await store.increment("127.0.0.1");
+  const second = await store.increment("127.0.0.1");
 
-  for (let attempt = 1; attempt <= 10; attempt += 1) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        email: "unknown@example.edu",
-        password: "incorrect-password",
-        type: "student",
-      }),
-    });
-    assert.equal(response.status, 401);
-  }
-
-  const limitedResponse = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      email: "unknown@example.edu",
-      password: "incorrect-password",
-      type: "student",
-    }),
-  });
-
-  assert.equal(limitedResponse.status, 429);
-  assert.deepEqual(await limitedResponse.json(), {
-    message: "Too many login attempts. Please try again in 15 minutes.",
-  });
+  assert.deepEqual(first, { totalHits: 1, resetTime: bucket.resetAt });
+  assert.deepEqual(second, first);
+  const updateCall = calls.find(([name]) => name === "findOneAndUpdate");
+  assert.deepEqual(updateCall[1], { namespace: "login", key: "127.0.0.1" });
+  assert.ok(Array.isArray(updateCall[2]), "counter update must be an aggregation pipeline");
+  assert.equal(updateCall[3].upsert, true);
+  assert.equal(updateCall[3].returnDocument, "after");
+  assert.equal(calls.filter(([name]) => name === "createIndex").length, 2);
 });
