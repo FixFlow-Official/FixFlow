@@ -6,7 +6,6 @@ const notificationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       required: true,
       refPath: "recipientRef",
-      index: true,
     },
     recipientRef: {
       type: String,
@@ -33,5 +32,11 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ recipientRef: 1, recipient: 1, createdAt: -1 });
 notificationSchema.index({ recipientRef: 1, recipient: 1, readAt: 1 });
+
+// Keep notification storage bounded; complaint records and audit history are retained.
+notificationSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: 365 * 24 * 60 * 60, name: "notification_retention_ttl" },
+);
 
 module.exports = mongoose.model("notification", notificationSchema);

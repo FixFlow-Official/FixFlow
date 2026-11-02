@@ -118,6 +118,13 @@ FixFlow's frontend uses same-origin `/api` requests and HTTP-only cookies. Deplo
 
 Do not expose the backend directly to browsers on a separate origin unless you deliberately add and test an explicit CORS and cookie policy. The current frontend expects same-origin API routing.
 
+### Data retention and scaling
+
+- MongoDB automatically removes expired sessions and OTP records through TTL indexes; authentication checks also reject expired records immediately.
+- In-app notification records expire after 365 days through a MongoDB TTL index. TTL cleanup runs asynchronously, so expired records may remain briefly after their retention date.
+- Complaint reports, identity snapshots, comments, and status history are retained and are not deleted by this policy. Removing an account revokes its access while preserving complaint history.
+- Complaint and notification query indexes support the dashboard filters and sorting. Avoid adding indexes without a matching query pattern because each index adds storage and write cost.
+
 ### Push notification setup
 
 Generate a VAPID key pair from the `Backend` folder:
