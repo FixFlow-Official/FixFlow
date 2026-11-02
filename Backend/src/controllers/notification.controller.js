@@ -14,7 +14,7 @@ async function listNotifications(req, res) {
     ]);
     return res.status(200).json({ notifications, unreadCount });
   } catch (error) {
-    console.error("listNotifications failed:", error);
+    console.error("listNotifications failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not load notifications." });
   }
 }
@@ -34,7 +34,7 @@ async function markNotificationRead(req, res) {
     }
     return res.status(200).json({ notification });
   } catch (error) {
-    console.error("markNotificationRead failed:", error);
+    console.error("markNotificationRead failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not update the notification." });
   }
 }
@@ -47,7 +47,7 @@ async function markAllNotificationsRead(req, res) {
     );
     return res.status(200).json({ updatedCount: result.modifiedCount });
   } catch (error) {
-    console.error("markAllNotificationsRead failed:", error);
+    console.error("markAllNotificationsRead failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not update notifications." });
   }
 }

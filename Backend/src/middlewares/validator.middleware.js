@@ -4,10 +4,18 @@ async function validateResult(req, res, next) {
   const error = validationResult(req);
 
   if (!error.isEmpty()) {
-    return res.status(400).json({ error: error.array() });
+    return res.status(400).json({
+      message: "Request validation failed.",
+      ...(req.requestId ? { requestId: req.requestId } : {}),
+      errors: error.array().map((item) => ({
+        field: item.path || item.param || "request",
+        message: item.msg,
+        location: item.location,
+      })),
+    });
   }
 
-  next();
+  return next();
 }
 
 const otpValidatorRule = [
@@ -33,8 +41,8 @@ const idValidatorRule = [
   body("id")
     .isNumeric()
     .withMessage("Id must be a number")
-    .isLength({ min: 10, max: 10 })
-    .withMessage("Length must be of 10 digit long"),
+    .isLength({ min: 1, max: 10 })
+    .withMessage("Campus ID must be between 1 and 10 digits"),
 
   validateResult,
 ];
@@ -73,6 +81,7 @@ const passwordValidatorRule = [
 ];
 
 module.exports = {
+  validateResult,
   typeValidatorRule,
   passwordValidatorRule,
   idValidatorRule,

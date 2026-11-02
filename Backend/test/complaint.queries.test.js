@@ -1,8 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const complaintModel = require("../src/models/complaint.model");
-const jwt = require("jsonwebtoken");
-const config = require("../src/config/config");
 const { getAssignedComplaints: getAdminAssigned } = require("../src/controllers/admin.controller");
 const { getAssignedComplaints: getStaffAssigned } = require("../src/controllers/staff.controller");
 const { getComplaint: getStudentComplaints } = require("../src/controllers/student.controller");
@@ -114,16 +112,11 @@ test("staff endpoint rejects unsupported status filters", async () => {
 });
 
 test("student complaint history searches and paginates the selected view", async () => {
-  const token = jwt.sign(
-    { id: "507f191e810c19729de860ea", role: "student" },
-    config.JWT_SECRET,
-  );
-
   await withComplaintStubs({ documents: [{ _id: "complaint-3" }], total: 13 }, async (getCaptured) => {
     const response = makeResponse();
     await getStudentComplaints(
       {
-        accessToken: token,
+        auth: { id: "507f191e810c19729de860ea", role: "student" },
         query: { view: "resolved", page: "2", limit: "6", search: "water" },
       },
       response,

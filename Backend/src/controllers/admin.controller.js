@@ -1,15 +1,12 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
-const fs = require("node:fs");
-const path = require("node:path");
 const complaintModel = require("../models/complaint.model");
 const staffModel = require("../models/staff.model");
 const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
 const sessionModel = require("../models/session.model");
+const campusDirectoryModel = require("../models/campusDirectory.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
-const studentData = require("../data/officialStudentData.json");
-const staffData = require("../data/staffData.json");
 const {
   findStudentIdsBySearch,
   getPageMetadata,
@@ -55,17 +52,127 @@ async function buildComplaintSearchFilter(search) {
   };
 }
 
-const studentFilePath = path.join(__dirname, "../data/officialStudentData.json");
-const staffFilePath = path.join(__dirname, "../data/staffData.json");
-
-function persistDirectory(filePath, records) {
-  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(temporaryPath, JSON.stringify(records, null, 2), "utf8");
-  fs.renameSync(temporaryPath, filePath);
-}
-
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isTransactionUnsupportedError(error) {
+  return (
+    error?.code === 20 && /transaction numbers are only allowed/i.test(error.message || "")
+  );
+}
+
+async function snapshotAccountHistory({ account, type, cleanId, isStudent, session }) {
+  const identitySnapshot = {
+    name: account.username,
+    campusId: cleanId,
+    email: account.email,
+    role: type,
+  };
+  const actorSnapshot = { name: account.username, campusId: cleanId };
+  const options = session ? { session } : {};
+
+  // Keep these writes sequential because MongoDB does not support parallel
+  // operations within a transaction session.
+  await complaintModel.updateMany(
+    { user: account._id, userRef: type },
+    { $set: { userSnapshot: identitySnapshot } },
+    options,
+  );
+  await complaintModel.updateMany(
+    {
+      statusHistory: {
+        $elemMatch: { changedBy: account._id, changedByRole: type },
+      },
+    },
+    {
+      $set: {
+        "statusHistory.$[event].changedBySnapshot": actorSnapshot,
+      },
+    },
+    {
+      ...options,
+      arrayFilters: [
+        { "event.changedBy": account._id, "event.changedByRole": type },
+      ],
+    },
+  );
+  await complaintModel.updateMany(
+    {
+      comments: {
+        $elemMatch: { author: account._id, authorRole: type },
+      },
+    },
+    { $set: { "comments.$[comment].authorSnapshot": actorSnapshot } },
+    {
+      ...options,
+      arrayFilters: [
+        { "comment.author": account._id, "comment.authorRole": type },
+      ],
+    },
+  );
+
+  if (!isStudent) {
+    const staffSnapshot = {
+      name: account.username,
+      campusId: cleanId,
+      department: account.department,
+    };
+    await complaintModel.updateMany(
+      { assignedStaff: account._id },
+      { $set: { assignedStaffSnapshot: staffSnapshot } },
+      options,
+    );
+    await complaintModel.updateMany(
+      { resolvedBy: account._id },
+      { $set: { resolvedBySnapshot: staffSnapshot } },
+      options,
+    );
+  }
+}
+
+async function removeAccountAndDirectoryEntry({
+  account,
+  directoryEntry,
+  type,
+  cleanId,
+  isStudent,
+  model,
+  session,
+}) {
+  if (session) {
+    const accountStillExists = await model
+      .findById(account._id)
+      .session(session)
+      .select("_id")
+      .lean();
+    if (!accountStillExists) {
+      throw new Error("The account changed during removal. Please retry.");
+    }
+  }
+
+  if (account) {
+    await snapshotAccountHistory({ account, type, cleanId, isStudent, session });
+    const options = session ? { session } : {};
+
+    await sessionModel.updateMany(
+      { user: account._id, userRef: type, revoked: false },
+      { $set: { revoked: true, expiresAt: new Date() } },
+      options,
+    );
+
+    const deletion = await model.deleteOne({ _id: account._id }, options);
+    if (deletion.deletedCount !== 1) {
+      throw new Error("The account could not be removed from the database.");
+    }
+  }
+
+  if (directoryEntry) {
+    await campusDirectoryModel.deleteOne(
+      { _id: directoryEntry._id },
+      session ? { session } : {},
+    );
+  }
 }
 
 async function getUnassignedComplaints(req, res) {
@@ -103,7 +210,7 @@ async function getUnassignedComplaints(req, res) {
       pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
     });
   } catch (err) {
-    console.error("getUnassignedComplaints failed:", err);
+    console.error("getUnassignedComplaints failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not load the complaint queue.",
@@ -134,7 +241,7 @@ async function getStaffByDepartment(req, res) {
 
     return res.status(200).json({ staff });
   } catch (err) {
-    console.error("getStaffByDepartment failed:", err);
+    console.error("getStaffByDepartment failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not load staff for this department.",
@@ -201,7 +308,7 @@ async function getRegisteredAccounts(req, res) {
       pagination: getPageMetadata(pageOptions.page, pageOptions.limit, total),
     });
   } catch (err) {
-    console.error("getRegisteredAccounts failed:", err);
+    console.error("getRegisteredAccounts failed", { requestId: req.requestId, error: err });
     return res.status(500).json({ message: "Could not load registered accounts." });
   }
 }
@@ -239,14 +346,14 @@ async function resetAccountPasswordByAdmin(req, res) {
     // Require the account owner to sign in again on every device.
     await sessionModel.updateMany(
       { user: account._id, userRef: type, revoked: false },
-      { $set: { revoked: true } },
+      { $set: { revoked: true, expiresAt: new Date() } },
     );
 
     return res.status(200).json({
       message: "Password reset successfully. All active sessions have been signed out.",
     });
   } catch (err) {
-    console.error("resetAccountPasswordByAdmin failed:", err);
+    console.error("resetAccountPasswordByAdmin failed", { requestId: req.requestId, error: err });
     return res.status(500).json({ message: "Could not reset the account password." });
   }
 }
@@ -329,7 +436,7 @@ async function getAssignedComplaints(req, res) {
       },
     });
   } catch (err) {
-    console.error("getAssignedComplaints failed:", err);
+    console.error("getAssignedComplaints failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not load assigned complaints.",
@@ -452,7 +559,7 @@ async function getComplaintReports(req, res) {
       trend: report?.trend || [],
     });
   } catch (error) {
-    console.error("getComplaintReports failed:", error);
+    console.error("getComplaintReports failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not load complaint reports." });
   }
 }
@@ -542,7 +649,7 @@ async function assignComplaint(req, res) {
       complaint,
     });
   } catch (err) {
-    console.error("assignComplaint failed:", err);
+    console.error("assignComplaint failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not assign the complaint.",
@@ -662,7 +769,7 @@ async function reassignComplaint(req, res) {
       complaint,
     });
   } catch (err) {
-    console.error("reassignComplaint failed:", err);
+    console.error("reassignComplaint failed", { requestId: req.requestId, error: err });
 
     return res.status(500).json({
       message: "Could not reassign the complaint.",
@@ -710,72 +817,41 @@ async function addUserToDirectoryByAdmin(req, res) {
       return res.status(400).json({ message: "Enter a valid email address." });
     }
 
-    const userData = type === "student" ? studentData : staffData;
     const idField = type === "student" ? "rollno" : "staffId";
     const model = type === "student" ? studentModel : staffModel;
     const emailPattern = new RegExp(`^${escapeRegex(cleanEmail)}$`, "i");
     const canonicalId = String(Number(cleanId));
-    const hasSameId = (entry, field) => String(Number(entry[field])) === canonicalId;
-    const directoryIdExists = userData.some((entry) => hasSameId(entry, idField));
-    const directoryEmailExists = userData.some(
-      (entry) => String(entry.email || "").trim().toLowerCase() === cleanEmail,
-    );
-
-    // IDs and emails are unique within each account type. Historical campus
-    // data may reuse the same values across roles, so compare the selected role.
-    if (directoryIdExists) {
-      return res.status(409).json({
-        message: "That campus ID is already used by an existing account or directory entry.",
-      });
-    }
-
-    if (directoryEmailExists) {
-      return res.status(409).json({
-        message: "That email is already used by an existing account or directory entry.",
-      });
-    }
-
-    const [idAccount, emailAccount] = await Promise.all([
+    const [directoryId, directoryEmail, idAccount, emailAccount] = await Promise.all([
+      campusDirectoryModel.findOne({ type, campusId: canonicalId }).select("_id"),
+      campusDirectoryModel.findOne({ type, email: cleanEmail }).select("_id"),
       model.findOne({ [idField]: Number(cleanId) }).select("_id"),
       model.findOne({ email: emailPattern }).select("_id"),
     ]);
 
-    if (idAccount) {
+    if (directoryId || idAccount) {
       return res.status(409).json({
         message: "That campus ID is already used by an existing account or directory entry.",
       });
     }
 
-    if (emailAccount) {
+    if (directoryEmail || emailAccount) {
       return res.status(409).json({
         message: "That email is already used by an existing account or directory entry.",
       });
     }
 
     const record = type === "student"
-      ? { rollno: Number(cleanId), name: cleanName, course: cleanCourse, email: cleanEmail }
-      : { staffId: Number(cleanId), name: cleanName, department: cleanCourse, email: cleanEmail };
-    const filePath = type === "student" ? studentFilePath : staffFilePath;
-    // Recheck the in-memory directories after the database reads so concurrent
-    // admin requests cannot append the same ID or email twice in this process.
-    const idNowExists = userData.some((entry) => hasSameId(entry, idField));
-    const emailNowExists = userData.some(
-      (entry) => String(entry.email || "").trim().toLowerCase() === cleanEmail,
-    );
-    if (idNowExists || emailNowExists) {
-      return res.status(409).json({
-        message: idNowExists
-          ? "That campus ID is already used by an existing account or directory entry."
-          : "That email is already used by an existing account or directory entry.",
-      });
-    }
-
-    userData.push(record);
+      ? { type, campusId: canonicalId, name: cleanName, email: cleanEmail, course: cleanCourse }
+      : { type, campusId: canonicalId, name: cleanName, email: cleanEmail, department: cleanCourse };
 
     try {
-      persistDirectory(filePath, userData);
+      await campusDirectoryModel.create(record);
     } catch (error) {
-      userData.pop();
+      if (error?.code === 11000) {
+        return res.status(409).json({
+          message: "That campus ID is already used by an existing account or directory entry.",
+        });
+      }
       throw error;
     }
 
@@ -783,7 +859,7 @@ async function addUserToDirectoryByAdmin(req, res) {
       message: "Campus directory entry added. The user must complete email OTP verification and set their own password before signing in.",
     });
   } catch (err) {
-    console.error("addUserToDirectoryByAdmin failed:", err);
+    console.error("addUserToDirectoryByAdmin failed", { requestId: req.requestId, error: err });
     return res.status(500).json({
       message: "Could not add the user to the campus directory.",
     });
@@ -814,117 +890,55 @@ async function deleteUserByAdmin(req, res) {
     }
 
     const isStudent = type === "student";
-    const directory = isStudent ? studentData : staffData;
-    const filePath = isStudent ? studentFilePath : staffFilePath;
     const idField = isStudent ? "rollno" : "staffId";
     const model = isStudent ? studentModel : staffModel;
-    const directoryIndex = directory.findIndex(
-      (entry) => String(entry[idField]) === cleanId,
-    );
+    const canonicalId = String(Number(cleanId));
+    const directoryEntry = await campusDirectoryModel.findOne({ type, campusId: canonicalId });
     const account = await model.findOne({ [idField]: Number(cleanId) });
 
-    if (!account && directoryIndex === -1) {
+    if (!account && !directoryEntry) {
       return res.status(404).json({
         message: `No ${type} account or directory entry was found for that ID.`,
       });
     }
 
-    // Store identity snapshots before deleting the account so historical
-    // complaints remain readable after their populated references disappear.
-    if (account) {
-      const identitySnapshot = {
-        name: account.username,
-        campusId: cleanId,
-        email: account.email,
-        role: type,
-      };
-      const actorSnapshot = { name: account.username, campusId: cleanId };
-      const updates = [
-        complaintModel.updateMany(
-          { user: account._id, userRef: type },
-          { $set: { userSnapshot: identitySnapshot } },
-        ),
-        complaintModel.updateMany(
-          {
-            statusHistory: {
-              $elemMatch: { changedBy: account._id, changedByRole: type },
-            },
-          },
-          {
-            $set: {
-              "statusHistory.$[event].changedBySnapshot": actorSnapshot,
-            },
-          },
-          {
-            arrayFilters: [
-              { "event.changedBy": account._id, "event.changedByRole": type },
-            ],
-          },
-        ),
-        complaintModel.updateMany(
-          {
-            comments: {
-              $elemMatch: { author: account._id, authorRole: type },
-            },
-          },
-          { $set: { "comments.$[comment].authorSnapshot": actorSnapshot } },
-          {
-            arrayFilters: [
-              { "comment.author": account._id, "comment.authorRole": type },
-            ],
-          },
-        ),
-      ];
-
-      if (!isStudent) {
-        const staffSnapshot = {
-          name: account.username,
-          campusId: cleanId,
-          department: account.department,
-        };
-        updates.push(
-          complaintModel.updateMany(
-            { assignedStaff: account._id },
-            { $set: { assignedStaffSnapshot: staffSnapshot } },
-          ),
-          complaintModel.updateMany(
-            { resolvedBy: account._id },
-            { $set: { resolvedBySnapshot: staffSnapshot } },
-          ),
-        );
+    if (!account) {
+      if (directoryEntry) {
+        await campusDirectoryModel.deleteOne({ _id: directoryEntry._id });
       }
+    } else {
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await removeAccountAndDirectoryEntry({
+            account,
+            directoryEntry,
+            type,
+            cleanId,
+            isStudent,
+            model,
+            session,
+          });
+        });
+      } catch (error) {
+        if (!isTransactionUnsupportedError(error)) throw error;
 
-      await Promise.all(updates);
-    }
-
-    const [removedDirectoryEntry] = directoryIndex >= 0
-      ? directory.splice(directoryIndex, 1)
-      : [];
-
-    try {
-      if (removedDirectoryEntry) persistDirectory(filePath, directory);
-
-      if (account) {
-        await sessionModel.updateMany(
-          { user: account._id, userRef: type, revoked: false },
-          { $set: { revoked: true } },
-        );
-
-        const deletion = await model.deleteOne({ _id: account._id });
-        if (deletion.deletedCount !== 1) {
-          throw new Error("The account could not be removed from the database.");
-        }
+        // A standalone MongoDB server doesn't support transactions. The first
+        // transactional read happens before writes, so this fallback can run
+        // the same idempotent sequence without leaving a partial transaction.
+        console.warn("MongoDB transactions are unavailable; removing the account without a transaction.");
+        await removeAccountAndDirectoryEntry({
+          account,
+          directoryEntry,
+          type,
+          cleanId,
+          isStudent,
+          model,
+          session: null,
+        });
+      } finally {
+        await session.endSession();
       }
-    } catch (error) {
-      if (removedDirectoryEntry) {
-        directory.splice(directoryIndex, 0, removedDirectoryEntry);
-        try {
-          persistDirectory(filePath, directory);
-        } catch (restoreError) {
-          console.error("Could not restore the user directory after a failed deletion:", restoreError);
-        }
-      }
-      throw error;
     }
 
     return res.status(200).json({
@@ -933,7 +947,7 @@ async function deleteUserByAdmin(req, res) {
         : "User removed from the campus registration directory.",
     });
   } catch (err) {
-    console.error("deleteUserByAdmin failed:", err);
+    console.error("deleteUserByAdmin failed", { requestId: req.requestId, error: err });
     return res.status(500).json({
       message: "Could not remove the user account.",
     });

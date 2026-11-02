@@ -1,5 +1,6 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const config = require("../config/config");
 const otpModel = require("../models/otp.model");
 const { getOtp, getHtml } = require("../utils/utils");
@@ -8,8 +9,13 @@ const sessionModel = require("../models/session.model");
 const studentModel = require("../models/student.model");
 const staffModel = require("../models/staff.model");
 const adminModel = require("../models/admin.model");
+const campusDirectoryModel = require("../models/campusDirectory.model");
 const blackListTokenModel = require("../models/blackListToken.model");
 const uploadFile = require("../services/storage.service");
+const {
+  REFRESH_TOKEN_TTL_MS,
+  enforceActiveSessionLimit,
+} = require("../services/session.service");
 
 function serializeCurrentUser(user) {
   return {
@@ -68,7 +74,7 @@ async function updateProfile(req, res) {
       user: serializeCurrentUser(user),
     });
   } catch (err) {
-    console.error("updateProfile failed:", err);
+    console.error("updateProfile failed", { requestId: req.requestId, error: err });
     return res.status(500).json({ message: "Could not update your profile." });
   }
 }
@@ -101,12 +107,12 @@ async function changePassword(req, res) {
     // Keep the current device signed in and revoke the other sessions.
     await sessionModel.updateMany(
       { user: user._id, userRef: req.auth.role, revoked: false, _id: { $ne: req.auth.sessionId } },
-      { $set: { revoked: true } },
+      { $set: { revoked: true, expiresAt: new Date() } },
     );
 
     return res.status(200).json({ message: "Password changed. Other active sessions have been signed out." });
   } catch (err) {
-    console.error("changePassword failed:", err);
+    console.error("changePassword failed", { requestId: req.requestId, error: err });
     return res.status(500).json({ message: "Could not change your password." });
   }
 }
@@ -121,10 +127,8 @@ async function changePassword(req, res) {
 async function verifyUserAndSendEmail(req, res) {
   const { id, type } = req.body;
 
-  const userData = req.userData;
+  const userFound = req.directoryEntry;
   const idField = req.idField;
-
-  const userFound = userData.find((s) => String(s[idField]) === String(id));
 
   if (!userFound) {
     return res.status(401).json({
@@ -220,10 +224,7 @@ async function verifyUserAndSendEmail(req, res) {
 async function verifyEmail(req, res) {
   const { otp, id, type, purpose = "registration" } = req.body;
 
-  const userData = req.userData;
-  const idField = req.idField;
-
-  const userFound = userData.find((s) => String(s[idField]) === String(id));
+  const userFound = req.directoryEntry;
 
   if (!userFound) {
     return res.status(401).json({
@@ -302,7 +303,7 @@ async function verifyEmail(req, res) {
  * @access public
  */
 
-async function createUser(req, res) {
+async function createUser(req, res, next) {
   const { password, type, termsAccepted } = req.body;
 
   if (termsAccepted !== true) {
@@ -328,12 +329,11 @@ async function createUser(req, res) {
     }
 
     const model = req.model;
-    const userData = req.userData;
     const idField = req.idField;
-
-    const userFound = userData.find(
-      (e) => String(e[idField]) === String(decoded.id),
-    );
+    const userFound = await campusDirectoryModel.findOne({
+      type,
+      campusId: String(decoded.id),
+    }).lean();
 
     const depField = {
       student: "course",
@@ -378,11 +378,11 @@ async function createUser(req, res) {
         role: user.role,
       },
     });
-  } catch (err) {
-    return res.status(401).json({
-      message: "Invalid Token",
-      err,
-    });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    return next(error);
   }
 }
 
@@ -412,10 +412,13 @@ async function loginController(req, res) {
     });
   }
 
+  const sessionId = new mongoose.Types.ObjectId();
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
   const refreshToken = jwt.sign(
     {
       id: user.id,
       role: user.role,
+      sessionId: String(sessionId),
     },
     config.JWT_SECRET,
     {
@@ -426,12 +429,28 @@ async function loginController(req, res) {
   const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
 
   const session = await sessionModel.create({
+    _id: sessionId,
     user: user.id,
     userRef: user.role,
     refreshTokenHash,
     ip: req.ip,
-    userAgent: req.headers["user-agent"],
+    userAgent: req.headers["user-agent"] || "Unknown browser",
+    expiresAt,
   });
+
+  try {
+    await enforceActiveSessionLimit({
+      user: user.id,
+      userRef: user.role,
+      keepSessionId: session._id,
+    });
+  } catch (error) {
+    await sessionModel.updateOne(
+      { _id: session._id },
+      { $set: { revoked: true, expiresAt: new Date() } },
+    );
+    throw error;
+  }
 
   const accessToken = jwt.sign(
     {
@@ -467,9 +486,7 @@ async function loginController(req, res) {
  */
 
 async function getMe(req, res) {
-  const refreshToken = req.cookies.refreshToken;
-
-  if (!refreshToken) {
+  if (!req.session || !req.decoded) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
@@ -479,48 +496,20 @@ async function getMe(req, res) {
     admin: adminModel,
   };
 
-  try {
-    const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
-    const model = userModels[decoded.role];
+  const decoded = req.decoded;
+  const model = userModels[decoded.role];
 
-    if (!model) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const activeSessions = await sessionModel.find({
-      user: decoded.id,
-      userRef: decoded.role,
-      revoked: false,
-    });
-
-    let hasMatchingSession = false;
-
-    for (const session of activeSessions) {
-      const matches = await bcrypt.compare(
-        refreshToken,
-        session.refreshTokenHash,
-      );
-
-      if (matches) {
-        hasMatchingSession = true;
-        break;
-      }
-    }
-
-    if (!hasMatchingSession) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = await model.findById(decoded.id);
-
-    if (!user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    return res.status(200).json({ user: serializeCurrentUser(user) });
-  } catch {
+  if (!model) {
     return res.status(401).json({ message: "Unauthorized" });
   }
+
+  const user = await model.findById(decoded.id);
+
+  if (!user) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  return res.status(200).json({ user: serializeCurrentUser(user) });
 }
 
 /**
@@ -530,34 +519,20 @@ async function getMe(req, res) {
  * @access public
  */
 
-async function logout(req, res) {
+async function logout(req, res, next) {
   try {
-    const sessions = req.sessions;
+    const session = req.session;
     const refreshToken = req.refreshToken;
     const decoded = req.decoded;
-
-    let targetSession = null;
-
-    for (const session of sessions) {
-      const isMatch = await bcrypt.compare(
-        refreshToken,
-        session.refreshTokenHash,
-      );
-
-      if (isMatch) {
-        targetSession = session;
-        break;
-      }
-    }
-
-    if (!targetSession) {
+    if (!session) {
       return res.status(401).json({
         message: "Unauthorized",
       });
     }
 
-    targetSession.revoked = true;
-    await targetSession.save();
+    session.revoked = true;
+    session.expiresAt = new Date();
+    await session.save();
 
     const authHeader = req.headers.authorization;
     const accessToken =
@@ -583,11 +558,8 @@ async function logout(req, res) {
     return res.status(200).json({
       message: "User logged out successfully",
     });
-  } catch (err) {
-    return res.status(500).json({
-      message: "something went wrong",
-      error: err.message,
-    });
+  } catch (error) {
+    return next(error);
   }
 }
 
@@ -598,15 +570,19 @@ async function logout(req, res) {
  * @access public
  */
 
-async function logoutAll(req, res) {
+async function logoutAll(req, res, next) {
   try {
-    const sessions = req.sessions;
+    const session = req.session;
     const decoded = req.decoded;
 
-    for (const session of sessions) {
-      session.revoked = true;
-      await session.save();
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
+
+    await sessionModel.updateMany(
+      { user: decoded.id || decoded._id, userRef: decoded.role, revoked: false },
+      { $set: { revoked: true, expiresAt: new Date() } },
+    );
 
     const authHeader = req.headers.authorization;
     const accessToken =
@@ -632,11 +608,8 @@ async function logoutAll(req, res) {
     return res.status(200).json({
       message: "User logged out from all devices successfully",
     });
-  } catch (err) {
-    return res.status(500).json({
-      message: "something went wrong",
-      err,
-    });
+  } catch (error) {
+    return next(error);
   }
 }
 
@@ -647,25 +620,10 @@ async function logoutAll(req, res) {
  * @access public
  */
 
-async function tokenRecreate(req, res) {
+async function tokenRecreate(req, res, next) {
   try {
-    const sessions = req.sessions;
-    const refreshToken = req.refreshToken;
     const decoded = req.decoded;
-
-    let targetSession = null;
-
-    for (const session of sessions) {
-      const isMatch = await bcrypt.compare(
-        refreshToken,
-        session.refreshTokenHash,
-      );
-
-      if (isMatch) {
-        targetSession = session;
-        break;
-      }
-    }
+    const targetSession = req.session;
 
     if (!targetSession) {
       return res.status(401).json({
@@ -689,6 +647,7 @@ async function tokenRecreate(req, res) {
       {
         id: decoded.id || decoded._id,
         role: decoded.role,
+        sessionId: String(targetSession._id),
       },
       config.JWT_SECRET,
       {
@@ -697,13 +656,22 @@ async function tokenRecreate(req, res) {
     );
 
     const newRefreshTokenHash = await bcrypt.hash(newRefreshToken, 10);
-
-    await sessionModel.findOneAndUpdate(
-      { _id: targetSession._id },
-      { refreshTokenHash: newRefreshTokenHash },
+    const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+    const rotatedSession = await sessionModel.findOneAndUpdate(
+      {
+        _id: targetSession._id,
+        user: decoded.id || decoded._id,
+        userRef: decoded.role,
+        revoked: false,
+        refreshTokenHash: targetSession.refreshTokenHash,
+        expiresAt: { $gt: new Date() },
+      },
+      { $set: { refreshTokenHash: newRefreshTokenHash, expiresAt: newExpiresAt } },
+      { new: true },
     );
-
-    await targetSession.save();
+    if (!rotatedSession) {
+      return res.status(401).json({ message: "This session has already expired or been refreshed." });
+    }
 
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
@@ -716,11 +684,8 @@ async function tokenRecreate(req, res) {
       message: "Token refreshed successfully",
       accessToken,
     });
-  } catch (err) {
-    return res.status(500).json({
-      message: "Something went wrong",
-      err,
-    });
+  } catch (error) {
+    return next(error);
   }
 }
 
@@ -733,12 +698,9 @@ async function tokenRecreate(req, res) {
 
 async function verifyUser(req, res) {
   const { id, type } = req.body;
-  const userData = req.userData;
   const idField = req.idField;
 
-  const userFound = userData.find(
-    (student) => String(student[idField]) === String(id),
-  );
+  const userFound = req.directoryEntry;
 
   if (!userFound) {
     return res.status(404).json({
@@ -832,7 +794,7 @@ async function verifyUser(req, res) {
  * @access public
  */
 
-async function forgotPasswordChange(req, res) {
+async function forgotPasswordChange(req, res, next) {
   const token = req.cookies.token;
 
   if (!token) {
@@ -888,11 +850,11 @@ async function forgotPasswordChange(req, res) {
     return res.status(200).json({
       message: "Password changed successfully",
     });
-  } catch (err) {
-    return res.status(401).json({
-      message: "Unauthorized",
-      error: err.message,
-    });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    return next(error);
   }
 }
 

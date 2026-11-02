@@ -62,7 +62,7 @@ async function savePushSubscription(req, res) {
     );
     return res.status(201).json({ message: "Push notifications enabled for this device." });
   } catch (error) {
-    console.error("savePushSubscription failed:", error);
+    console.error("savePushSubscription failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not save this device's push subscription." });
   }
 }
@@ -81,7 +81,7 @@ async function removePushSubscription(req, res) {
     });
     return res.status(200).json({ message: "Push notifications disabled for this device." });
   } catch (error) {
-    console.error("removePushSubscription failed:", error);
+    console.error("removePushSubscription failed", { requestId: req.requestId, error });
     return res.status(500).json({ message: "Could not disable push notifications." });
   }
 }

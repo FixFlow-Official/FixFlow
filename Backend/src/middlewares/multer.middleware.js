@@ -14,7 +14,9 @@ const upload = multer({
   },
   fileFilter(req, file, callback) {
     if (!acceptedImageTypes.has(file.mimetype)) {
-      return callback(new Error("Upload a JPG, PNG, or WebP image."));
+      const error = new Error("Unsupported image type.");
+      error.code = "UNSUPPORTED_IMAGE_TYPE";
+      return callback(error);
     }
 
     return callback(null, true);
@@ -40,8 +42,11 @@ function uploadSingleImage(fieldName) {
         });
       }
 
-      return res.status(400).json({
-        message: error.message || "Could not process the uploaded image.",
+      const unsupportedType = error.code === "UNSUPPORTED_IMAGE_TYPE";
+      return res.status(unsupportedType ? 400 : 500).json({
+        message: unsupportedType
+          ? "Upload a JPG, PNG, or WebP image."
+          : "Could not process the uploaded image.",
       });
     });
   };

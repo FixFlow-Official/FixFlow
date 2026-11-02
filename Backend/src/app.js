@@ -8,21 +8,43 @@ const adminRouter = require("./routes/admin.routes");
 const staffRouter = require("./routes/staff.routes");
 const complaintConversationRouter = require("./routes/complaintConversation.routes");
 const notificationRouter = require("./routes/notification.routes");
+const { isCampusDirectoryReady } = require("./services/campusDirectoryMigration.service");
+const { notFoundHandler, errorHandler } = require("./middlewares/error.middleware");
+const {
+  requestIdMiddleware,
+  structuredRequestLog,
+} = require("./middlewares/requestId.middleware");
 
 const app = express();
 
-// Middlewares
-
+// Assign an ID before parsing or logging so every request, including malformed
+// JSON requests, can be traced through the response and server logs.
+app.use(requestIdMiddleware);
+app.use(morgan(structuredRequestLog));
 app.use(express.json());
-app.use(morgan("dev"));
 app.use(cookieParser());
+
+// Keep health checks available while MongoDB or startup migration is unavailable.
+app.get("/api/health", (req, res) => {
+  const databaseReady = mongoose.connection.readyState === 1;
+  const directoryReady = isCampusDirectoryReady();
+  const ready = databaseReady && directoryReady;
+
+  return res.status(ready ? 200 : 503).json({
+    requestId: req.requestId,
+    status: ready ? "ready" : "starting",
+    database: databaseReady ? "connected" : "disconnected",
+    campusDirectory: directoryReady ? "ready" : "initializing",
+  });
+});
 
 // Return an actionable API response while MongoDB is connecting instead of
 // leaving Mongoose queries buffered until the Vite proxy times out.
 app.use("/api", (req, res, next) => {
-  if (mongoose.connection.readyState !== 1) {
+  if (mongoose.connection.readyState !== 1 || !isCampusDirectoryReady()) {
     return res.status(503).json({
       message: "The database is still connecting. Please retry in a moment.",
+      requestId: req.requestId,
     });
   }
 
@@ -38,5 +60,8 @@ app.use("/api/student", studentRouter);
 app.use("/api/complaints", complaintConversationRouter);
 app.use("/api/notifications", notificationRouter);
 
+// Keep unknown API paths and unexpected failures in the same JSON format.
+app.use("/api", notFoundHandler);
+app.use(errorHandler);
 
 module.exports = app;

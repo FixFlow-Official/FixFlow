@@ -1,3 +1,17 @@
+/**
+ * API errors keep structured server details while exposing a readable message
+ * to existing page-level error banners.
+ */
+export class ApiRequestError extends Error {
+  constructor(message, { status = null, requestId = null, errors = [] } = {}) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.requestId = requestId;
+    this.errors = errors;
+  }
+}
+
 export async function loginRequest({ email, password, type }) {
   let response;
 
@@ -388,14 +402,46 @@ async function complaintRequest(url, options, accessToken) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const validationMessage = Array.isArray(data.error)
-      ? data.error.map((item) => item.msg).filter(Boolean).join(" ")
-      : "";
-    throw new Error(
-      data.message ||
-        validationMessage ||
-        `Request failed with status ${response.status}.`,
-    );
+    // express-validator returns `errors`; accept the older `error` shape too.
+    const validationErrors = Array.isArray(data.errors)
+      ? data.errors
+      : Array.isArray(data.error)
+        ? data.error.map((item) => ({
+            field: item.path || item.param || "request",
+            message: item.message || item.msg,
+          }))
+        : [];
+
+    const validationDetails = validationErrors
+      .map(({ field, message }) => {
+        if (!message) return "";
+        const readableField = String(field || "request")
+          .split(/[._]/)
+          .filter(Boolean)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ");
+        return `${readableField}: ${message}`;
+      })
+      .filter(Boolean)
+      .join(" ");
+
+    const baseMessage = [data.message, validationDetails]
+      .filter(Boolean)
+      .join(" ");
+    const requestId =
+      data.requestId || response.headers.get("X-Request-ID") || null;
+    const message = [
+      baseMessage || `Request failed with status ${response.status}.`,
+      requestId ? `Support reference: ${requestId}.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    throw new ApiRequestError(message, {
+      status: response.status,
+      requestId,
+      errors: validationErrors,
+    });
   }
 
   return data;
