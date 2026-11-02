@@ -1,6 +1,7 @@
 const express = require("express");
 const { verifyAccessToken } = require("../middlewares/auth.middleware");
 const adminController = require("../controllers/admin.controller");
+const adminReportsController = require("../controllers/adminReports.controller");
 const {
   directoryIdValidatorRule,
   typeValidatorRule,
@@ -28,7 +29,7 @@ router.patch(
   adminController.resetAccountPasswordByAdmin,
 );
 
-router.get("/reports/complaints", verifyAccessToken, adminController.getComplaintReports);
+router.get("/reports/complaints", verifyAccessToken, adminReportsController.getComplaintReports);
 
 router.patch(
   "/complaints/:complaintId/assign",

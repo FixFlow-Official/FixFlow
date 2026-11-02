@@ -151,7 +151,7 @@ export async function downloadComplaintPdf(complaint) {
 
   try {
     // The PDF engine is large; load it only when a user requests a PDF export.
-    const { default: html2pdf } = await import("html2pdf.js");
+    const { default: html2pdf } = await import("html2pdf.js/src/index.js");
 
     // Wait for proof images to load before creating the PDF.
     const images = Array.from(report.querySelectorAll("img"));
