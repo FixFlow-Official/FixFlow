@@ -8,6 +8,8 @@ const app = require("./src/app");
 const connectDB = require("./src/config/database");
 
 const shutdownController = new AbortController();
+const SHUTDOWN_TIMEOUT_MS = 15_000;
+let shutdownStarted = false;
 
 // Serve readiness responses immediately; regular API requests receive 503 until
 // MongoDB and the campus directory migration are ready.
@@ -20,17 +22,41 @@ connectDB({ signal: shutdownController.signal }).catch((error) => {
 });
 
 async function shutdown(signalName) {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+
   console.log(`${signalName} received. Shutting down FixFlow backend.`);
   shutdownController.abort();
 
-  server.close(async () => {
+  // Finish active requests first, but do not let a stuck client block shutdown forever.
+  const forceCloseTimer = setTimeout(() => {
+    console.error("Graceful shutdown timed out; closing remaining connections.");
+    server.closeAllConnections?.();
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceCloseTimer.unref();
+
+  server.close(async (error) => {
+    if (error) {
+      console.error("Could not close the HTTP server cleanly:", error.message);
+      process.exitCode = 1;
+    }
+
     try {
       await mongoose.disconnect();
+    } catch (disconnectError) {
+      console.error("Could not close the database connection cleanly:", disconnectError.message);
+      process.exitCode = 1;
     } finally {
-      process.exit(0);
+      clearTimeout(forceCloseTimer);
     }
   });
 }
+
+server.on("error", (error) => {
+  console.error("FixFlow backend server error:", error.message);
+  process.exitCode = 1;
+});
 
 process.once("SIGINT", () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));

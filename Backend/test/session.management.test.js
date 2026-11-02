@@ -226,6 +226,10 @@ test("login creates a session-bound seven-day refresh token", async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(refreshCookie.name, "refreshToken");
+  assert.equal(refreshCookie.options.httpOnly, true);
+  assert.equal(refreshCookie.options.secure, config.NODE_ENV === "production");
+  assert.equal(refreshCookie.options.sameSite, "strict");
+  assert.equal(refreshCookie.options.path, "/");
   assert.equal(createdSession.expiresAt.getTime() - Date.now() <= REFRESH_TOKEN_TTL_MS, true);
   const refreshClaims = jwt.decode(refreshCookie.value);
   assert.equal(refreshClaims.sessionId, String(createdSession._id));

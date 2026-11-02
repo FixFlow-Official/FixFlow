@@ -84,7 +84,7 @@ FixFlow/
 
 Copy `Backend/.env.example` to `Backend/.env` and replace the placeholders with your own values. The backend validates required configuration before starting; it will report missing variable names without printing secret values. Push notifications are optional, but both VAPID keys must be configured together.
 
-For local development, the backend defaults to `127.0.0.1:3000`. `HOST` and `PORT` can be overridden when needed. Never commit `Backend/.env` or put production secrets in frontend variables.
+For local development, the backend defaults to `127.0.0.1:3000` and trusts no reverse proxies (`TRUST_PROXY_HOPS=0`). If the API is placed behind a reverse proxy, set `TRUST_PROXY_HOPS` to the exact number of trusted proxy hops so rate limits use the real client IP. Never commit `Backend/.env` or put production secrets in frontend variables.
 
 ### Run locally
 
@@ -109,7 +109,7 @@ Vite serves the frontend and proxies `/api` requests to the backend at `http://1
 FixFlow's frontend uses same-origin `/api` requests and HTTP-only cookies. Deploy it behind one HTTPS origin: serve the frontend build as static files, route `/api` to the Node backend, and configure the static host to return `index.html` for SPA routes such as `/login` and `/student/dashboard`.
 
 1. Use Node.js 20.19+ or 22.12+.
-2. Configure the backend environment variables from `Backend/.env.example` in your hosting provider's secret/configuration settings. Use `NODE_ENV=production`, `HOST=0.0.0.0`, and the `PORT` assigned by the platform.
+2. Configure the backend environment variables from `Backend/.env.example` in your hosting provider's secret/configuration settings. Use `NODE_ENV=production`, `HOST=0.0.0.0`, the `PORT` assigned by the platform, and set `TRUST_PROXY_HOPS` to the actual proxy hop count (commonly `1` behind one trusted proxy).
 3. Ensure the backend can reach MongoDB, Gmail OAuth2, and ImageKit. Configure both VAPID keys only if push notifications should be enabled.
 4. Build the frontend with `cd Frontend && npm ci && npm run build`, then publish `Frontend/dist` as the static site.
 5. Install and start the API with `cd Backend && npm ci && npm start`.

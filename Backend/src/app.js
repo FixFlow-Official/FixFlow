@@ -14,14 +14,20 @@ const {
   requestIdMiddleware,
   structuredRequestLog,
 } = require("./middlewares/requestId.middleware");
+const securityHeaders = require("./middlewares/securityHeaders.middleware");
+const config = require("./config/config");
 
 const app = express();
+app.disable("x-powered-by");
+// Trust only an explicitly configured number of reverse-proxy hops.
+app.set("trust proxy", config.TRUST_PROXY_HOPS);
 
 // Assign an ID before parsing or logging so every request, including malformed
 // JSON requests, can be traced through the response and server logs.
 app.use(requestIdMiddleware);
+app.use(securityHeaders);
 app.use(morgan(structuredRequestLog));
-app.use(express.json());
+app.use(express.json({ limit: "64kb" }));
 app.use(cookieParser());
 
 // Keep health checks available while MongoDB or startup migration is unavailable.

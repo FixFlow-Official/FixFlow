@@ -6,6 +6,9 @@ const config = {
   NODE_ENV: nodeEnv,
   HOST: process.env.HOST?.trim() || (nodeEnv === "production" ? "0.0.0.0" : "127.0.0.1"),
   PORT: process.env.PORT === undefined ? 3000 : Number(process.env.PORT),
+  TRUST_PROXY_HOPS: process.env.TRUST_PROXY_HOPS === undefined
+    ? 0
+    : Number(process.env.TRUST_PROXY_HOPS),
   MONGO_URI: process.env.MONGO_URI,
   JWT_SECRET: process.env.JWT_SECRET,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
@@ -45,6 +48,14 @@ function validateConfig(values = config) {
     throw new Error("PORT must be an integer between 1 and 65535.");
   }
 
+  if (
+    !Number.isInteger(values.TRUST_PROXY_HOPS ?? 0) ||
+    (values.TRUST_PROXY_HOPS ?? 0) < 0 ||
+    (values.TRUST_PROXY_HOPS ?? 0) > 10
+  ) {
+    throw new Error("TRUST_PROXY_HOPS must be a whole number between 0 and 10.");
+  }
+
   if (!["development", "test", "production"].includes(values.NODE_ENV)) {
     throw new Error("NODE_ENV must be development, test, or production.");
   }
@@ -57,6 +68,14 @@ function validateConfig(values = config) {
   const hasVapidPrivateKey = Boolean(values.VAPID_PRIVATE_KEY?.trim());
   if (hasVapidPublicKey !== hasVapidPrivateKey) {
     throw new Error("Set both VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, or leave both unset.");
+  }
+
+  if (
+    hasVapidPublicKey &&
+    values.VAPID_SUBJECT &&
+    !/^(?:mailto:[^\s@]+@[^\s@]+|https:\/\/\S+)$/i.test(values.VAPID_SUBJECT)
+  ) {
+    throw new Error("VAPID_SUBJECT must be a mailto: address or an HTTPS URL.");
   }
 
   return values;
