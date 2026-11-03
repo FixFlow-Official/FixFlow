@@ -1,6 +1,8 @@
 const complaintModel = require("../models/complaint.model");
 const uploadFile = require("../services/storage.service");
 const studentModel = require("../models/student.model");
+const adminModel = require("../models/admin.model");
+const { createNotifications, complaintNotification } = require("../services/notification.service");
 const { getSlaPolicy, makeComplaintSlaDates } = require("../services/sla.service");
 const {
   getPageMetadata,
@@ -109,6 +111,32 @@ async function createComplaint(req, res) {
       room: room.trim(),
     },
   });
+
+  // Confirm submission to the student and alert administrators who are watching
+  // for new reports. Keep notification failures from undoing a saved complaint.
+  try {
+    const admins = await adminModel.find({}).select("_id").lean();
+    await createNotifications([
+      complaintNotification({
+        recipient: user._id,
+        recipientRef: "student",
+        complaint,
+        type: "submitted",
+        title: "Complaint submitted",
+        message: "Your complaint was submitted and is waiting for review.",
+      }),
+      ...admins.map((admin) => complaintNotification({
+        recipient: admin._id,
+        recipientRef: "admin",
+        complaint,
+        type: "submitted",
+        title: "New complaint submitted",
+        message: `A new ${category} complaint is waiting for review.`,
+      })),
+    ]);
+  } catch (error) {
+    console.error("Could not notify users about a submitted complaint:", error.message);
+  }
 
   return res.status(201).json({
     message: "Complaint created successfully",

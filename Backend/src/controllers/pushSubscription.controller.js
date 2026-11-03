@@ -13,9 +13,12 @@ const allowedPushHosts = [
 function isAllowedEndpoint(value) {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && allowedPushHosts.some(
-      (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
-    );
+    return url.protocol === "https:" &&
+      !url.username && !url.password &&
+      (!url.port || url.port === "443") &&
+      allowedPushHosts.some(
+        (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
+      );
   } catch {
     return false;
   }
@@ -86,4 +89,4 @@ async function removePushSubscription(req, res) {
   }
 }
 
-module.exports = { getPushConfig, savePushSubscription, removePushSubscription };
+module.exports = { getPushConfig, isAllowedEndpoint, savePushSubscription, removePushSubscription };

@@ -20,7 +20,7 @@ const notificationSchema = new mongoose.Schema(
     complaintTitle: { type: String, required: true, maxlength: 120 },
     type: {
       type: String,
-      enum: ["assigned", "reassigned", "status", "message", "sla_reminder", "sla_escalation"],
+      enum: ["submitted", "assigned", "reassigned", "status", "message", "sla_reminder", "sla_escalation"],
       required: true,
     },
     title: { type: String, required: true, maxlength: 120 },
