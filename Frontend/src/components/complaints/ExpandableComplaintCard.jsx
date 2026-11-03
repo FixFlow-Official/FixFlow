@@ -16,6 +16,22 @@ function formatDate(date) {
   }).format(parsedDate);
 }
 
+function getSlaSummary(complaint) {
+  if (!complaint.slaResponseDueAt && !complaint.slaResolutionDueAt) return null;
+  const now = Date.now();
+  const responseDue = complaint.slaResponseDueAt ? new Date(complaint.slaResponseDueAt).getTime() : null;
+  const resolutionDue = complaint.slaResolutionDueAt ? new Date(complaint.slaResolutionDueAt).getTime() : null;
+  const breached = (!complaint.slaFirstRespondedAt && responseDue !== null && responseDue < now)
+    || (resolutionDue !== null && resolutionDue < now && !["Resolved", "Rejected", "Closed", "Withdrawn"].includes(complaint.status));
+  if (complaint.slaFirstRespondedAt && ["Resolved", "Rejected", "Closed", "Withdrawn"].includes(complaint.status)) {
+    return { text: "SLA complete", className: "text-emerald-700" };
+  }
+  return {
+    text: `Response ${complaint.slaFirstRespondedAt ? "received" : `due ${formatDate(complaint.slaResponseDueAt)}`} · Resolve by ${formatDate(complaint.slaResolutionDueAt)}`,
+    className: breached ? "font-semibold text-rose-700" : "text-muted",
+  };
+}
+
 export default function ExpandableComplaintCard({
   complaint,
   expanded,
@@ -25,6 +41,7 @@ export default function ExpandableComplaintCard({
   children,
 }) {
   const status = complaint.status || "Submitted";
+  const slaSummary = getSlaSummary(complaint);
 
   const location = [
     complaint.location?.building,
@@ -119,6 +136,8 @@ export default function ExpandableComplaintCard({
                   Submitted {formatDate(complaint.createdAt)}
                 </span>
 
+                {slaSummary && <span className={`mt-2 block break-words text-xs ${slaSummary.className}`}>{slaSummary.text}</span>}
+
                 <span className="mt-2 block text-sm font-semibold text-brand">
                   View details
                 </span>
@@ -172,6 +191,7 @@ export default function ExpandableComplaintCard({
                   <p className="mt-1 text-sm text-muted">
                     Submitted {formatDate(complaint.createdAt)}
                   </p>
+                  {slaSummary && <p className={`mt-1 text-xs ${slaSummary.className}`}>{slaSummary.text}</p>}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">

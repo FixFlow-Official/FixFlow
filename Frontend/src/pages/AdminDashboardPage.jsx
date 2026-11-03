@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardList,
   LoaderCircle,
+  Timer,
   Users,
   UserRound,
 } from "lucide-react";
@@ -33,6 +34,7 @@ import {
 const AdminReports = lazy(() => import("../features/admin/AdminReports.jsx"));
 const AdminUserManagement = lazy(() => import("../features/admin/AdminUserManagement.jsx"));
 const AdminAccountsPage = lazy(() => import("../features/admin/AdminAccountsPage.jsx"));
+const AdminSlaPage = lazy(() => import("../features/admin/AdminSlaPage.jsx"));
 
 // Main admin dashboard: complaint queues, assignment actions, and reassignment.
 export default function AdminDashboardPage() {
@@ -386,6 +388,7 @@ export default function AdminDashboardPage() {
         { id: "users", label: "User access", icon: Users },
         { id: "accounts", label: "Accounts", icon: Users },
         { id: "profile", label: "Profile", icon: UserRound },
+        { id: "sla", label: "SLA tracking", icon: Timer },
         {
           id: "reports",
           label: "Reports",
@@ -406,6 +409,10 @@ export default function AdminDashboardPage() {
       ) : activeSection === "reports" ? (
         <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading reports…</div>}>
           <AdminReports accessToken={accessToken} />
+        </Suspense>
+      ) : activeSection === "sla" ? (
+        <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading SLA tracking…</div>}>
+          <AdminSlaPage accessToken={accessToken} />
         </Suspense>
       ) : (
       <main className="w-full min-w-0">

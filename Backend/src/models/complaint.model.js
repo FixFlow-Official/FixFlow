@@ -112,6 +112,11 @@ const complaintSchema = new mongoose.Schema(
       ref: "staff",
       default: null,
     },
+    // SLA deadlines are snapshotted when submitted so later policy edits do not
+    // silently change the promise already shown to a student.
+    slaResponseDueAt: { type: Date, default: null },
+    slaResolutionDueAt: { type: Date, default: null },
+    slaFirstRespondedAt: { type: Date, default: null },
     statusHistory: [
       {
         status: {
@@ -201,6 +206,8 @@ complaintSchema.index({
   status: 1,
   updatedAt: -1,
 });
+complaintSchema.index({ status: 1, slaResponseDueAt: 1, slaFirstRespondedAt: 1 });
+complaintSchema.index({ status: 1, slaResolutionDueAt: 1 });
 
 const complaintModel = mongoose.model("complaint", complaintSchema);
 

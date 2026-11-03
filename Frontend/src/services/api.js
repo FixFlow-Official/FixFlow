@@ -591,6 +591,31 @@ export async function getAdminComplaintReportsRequest(period, accessToken) {
   );
 }
 
+export async function getAdminSlaOverviewRequest({ page = 1, limit = 20, view = "all" } = {}, accessToken) {
+  const query = new URLSearchParams({ page: String(page), limit: String(limit), view });
+  return complaintRequest(`/api/admin/sla?${query.toString()}`, { method: "GET" }, accessToken);
+}
+
+export async function updateAdminSlaPoliciesRequest(policies, accessToken) {
+  return complaintRequest(
+    "/api/admin/sla/policies",
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policies }),
+    },
+    accessToken,
+  );
+}
+
+export async function getAdminComplaintSlaHistoryRequest(complaintId, accessToken) {
+  return complaintRequest(
+    `/api/admin/sla/complaints/${encodeURIComponent(complaintId)}/history`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function getStaffAssignedComplaintsRequest(accessToken, options = {}) {
   return complaintRequest(
     `/api/staff/assigned-complaints${buildComplaintQuery(options)}`,

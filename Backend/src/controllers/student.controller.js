@@ -1,6 +1,7 @@
 const complaintModel = require("../models/complaint.model");
 const uploadFile = require("../services/storage.service");
 const studentModel = require("../models/student.model");
+const { getSlaPolicy, makeComplaintSlaDates } = require("../services/sla.service");
 const {
   getPageMetadata,
   getPageOptions,
@@ -93,6 +94,8 @@ async function createComplaint(req, res) {
     });
   }
 
+  const submittedAt = new Date();
+  const slaPolicy = await getSlaPolicy(category);
   const complaint = await complaintModel.create({
     user: user._id,
     userRef: user.role,
@@ -100,6 +103,7 @@ async function createComplaint(req, res) {
     complaintTitle: title.trim(),
     complaintDescription: description.trim(),
     category,
+    ...makeComplaintSlaDates(slaPolicy, submittedAt),
     location: {
       building: building.trim(),
       room: room.trim(),

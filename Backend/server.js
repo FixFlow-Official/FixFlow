@@ -6,10 +6,12 @@ config.validateConfig();
 
 const app = require("./src/app");
 const connectDB = require("./src/config/database");
+const { backfillComplaintSlaDates, ensureSlaPolicies, startSlaMonitor } = require("./src/services/sla.service");
 
 const shutdownController = new AbortController();
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 let shutdownStarted = false;
+let stopSlaMonitor = null;
 
 // Serve readiness responses immediately; regular API requests receive 503 until
 // MongoDB and the campus directory migration are ready.
@@ -17,9 +19,18 @@ const server = app.listen(config.PORT, config.HOST, () => {
   console.log(`FixFlow backend is listening on ${config.HOST}:${config.PORT}`);
 });
 
-connectDB({ signal: shutdownController.signal }).catch((error) => {
-  console.error("Database startup stopped unexpectedly:", error.message);
-});
+connectDB({ signal: shutdownController.signal })
+  .then(async () => {
+    if (shutdownController.signal.aborted) return;
+    await ensureSlaPolicies();
+    await backfillComplaintSlaDates();
+    if (shutdownController.signal.aborted) return;
+    stopSlaMonitor = startSlaMonitor();
+    console.log("Complaint SLA monitoring is ready");
+  })
+  .catch((error) => {
+    console.error("Database startup stopped unexpectedly:", error.message);
+  });
 
 async function shutdown(signalName) {
   if (shutdownStarted) return;
@@ -27,6 +38,7 @@ async function shutdown(signalName) {
 
   console.log(`${signalName} received. Shutting down FixFlow backend.`);
   shutdownController.abort();
+  stopSlaMonitor?.();
 
   // Finish active requests first, but do not let a stuck client block shutdown forever.
   const forceCloseTimer = setTimeout(() => {
