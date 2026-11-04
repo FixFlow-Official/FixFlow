@@ -106,7 +106,7 @@ self.addEventListener("push", (event) => {
     icon: "/app-icon-192.png",
     badge: "/app-icon-192.png",
     tag: payload.tag || "fixflow-complaint-update",
-    data: { path: payload.path || "/login" },
+    data: { path: payload.path || "/login", notificationId: payload.notificationId || null },
     renotify: false,
   };
 
@@ -120,11 +120,15 @@ self.addEventListener("notificationclick", (event) => {
   if (targetUrl.origin !== self.location.origin) return;
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
       for (const client of clients) {
         if ("focus" in client) {
-          client.navigate(targetUrl.href);
-          return client.focus();
+          try {
+            const navigatedClient = await client.navigate(targetUrl.href);
+            return await (navigatedClient || client).focus();
+          } catch {
+            // A stale or closed tab should not prevent opening the requested complaint.
+          }
         }
       }
       return self.clients.openWindow(targetUrl.href);

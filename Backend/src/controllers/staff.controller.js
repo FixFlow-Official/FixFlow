@@ -244,6 +244,11 @@ async function updateComplaintStatus(req, res) {
 
     complaint.status = status;
 
+    // The first staff workflow action counts as the response against the SLA.
+    if (!complaint.slaFirstRespondedAt && ["Under_Review", "In_Progress", "On_Hold", "Resolved"].includes(status)) {
+      complaint.slaFirstRespondedAt = new Date();
+    }
+
     if (status === "On_Hold") {
       complaint.onHoldReason = trimmedNote;
     } else {

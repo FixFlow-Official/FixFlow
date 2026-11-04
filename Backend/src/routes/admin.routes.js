@@ -2,6 +2,7 @@ const express = require("express");
 const { verifyAccessToken } = require("../middlewares/auth.middleware");
 const adminController = require("../controllers/admin.controller");
 const adminReportsController = require("../controllers/adminReports.controller");
+const slaController = require("../controllers/sla.controller");
 const {
   directoryIdValidatorRule,
   typeValidatorRule,
@@ -30,6 +31,9 @@ router.patch(
 );
 
 router.get("/reports/complaints", verifyAccessToken, adminReportsController.getComplaintReports);
+router.get("/sla", verifyAccessToken, slaController.getSlaOverview);
+router.put("/sla/policies", verifyAccessToken, slaController.updateSlaPolicies);
+router.get("/sla/complaints/:complaintId/history", verifyAccessToken, slaController.getComplaintSlaHistory);
 
 router.patch(
   "/complaints/:complaintId/assign",
