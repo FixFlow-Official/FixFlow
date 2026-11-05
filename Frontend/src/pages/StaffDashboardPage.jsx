@@ -48,6 +48,11 @@ const staffNavItems = [
   },
 ];
 
+const staffAssistantItems = [
+  { id: "activeComplaints", label: "Active complaints" },
+  { id: "resolvedComplaints", label: "Resolved complaints" },
+];
+
 export default function StaffDashboardPage() {
   const { user, accessToken } = useAuth();
   const [activeSection, setActiveSection] = useState("complaints");
@@ -235,6 +240,15 @@ export default function StaffDashboardPage() {
       workspaceLabel="Staff"
       activeSection={activeSection}
       onSectionChange={setActiveSection}
+      assistantNavItems={staffAssistantItems}
+      onAssistantNavigate={(item) => {
+        if (item.id === "resolvedComplaints" || item.id === "activeComplaints") {
+          setActiveSection("complaints");
+          handleViewChange(item.id === "resolvedComplaints" ? "resolved" : "current");
+        }
+        else if (item.id === "profile") setActiveSection("profile");
+        else setActiveSection("complaints");
+      }}
       navItems={staffNavItems}
     >
       {activeSection === "profile" ? <ProfileSettings /> : (
@@ -422,6 +436,7 @@ export default function StaffDashboardPage() {
                 <StaffComplaintCard
                   key={complaint._id}
                   complaint={complaint}
+                  accessToken={accessToken}
                   selectedStatuses={selectedStatuses}
                   staffStatuses={staffStatuses}
                   setSelectedStatuses={setSelectedStatuses}

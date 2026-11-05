@@ -196,7 +196,7 @@ async function getUnassignedComplaints(req, res) {
       complaintModel
         .find(filter)
         .populate("user", "username rollno email")
-        .sort({ createdAt: -1 })
+        .sort({ "aiTriage.priority": 1, createdAt: -1 })
         .skip(pageOptions.skip)
         .limit(pageOptions.limit),
       complaintModel.countDocuments(filter),
@@ -414,7 +414,7 @@ async function getAssignedComplaints(req, res) {
           .populate("user", "username rollno email")
           .populate("assignedStaff", "staffId username department")
           .populate("resolvedBy", "staffId username department")
-          .sort({ [sort === "created" ? "createdAt" : "updatedAt"]: order === "asc" ? 1 : -1 })
+          .sort({ "aiTriage.priority": 1, [sort === "created" ? "createdAt" : "updatedAt"]: order === "asc" ? 1 : -1 })
           .skip(pageOptions.skip)
           .limit(pageOptions.limit),
         complaintModel.countDocuments(filter),

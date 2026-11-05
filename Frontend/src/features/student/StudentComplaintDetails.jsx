@@ -1,6 +1,7 @@
 import { CheckCircle2 } from "lucide-react";
 import ComplaintImageLink from "../../components/complaints/ComplaintImageLink.jsx";
 import ComplaintStatusTimeline from "../../components/complaints/ComplaintStatusTimeline.jsx";
+import ComplaintAiTriage from "../../components/complaints/ComplaintAiTriage.jsx";
 import { formatDate } from "../../utils/complaintConfig.js";
 
 export default function StudentComplaintDetails({ complaint }) {
@@ -20,6 +21,7 @@ export default function StudentComplaintDetails({ complaint }) {
 
         <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-5">
+            <ComplaintAiTriage triage={complaint.aiTriage && { ...complaint.aiTriage, currentCategory: complaint.category }} />
             <div>
               <h3 className="text-sm font-bold">Description</h3>
               <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-muted">

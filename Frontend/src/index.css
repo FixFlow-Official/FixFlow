@@ -39,3 +39,12 @@
 .terms-modal-scroll::-webkit-scrollbar {
   display: none; /* Chrome, Safari, and other WebKit browsers */
 }
+
+.assistant-chat-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.assistant-chat-scroll::-webkit-scrollbar {
+  display: none;
+}

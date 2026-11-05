@@ -43,6 +43,8 @@ export default function DashboardPage() {
   const [complaintError, setComplaintError] = useState("");
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [submissionTriage, setSubmissionTriage] = useState(null);
+  const [triagePreview, setTriagePreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   const [complaintSearch, setComplaintSearch] = useState("");
@@ -68,6 +70,16 @@ export default function DashboardPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [complaintSearch]);
+
+  // Keep the submission confirmation and its one-time triage summary brief.
+  useEffect(() => {
+    if (!successMessage) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setSuccessMessage("");
+      setSubmissionTriage(null);
+    }, 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [successMessage]);
 
   // Fetch only the current server page. The home view requests its newest active item.
   useEffect(() => {
@@ -144,6 +156,7 @@ export default function DashboardPage() {
     const selectedImage = event.target.files?.[0] ?? null;
     setFormError("");
     setSuccessMessage("");
+    setSubmissionTriage(null);
 
     if (
       selectedImage &&
@@ -200,11 +213,14 @@ export default function DashboardPage() {
           building: cleanBuilding,
           room: cleanRoom,
           image,
+          triageToken: triagePreview?.token,
         },
         accessToken,
       );
 
       setSuccessMessage(result.message || "Complaint submitted successfully.");
+      setSubmissionTriage(result.complaint?.aiTriage || null);
+      setTriagePreview(null);
       setTitle("");
       setDescription("");
       setCategory("");
@@ -245,6 +261,17 @@ export default function DashboardPage() {
       workspaceLabel="Student"
       activeSection={activeSection}
       onSectionChange={setActiveSection}
+      assistantNavItems={[
+        { id: "newComplaint", label: "New complaint" },
+        { id: "myComplaints", label: "My complaints" },
+      ]}
+      onAssistantNavigate={(item) => {
+        if (item.id === "newComplaint" || item.id === "myComplaints") {
+          setActiveSection("complaints");
+          if (item.id === "newComplaint") openCreateComplaint();
+          else openMyComplaints();
+        } else setActiveSection(item.id);
+      }}
       navItems={[
         { id: "complaints", label: "Complaints", icon: MessageSquareText },
         { id: "profile", label: "Profile", icon: UserRound },
@@ -297,6 +324,10 @@ export default function DashboardPage() {
               handleImageChange={handleImageChange}
               formError={formError}
               successMessage={successMessage}
+              submissionTriage={submissionTriage}
+              triagePreview={triagePreview}
+              setTriagePreview={setTriagePreview}
+              accessToken={accessToken}
               submitting={submitting}
               handleSubmit={handleSubmit}
             />

@@ -1,9 +1,12 @@
 const complaintModel = require("../models/complaint.model");
+const jwt = require("jsonwebtoken");
+const config = require("../config/config");
 const uploadFile = require("../services/storage.service");
 const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
 const { getSlaPolicy, makeComplaintSlaDates } = require("../services/sla.service");
+const { triageComplaint, fingerprintComplaint } = require("../services/complaintTriage.service");
 const {
   getPageMetadata,
   getPageOptions,
@@ -97,6 +100,26 @@ async function createComplaint(req, res) {
   }
 
   const submittedAt = new Date();
+  const triageInput = { title: title.trim(), description: description.trim(), category, building: building.trim() };
+  let aiTriage;
+  try {
+    const preview = req.body.triageToken && jwt.verify(req.body.triageToken, config.JWT_SECRET, { subject: String(user._id) });
+    if (preview?.purpose === "complaint-triage-preview" && preview.fingerprint === fingerprintComplaint(triageInput) && preview.aiTriage) {
+      aiTriage = preview.aiTriage;
+    }
+  } catch {
+    // Expired or mismatched previews are safely recalculated at submission.
+  }
+  aiTriage ||= await triageComplaint(triageInput);
+  const exactTitle = new RegExp(`^${title.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+  const exactBuilding = new RegExp(`^${building.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+  if (!Number.isFinite(aiTriage.relatedOpenReports)) aiTriage.relatedOpenReports = await complaintModel.countDocuments({
+    complaintTitle: exactTitle,
+    category,
+    "location.building": exactBuilding,
+    status: { $in: activeComplaintStatuses },
+    createdAt: { $gte: new Date(submittedAt.getTime() - 30 * 24 * 60 * 60 * 1000) },
+  });
   const slaPolicy = await getSlaPolicy(category);
   const complaint = await complaintModel.create({
     user: user._id,
@@ -105,6 +128,7 @@ async function createComplaint(req, res) {
     complaintTitle: title.trim(),
     complaintDescription: description.trim(),
     category,
+    aiTriage,
     ...makeComplaintSlaDates(slaPolicy, submittedAt),
     location: {
       building: building.trim(),
@@ -131,7 +155,7 @@ async function createComplaint(req, res) {
         complaint,
         type: "submitted",
         title: "New complaint submitted",
-        message: `A new ${category} complaint is waiting for review.`,
+        message: `${aiTriage.priority} · ${aiTriage.urgency}: ${title.trim()} (${aiTriage.suggestedCategory} suggested). Waiting for staff review.`,
       })),
     ]);
   } catch (error) {
@@ -146,6 +170,7 @@ async function createComplaint(req, res) {
       title: complaint.complaintTitle,
       description: complaint.complaintDescription,
       createdAt: complaint.createdAt,
+      aiTriage: { ...(complaint.aiTriage?.toObject?.() || complaint.aiTriage || aiTriage), currentCategory: complaint.category },
     },
   });
 }

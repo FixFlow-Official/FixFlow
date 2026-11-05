@@ -8,6 +8,7 @@ const ASSISTANT_INSTRUCTIONS = [
   "You are the FixFlow assistant, a concise and friendly guide for a campus complaint-management app.",
   "Answer in the language and tone the user uses; Hindi, Hinglish, and English are all welcome.",
   "Help explain how to use FixFlow and give practical complaint-workflow guidance.",
+  "FixFlow provides AI complaint triage recommendations for priority, urgency, suggested category, safety concerns, and missing details. Explain these as advisory only; staff/admin make final decisions.",
   "You cannot see account or complaint records, change data, send notifications, or perform actions. Never claim that you did.",
   "Do not ask for or repeat passwords, OTPs, student IDs, email addresses, or other identifying complaint details.",
   "Do not decide whether a complaint is genuine or make consequential decisions about a person. Explain that staff/admin review is required.",
@@ -102,8 +103,79 @@ async function generateAssistantReply({
   return reply.slice(0, 4000);
 }
 
+async function generateComplaintDescriptionDraft({ title, category, role = "student", apiKey, model }) {
+  const fallback = `Please inspect and help resolve this issue: “${title}”. [Add the exact location and when it started.] It is affecting [describe the impact]. [Mention any troubleshooting already tried, if relevant.]`;
+  try {
+    const reply = await generateAssistantReply({
+      apiKey,
+      model,
+      role,
+      messages: [{
+        role: "user",
+        text: [
+          "Write only an editable complaint description draft in 2-4 short sentences.",
+          "Use only the facts below. Do not invent dates, locations, effects, troubleshooting, injuries, or other events.",
+          "Use short bracketed placeholders for missing facts the student should fill in. No heading, markdown, or greeting.",
+          `Complaint title: ${title}`,
+          `Selected category: ${category || "not selected"}`,
+        ].join("\n"),
+      }],
+    });
+    return { description: reply, source: "gemini" };
+  } catch {
+    return { description: fallback, source: "template" };
+  }
+}
+
+async function generateStatusNoteDraft({ title, category, status, apiKey, model }) {
+  const statusLabel = status.replaceAll("_", " ").toLowerCase();
+  const fallback = `This complaint is now ${statusLabel}. [Add the verified work completed, reason for the update, or next step and expected timing.]`;
+  try {
+    const reply = await generateAssistantReply({
+      apiKey,
+      model,
+      role: "staff",
+      messages: [{ role: "user", text: [
+        "Draft a concise, student-facing complaint status note (1-3 sentences).",
+        "Use only the facts below. Never claim work was completed or a cause was confirmed unless explicitly provided.",
+        "Include a short bracketed placeholder for the staff member to fill in verified work or the next step.",
+        "Return only the editable note, with no heading or markdown.",
+        `Complaint title: ${title}`,
+        `Category: ${category || "not provided"}`,
+        `New status: ${statusLabel}`,
+      ].join("\n") }],
+    });
+    return { note: reply, source: "gemini" };
+  } catch {
+    return { note: fallback, source: "template" };
+  }
+}
+
+async function generateReportInsights({ period, reportData, apiKey, model }) {
+  try {
+    const reply = await generateAssistantReply({
+      apiKey,
+      model,
+      role: "admin",
+      messages: [{ role: "user", text: [
+        "Summarize these aggregate campus complaint metrics for an administrator in 3 concise bullet points.",
+        "Identify visible patterns and practical follow-up actions. Do not claim causation, invent trends, or expose personal data.",
+        "If the dataset is too small or has no trend, say so clearly. Return plain text without markdown symbols.",
+        `Period: ${period}`,
+        `Aggregate data: ${JSON.stringify(reportData)}`,
+      ].join("\n") }],
+    });
+    return { insights: reply, source: "gemini" };
+  } catch {
+    return { insights: "AI insights are temporarily unavailable. The charts and totals above are still available.", source: "fallback" };
+  }
+}
+
 module.exports = {
   AssistantServiceError,
   buildSystemInstruction,
   generateAssistantReply,
+  generateComplaintDescriptionDraft,
+  generateStatusNoteDraft,
+  generateReportInsights,
 };

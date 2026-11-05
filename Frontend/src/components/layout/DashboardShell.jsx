@@ -64,6 +64,8 @@ export default function DashboardShell({
   navItems,
   activeSection,
   onSectionChange,
+  assistantNavItems = [],
+  onAssistantNavigate,
   children,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -153,7 +155,10 @@ export default function DashboardShell({
 
         {children}
       </main>
-      <DashboardAssistant navItems={navItems} onNavigate={handleNavigate} />
+      <DashboardAssistant
+        navItems={[...navItems, ...assistantNavItems]}
+        onNavigate={onAssistantNavigate || handleNavigate}
+      />
     </div>
   );
 }

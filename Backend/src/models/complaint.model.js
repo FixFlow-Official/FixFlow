@@ -85,6 +85,18 @@ const complaintSchema = new mongoose.Schema(
       ],
       required: [true, "Complaint category is required"],
     },
+    aiTriage: {
+      suggestedCategory: { type: String, enum: ["Electrical", "Plumbing", "Cleaning", "Internet", "Furniture", "Other"], default: null },
+      priority: { type: String, enum: ["P1", "P2", "P3", "P4"], default: null },
+      urgency: { type: String, enum: ["Critical", "High", "Normal", "Low"], default: null },
+      confidence: { type: Number, min: 0, max: 1, default: null },
+      summary: { type: String, maxlength: 280, default: null },
+      missingInformation: { type: [String], default: [] },
+      safetyConcern: { type: Boolean, default: false },
+      relatedOpenReports: { type: Number, min: 0, default: 0 },
+      rationale: { type: String, maxlength: 280, default: null },
+      provider: { type: String, enum: ["gemini", "rules"], default: null },
+    },
     location: {
       building: {
         type: String,
@@ -208,6 +220,7 @@ complaintSchema.index({
 });
 complaintSchema.index({ status: 1, slaResponseDueAt: 1, slaFirstRespondedAt: 1 });
 complaintSchema.index({ status: 1, slaResolutionDueAt: 1 });
+complaintSchema.index({ "aiTriage.priority": 1, status: 1, createdAt: -1 });
 
 const complaintModel = mongoose.model("complaint", complaintSchema);
 
