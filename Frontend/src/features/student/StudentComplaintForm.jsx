@@ -20,6 +20,8 @@ export default function StudentComplaintForm({
   formError,
   successMessage,
   submissionTriage,
+  confirmedCampusIssue,
+  setConfirmedCampusIssue,
   triagePreview,
   setTriagePreview,
   accessToken,
@@ -67,6 +69,7 @@ export default function StudentComplaintForm({
     setTriagePreview(null);
     setTriageLoading(false);
     setTriageError("");
+    setConfirmedCampusIssue(false);
   }
 
   async function requestDescriptionDraft() {
@@ -100,7 +103,7 @@ export default function StudentComplaintForm({
               </div>
 
               <form
-                onSubmit={handleSubmit}
+                onSubmit={(event) => handleSubmit(event, confirmedCampusIssue)}
                 className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2"
               >
                 <div className="min-w-0">
@@ -276,6 +279,13 @@ export default function StudentComplaintForm({
                     <AlertCircle size={17} className="mt-0.5 shrink-0" />
                     <span>{formError}</span>
                   </p>
+                )}
+
+                {triagePreview?.triage?.reviewSignal === "check_relevance" && (
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950 sm:col-span-2">
+                    <input type="checkbox" required checked={confirmedCampusIssue} onChange={(event) => setConfirmedCampusIssue(event.target.checked)} className="mt-1 size-4 accent-amber-700" />
+                    <span><strong>Confirm for staff review:</strong> I’m reporting an actual campus issue. The AI cannot verify whether something is true; this confirmation lets staff review a draft the AI could not classify clearly. Safety reports remain submitable.</span>
+                  </label>
                 )}
 
                 {successMessage && (

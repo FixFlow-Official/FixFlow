@@ -91,14 +91,6 @@ async function createComplaint(req, res) {
     });
   }
 
-  const result = await uploadFile(req.file.buffer, title.trim());
-
-  if (!result?.url) {
-    return res.status(502).json({
-      message: "Could not upload the complaint photo. Please try again.",
-    });
-  }
-
   const submittedAt = new Date();
   const triageInput = { title: title.trim(), description: description.trim(), category, building: building.trim() };
   let aiTriage;
@@ -120,6 +112,19 @@ async function createComplaint(req, res) {
     status: { $in: activeComplaintStatuses },
     createdAt: { $gte: new Date(submittedAt.getTime() - 30 * 24 * 60 * 60 * 1000) },
   });
+  if (aiTriage.reviewSignal === "check_relevance" && !aiTriage.safetyConcern && req.body.confirmedCampusIssue !== "true") {
+    return res.status(422).json({
+      message: "The AI could not identify a clear campus issue in this draft. Add specific details or confirm that this is an actual campus issue so staff can review it.",
+    });
+  }
+
+  const result = await uploadFile(req.file.buffer, title.trim());
+  if (!result?.url) {
+    return res.status(502).json({
+      message: "Could not upload the complaint photo. Please try again.",
+    });
+  }
+
   const slaPolicy = await getSlaPolicy(category);
   const complaint = await complaintModel.create({
     user: user._id,

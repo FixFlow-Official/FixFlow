@@ -70,7 +70,7 @@ test("admin assigned endpoint applies server-side filters, ordering, and page bo
     assert.deepEqual(capturedFilter.status.$in, ["Assigned", "Under_Review", "In_Progress", "On_Hold"]);
     assert.equal(capturedQuery.skip, 6);
     assert.equal(capturedQuery.limit, 6);
-    assert.deepEqual(capturedQuery.sort, { createdAt: 1 });
+    assert.deepEqual(capturedQuery.sort, { "aiTriage.priority": 1, createdAt: 1 });
     assert.equal(response.payload.pagination.total, 13);
     assert.equal(response.payload.pagination.totalPages, 3);
   });

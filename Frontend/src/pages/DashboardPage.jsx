@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [submissionTriage, setSubmissionTriage] = useState(null);
   const [triagePreview, setTriagePreview] = useState(null);
+  const [confirmedCampusIssue, setConfirmedCampusIssue] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [complaintSearch, setComplaintSearch] = useState("");
@@ -179,14 +180,12 @@ export default function DashboardPage() {
   }
 
   // Submit the student's complaint and refresh the complaint list.
-  async function handleSubmit(event) {
-    event.preventDefault();
-
-    const form = event.currentTarget;
-    const cleanTitle = title.trim();
-    const cleanDescription = description.trim();
-    const cleanBuilding = building.trim();
-    const cleanRoom = room.trim();
+  async function submitComplaint(draft, form = null) {
+    const cleanTitle = draft.title.trim();
+    const cleanDescription = draft.description.trim();
+    const cleanBuilding = draft.building.trim();
+    const cleanRoom = (draft.room || "").trim();
+    const complaintImage = draft.image || image;
 
     setFormError("");
     setSuccessMessage("");
@@ -194,12 +193,12 @@ export default function DashboardPage() {
     if (
       !cleanTitle ||
       !cleanDescription ||
-      !category ||
+      !draft.category ||
       !cleanBuilding ||
-      !image
+      !complaintImage
     ) {
       setFormError("Complete the required fields and attach a photo as proof.");
-      return;
+      return false;
     }
 
     setSubmitting(true);
@@ -209,11 +208,12 @@ export default function DashboardPage() {
         {
           title: cleanTitle,
           description: cleanDescription,
-          category,
+          category: draft.category,
           building: cleanBuilding,
           room: cleanRoom,
-          image,
-          triageToken: triagePreview?.token,
+          image: complaintImage,
+          triageToken: draft.triageToken,
+          confirmedCampusIssue: draft.confirmedCampusIssue,
         },
         accessToken,
       );
@@ -221,13 +221,14 @@ export default function DashboardPage() {
       setSuccessMessage(result.message || "Complaint submitted successfully.");
       setSubmissionTriage(result.complaint?.aiTriage || null);
       setTriagePreview(null);
+      setConfirmedCampusIssue(false);
       setTitle("");
       setDescription("");
       setCategory("");
       setBuilding("");
       setRoom("");
       setImage(null);
-      form.reset();
+      form?.reset();
 
       try {
         const updatedData = await getComplaintsRequest(accessToken, {
@@ -247,9 +248,25 @@ export default function DashboardPage() {
       }
     } catch (error) {
       setFormError(error.message || "Could not submit the complaint.");
+      return false;
     } finally {
       setSubmitting(false);
     }
+    return true;
+  }
+
+  async function handleSubmit(event, confirmedCampusIssue = false) {
+    event.preventDefault();
+    await submitComplaint({
+      title,
+      description,
+      category,
+      building,
+      room,
+      image,
+      triageToken: triagePreview?.token,
+      confirmedCampusIssue,
+    }, event.currentTarget);
   }
 
   const firstName = user?.username?.trim()?.split(/\s+/)[0] || "there";
@@ -261,6 +278,7 @@ export default function DashboardPage() {
       workspaceLabel="Student"
       activeSection={activeSection}
       onSectionChange={setActiveSection}
+      onVoiceComplaintSubmit={submitComplaint}
       assistantNavItems={[
         { id: "newComplaint", label: "New complaint" },
         { id: "myComplaints", label: "My complaints" },
@@ -325,6 +343,8 @@ export default function DashboardPage() {
               formError={formError}
               successMessage={successMessage}
               submissionTriage={submissionTriage}
+              confirmedCampusIssue={confirmedCampusIssue}
+              setConfirmedCampusIssue={setConfirmedCampusIssue}
               triagePreview={triagePreview}
               setTriagePreview={setTriagePreview}
               accessToken={accessToken}

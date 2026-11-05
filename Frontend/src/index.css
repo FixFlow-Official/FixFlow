@@ -48,3 +48,86 @@
 .assistant-chat-scroll::-webkit-scrollbar {
   display: none;
 }
+
+.assistant-voice-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.assistant-voice-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes voice-orb-breathe {
+  0%, 100% { transform: scale(0.96); opacity: 0.68; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+@keyframes voice-orb-ripple {
+  0% { transform: scale(0.72); opacity: 0.62; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+@keyframes voice-orb-speak {
+  0%, 100% { transform: scale(1); filter: saturate(1); }
+  30% { transform: scale(1.08); filter: saturate(1.35); }
+  60% { transform: scale(0.98); filter: saturate(1.1); }
+}
+
+.voice-orb-scene {
+  position: relative;
+  width: min(56vw, 15rem);
+  aspect-ratio: 1;
+}
+
+.voice-orb-core {
+  position: relative;
+  display: grid;
+  width: 48%;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgb(220 255 240 / 58%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 28%, #b8f4da 0%, #55b996 23%, #267b66 55%, #164d43 100%);
+  box-shadow: 0 0 32px rgb(83 204 158 / 28%), inset -13px -19px 34px rgb(3 35 29 / 45%), inset 12px 12px 26px rgb(255 255 255 / 22%);
+  animation: voice-orb-breathe 3.2s ease-in-out infinite;
+}
+
+.voice-orb-light {
+  position: absolute;
+  top: 14%;
+  left: 19%;
+  width: 38%;
+  height: 20%;
+  border-radius: 50%;
+  background: rgb(240 255 249 / 45%);
+  filter: blur(9px);
+  transform: rotate(-28deg);
+}
+
+.voice-orb-ring {
+  position: absolute;
+  inset: 26%;
+  border: 1px solid rgb(139 229 187 / 34%);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.is-listening .voice-orb-ring,
+.is-thinking .voice-orb-ring {
+  animation: voice-orb-ripple 2.5s ease-out infinite;
+}
+
+.is-listening .voice-orb-ring-two { animation-delay: 1.2s; }
+.is-thinking .voice-orb-ring { border-color: rgb(248 211 127 / 45%); animation-duration: 1.8s; }
+.is-speaking .voice-orb-core { animation: voice-orb-speak 0.9s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-orb-core,
+  .is-listening .voice-orb-ring,
+  .is-thinking .voice-orb-ring,
+  .is-speaking .voice-orb-core {
+    animation: none !important;
+  }
+}

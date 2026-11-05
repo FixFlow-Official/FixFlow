@@ -74,6 +74,18 @@ export async function sendAssistantMessageRequest(messages, accessToken) {
   );
 }
 
+export async function sendVoiceComplaintTurnRequest({ utterance, draft }, accessToken) {
+  return complaintRequest(
+    "/api/assistant/voice-complaint-turn",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ utterance, draft }),
+    },
+    accessToken,
+  );
+}
+
 export async function suggestComplaintDescriptionRequest({ title, category }, accessToken) {
   return complaintRequest(
     "/api/assistant/complaint-description",
@@ -597,7 +609,7 @@ export async function removePushSubscriptionRequest(endpoint, accessToken) {
 }
 
 export async function createComplaintRequest(
-  { title, description, category, building, room, image, triageToken },
+  { title, description, category, building, room, image, triageToken, confirmedCampusIssue },
   accessToken,
 ) {
   const formData = new FormData();
@@ -608,6 +620,7 @@ export async function createComplaintRequest(
   formData.append("room", room);
   formData.append("complaintImage", image);
   if (triageToken) formData.append("triageToken", triageToken);
+  if (confirmedCampusIssue) formData.append("confirmedCampusIssue", "true");
 
   return complaintRequest(
     "/api/student/create-complaint",

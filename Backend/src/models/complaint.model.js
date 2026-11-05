@@ -96,6 +96,8 @@ const complaintSchema = new mongoose.Schema(
       relatedOpenReports: { type: Number, min: 0, default: 0 },
       rationale: { type: String, maxlength: 280, default: null },
       provider: { type: String, enum: ["gemini", "rules"], default: null },
+      reviewSignal: { type: String, enum: ["actionable", "needs_details", "check_relevance"], default: "needs_details" },
+      reviewSignalReason: { type: String, maxlength: 240, default: "" },
     },
     location: {
       building: {
