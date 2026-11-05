@@ -62,6 +62,18 @@ export async function getCurrentUserRequest() {
   return data;
 }
 
+export async function sendAssistantMessageRequest(messages, accessToken) {
+  return complaintRequest(
+    "/api/assistant/chat",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    },
+    accessToken,
+  );
+}
+
 export async function updateMyProfileRequest(
   { username, profilePicture, removeProfilePicture = false },
   accessToken,
