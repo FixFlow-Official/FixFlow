@@ -122,7 +122,7 @@ async function getAssignedComplaints(req, res) {
         .find(filter)
         .populate("user", "username rollno")
         .populate("resolvedBy", "username staffId department")
-        .sort({ updatedAt: -1 })
+        .sort({ "aiTriage.priority": 1, updatedAt: -1 })
         .skip(pageOptions.skip)
         .limit(pageOptions.limit),
       complaintModel.countDocuments(filter),

@@ -1,6 +1,7 @@
 import { LoaderCircle, UserCheck } from "lucide-react";
 import ExpandableComplaintCard from "../../components/complaints/ExpandableComplaintCard.jsx";
 import { departments, formatDate } from "../../utils/complaintConfig.js";
+import ComplaintAiTriage from "../../components/complaints/ComplaintAiTriage.jsx";
 
 // Complete unassigned complaint row, including department/staff selection and assignment action.
 export default function UnassignedComplaintCard({
@@ -32,7 +33,8 @@ export default function UnassignedComplaintCard({
       summary={studentSummary}
     >
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-4">
+          <ComplaintAiTriage compact triage={complaint.aiTriage && { ...complaint.aiTriage, currentCategory: complaint.category }} />
           <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-xs text-muted">Student</dt>

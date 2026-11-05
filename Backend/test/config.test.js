@@ -15,6 +15,8 @@ function validConfig(overrides = {}) {
     GOOGLE_REFRESH_TOKEN: "refresh-token",
     GOOGLE_USER: "support@example.edu",
     IMAGEKIT_PRIVATE_KEY: "imagekit-key",
+    GEMINI_API_KEY: undefined,
+    GEMINI_MODEL: "gemini-3.5-flash-lite",
     VAPID_PUBLIC_KEY: undefined,
     VAPID_PRIVATE_KEY: undefined,
     ...overrides,

@@ -1,4 +1,7 @@
-import { AlertCircle, CheckCircle2, FileImage, LoaderCircle, Plus, Send, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, FileImage, LoaderCircle, Plus, Send, Sparkles, Upload } from "lucide-react";
+import ComplaintAiTriage from "../../components/complaints/ComplaintAiTriage.jsx";
+import { previewComplaintTriageRequest, suggestComplaintDescriptionRequest } from "../../services/api.js";
 
 // Student complaint submission UI. State, validation, and API requests stay in DashboardPage.
 export default function StudentComplaintForm({
@@ -16,9 +19,70 @@ export default function StudentComplaintForm({
   handleImageChange,
   formError,
   successMessage,
+  submissionTriage,
+  triagePreview,
+  setTriagePreview,
+  accessToken,
   submitting,
   handleSubmit,
 }) {
+  const [draftSuggestion, setDraftSuggestion] = useState(null);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftError, setDraftError] = useState("");
+  const [triageLoading, setTriageLoading] = useState(false);
+  const [triageError, setTriageError] = useState("");
+  const triageRequestId = useRef(0);
+
+  useEffect(() => {
+    const requestId = ++triageRequestId.current;
+    if (title.trim().length < 5 || description.trim().length < 30 || !category) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      setTriageLoading(true);
+      try {
+        const result = await previewComplaintTriageRequest({
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          building: building.trim(),
+        }, accessToken);
+        if (triageRequestId.current === requestId) setTriagePreview(result);
+      } catch (error) {
+        if (triageRequestId.current === requestId) {
+          setTriagePreview(null);
+          setTriageError(error.message || "Could not assess this draft yet.");
+        }
+      } finally {
+        if (triageRequestId.current === requestId) setTriageLoading(false);
+      }
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [title, description, category, building, accessToken, setTriagePreview]);
+
+  function invalidateTriagePreview() {
+    triageRequestId.current += 1;
+    setTriagePreview(null);
+    setTriageLoading(false);
+    setTriageError("");
+  }
+
+  async function requestDescriptionDraft() {
+    if (title.trim().length < 5 || draftLoading) return;
+    setDraftLoading(true);
+    setDraftError("");
+    setDraftSuggestion(null);
+    try {
+      setDraftSuggestion(await suggestComplaintDescriptionRequest({ title: title.trim(), category }, accessToken));
+    } catch (error) {
+      setDraftError(error.message || "Could not suggest a description. Please try again.");
+    } finally {
+      setDraftLoading(false);
+    }
+  }
+
   return (
             <section className="w-full rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_18px_55px_-36px_rgba(24,35,45,0.38)] ring-1 ring-line/70 sm:rounded-[1.75rem] sm:p-6 lg:p-8">
               <div className="mb-6 flex items-start gap-3.5">
@@ -30,7 +94,7 @@ export default function StudentComplaintForm({
                     Submit a complaint
                   </h2>
                   <p className="mt-1 text-sm leading-5 text-muted">
-                    Share enough detail so your campus team can help.
+                    As you write, AI can suggest a category, priority, and useful missing details. Staff review every complaint and make the final decision.
                   </p>
                 </div>
               </div>
@@ -49,7 +113,11 @@ export default function StudentComplaintForm({
                   <input
                     id="complaint-title"
                     value={title}
-                    onChange={(event) => setTitle(event.target.value)}
+                    onChange={(event) => {
+                      setTitle(event.target.value);
+                      setDraftSuggestion(null);
+                      invalidateTriagePreview();
+                    }}
                     maxLength={100}
                     required
                     placeholder="For example, Projector not working in Room 204"
@@ -70,7 +138,11 @@ export default function StudentComplaintForm({
                   <select
                     id="complaint-category"
                     value={category}
-                    onChange={(event) => setCategory(event.target.value)}
+                    onChange={(event) => {
+                      setCategory(event.target.value);
+                      setDraftSuggestion(null);
+                      invalidateTriagePreview();
+                    }}
                     required
                     className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                   >
@@ -85,22 +157,38 @@ export default function StudentComplaintForm({
                 </div>
 
                 <div className="min-w-0 sm:col-span-2">
-                  <label
-                    htmlFor="complaint-description"
-                    className="mb-2 block text-sm font-semibold"
-                  >
-                    Description
-                  </label>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <label htmlFor="complaint-description" className="block text-sm font-semibold">Description</label>
+                    <button type="button" onClick={requestDescriptionDraft} disabled={title.trim().length < 5 || draftLoading} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-brand/20 bg-brand-soft/60 px-3 text-xs font-bold text-brand-dark transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50">
+                      {draftLoading ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {draftLoading ? "Drafting…" : "Suggest with AI"}
+                    </button>
+                  </div>
                   <textarea
                     id="complaint-description"
                     value={description}
-                    onChange={(event) => setDescription(event.target.value)}
+                    onChange={(event) => { setDescription(event.target.value); invalidateTriagePreview(); }}
                     maxLength={2000}
                     rows={5}
                     required
                     placeholder="Where is the issue, and what happened?"
                     className="w-full min-w-0 resize-y rounded-xl border border-line bg-white px-3.5 py-3 text-sm leading-6 shadow-sm outline-none placeholder:text-muted/70 focus:border-brand focus:ring-4 focus:ring-brand/10"
                   />
+                      <p className="mt-1 text-xs text-muted">Description drafts use your title and category. Draft triage checks the title, description, category, and building for suggestions; avoid including personal information.</p>
+                  {draftError && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">{draftError}</p>}
+                  {draftSuggestion && (
+                    <div className="mt-3 rounded-xl border border-brand/15 bg-gradient-to-br from-brand-soft/60 to-white p-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-bold uppercase tracking-wide text-brand-dark">{draftSuggestion.source === "gemini" ? "AI draft suggestion" : "Starter draft suggestion"}</p>
+                        <button type="button" onClick={() => { setDescription(draftSuggestion.description); setDraftSuggestion(null); }} className="rounded-lg bg-brand px-3 py-2 text-xs font-bold text-white transition hover:bg-brand-dark">Use this draft</button>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink">{draftSuggestion.description}</p>
+                      <p className="mt-2 text-[11px] text-muted">This is only a starting point. Replace bracketed prompts with what actually happened.</p>
+                    </div>
+                  )}
+                  {triageLoading && <p className="mt-3 flex items-center gap-2 text-xs font-medium text-muted"><LoaderCircle size={14} className="animate-spin" /> Reviewing this draft…</p>}
+                  {triageError && <p role="status" className="mt-3 text-xs text-muted">Draft suggestions are temporarily unavailable. You can still submit your complaint.</p>}
+                  {!successMessage && triagePreview?.triage && <div className="mt-3"><ComplaintAiTriage triage={triagePreview.triage} /></div>}
                   <p className="mt-1.5 text-right text-xs text-muted">
                     {description.length}/2000
                   </p>
@@ -116,7 +204,7 @@ export default function StudentComplaintForm({
                   <input
                     id="complaint-building"
                     value={building}
-                    onChange={(event) => setBuilding(event.target.value)}
+                    onChange={(event) => { setBuilding(event.target.value); invalidateTriagePreview(); }}
                     maxLength={100}
                     required
                     placeholder="For example, Science Block"
@@ -191,13 +279,13 @@ export default function StudentComplaintForm({
                 )}
 
                 {successMessage && (
-                  <p
-                    role="status"
-                    className="flex min-w-0 items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800 sm:col-span-2"
-                  >
-                    <CheckCircle2 size={17} className="mt-0.5 shrink-0" />
-                    <span>{successMessage}</span>
-                  </p>
+                  <div className="space-y-3 sm:col-span-2">
+                    <p role="status" className="flex min-w-0 items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800">
+                      <CheckCircle2 size={17} className="mt-0.5 shrink-0" />
+                      <span>{successMessage}</span>
+                    </p>
+                    <ComplaintAiTriage triage={submissionTriage} />
+                  </div>
                 )}
 
                 <div className="sm:col-span-2">
@@ -209,7 +297,7 @@ export default function StudentComplaintForm({
                     {submitting ? (
                       <>
                         <LoaderCircle size={17} className="animate-spin" />
-                        Submitting…
+                        Submitting · reviewing…
                       </>
                     ) : (
                       <>

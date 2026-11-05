@@ -114,6 +114,11 @@ export default function ExpandableComplaintCard({
                   </span>
 
                   <ComplaintStatusBadge status={status} />
+                  {complaint.aiTriage?.priority && (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${complaint.aiTriage.priority === "P1" ? "bg-rose-100 text-rose-800" : complaint.aiTriage.priority === "P2" ? "bg-amber-100 text-amber-900" : complaint.aiTriage.priority === "P3" ? "bg-sky-100 text-sky-800" : "bg-stone-100 text-stone-700"}`}>
+                      AI {complaint.aiTriage.priority} · {complaint.aiTriage.urgency}
+                    </span>
+                  )}
                 </span>
 
                 <span className="mt-1 block break-words text-sm text-muted">

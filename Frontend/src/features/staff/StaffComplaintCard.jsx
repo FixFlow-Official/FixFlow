@@ -3,10 +3,12 @@ import ComplaintImageLink from "../../components/complaints/ComplaintImageLink.j
 import ExpandableComplaintCard from "../../components/complaints/ExpandableComplaintCard.jsx";
 import StaffComplaintStatusForm from "./StaffComplaintStatusForm.jsx";
 import { formatDate } from "../../utils/complaintConfig.js";
+import ComplaintAiTriage from "../../components/complaints/ComplaintAiTriage.jsx";
 
 // Staff complaint card with student evidence, resolution history, and status controls.
 export default function StaffComplaintCard({
   complaint,
+  accessToken,
   selectedStatuses,
   staffStatuses,
   setSelectedStatuses,
@@ -48,6 +50,7 @@ export default function StaffComplaintCard({
                       }`}
                     >
                       <div className="min-w-0">
+                        <ComplaintAiTriage compact triage={complaint.aiTriage && { ...complaint.aiTriage, currentCategory: complaint.category }} />
                         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                           <div>
                             <dt className="inline text-muted">Student: </dt>
@@ -126,6 +129,9 @@ export default function StaffComplaintCard({
 
                       <StaffComplaintStatusForm
                         complaintId={complaintId}
+                        complaintTitle={complaint.complaintTitle}
+                        complaintCategory={complaint.category}
+                        accessToken={accessToken}
                         isResolved={isResolved}
                         selectedStatus={selectedStatus}
                         staffStatuses={staffStatuses}

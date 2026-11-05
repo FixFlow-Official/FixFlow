@@ -3,6 +3,7 @@ import ComplaintImageLink from "../../components/complaints/ComplaintImageLink.j
 import ComplaintStatusTimeline from "../../components/complaints/ComplaintStatusTimeline.jsx";
 import ExpandableComplaintCard from "../../components/complaints/ExpandableComplaintCard.jsx";
 import { departments, formatDate } from "../../utils/complaintConfig.js";
+import ComplaintAiTriage from "../../components/complaints/ComplaintAiTriage.jsx";
 
 // Assigned complaint details and reassignment controls for the administrator queue.
 export default function AdminAssignedComplaintCard({
@@ -41,6 +42,7 @@ export default function AdminAssignedComplaintCard({
                   >
                     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
                       <div className="min-w-0">
+                        <ComplaintAiTriage compact triage={complaint.aiTriage && { ...complaint.aiTriage, currentCategory: complaint.category }} />
                         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                           <div>
                             <dt className="text-xs text-muted">Student</dt>

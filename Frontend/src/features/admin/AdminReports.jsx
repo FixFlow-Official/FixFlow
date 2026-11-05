@@ -6,9 +6,10 @@ import {
   ClipboardList,
   Clock3,
   RefreshCw,
+  Sparkles,
   X,
 } from "lucide-react";
-import { getAdminComplaintReportsRequest } from "../../services/api.js";
+import { getAdminComplaintReportsRequest, getAdminReportInsightsRequest } from "../../services/api.js";
 import { formatStatus } from "../../utils/complaintConfig.js";
 
 const periodOptions = [
@@ -142,6 +143,10 @@ export default function AdminReports({ accessToken }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [aiInsight, setAiInsight] = useState("");
+  const [aiInsightSource, setAiInsightSource] = useState("");
+  const [aiInsightError, setAiInsightError] = useState("");
+  const [aiInsightLoading, setAiInsightLoading] = useState(false);
   const requestIdRef = useRef(0);
 
   const loadReport = useCallback(async () => {
@@ -175,6 +180,33 @@ export default function AdminReports({ accessToken }) {
   const summary = report?.summary || {};
   const maxTrend = Math.max(1, ...(report?.trend || []).flatMap((item) => [item.submitted, item.resolved]));
   const periodLabel = periodOptions.find((option) => option.value === period)?.label.toLowerCase();
+  async function generateInsights() {
+    if (!report || aiInsightLoading) return;
+    setAiInsightLoading(true);
+    setAiInsightError("");
+    setAiInsight("");
+    setAiInsightSource("");
+    try {
+      const result = await getAdminReportInsightsRequest({
+        period: periodOptions.find((option) => option.value === period)?.label,
+        summary: {
+          total: summary.total ?? 0,
+          current: summary.current ?? 0,
+          resolved: summary.resolved ?? 0,
+          averageResolutionHours: summary.averageResolutionHours ?? null,
+        },
+        categories: (report.categories || []).map((entry) => ({ label: String(entry._id || "Other"), count: entry.count })),
+        statuses: (report.statuses || []).map((entry) => ({ label: formatStatus(String(entry._id || "Other")), count: entry.count })),
+        departments: (report.departments || []).map((entry) => ({ label: String(entry._id || "Unassigned"), count: entry.count })),
+      }, accessToken);
+      setAiInsight(result.insights || "No insights were returned.");
+      setAiInsightSource(result.source || "gemini");
+    } catch (requestError) {
+      setAiInsightError(requestError.message || "Could not generate report insights.");
+    } finally {
+      setAiInsightLoading(false);
+    }
+  }
   const openMetric = (title, value, description, extra) => setSelectedDetail({ title, value, description, content: extra });
   const openBreakdown = (title, entries, total) => setSelectedDetail({
     title,
@@ -190,7 +222,7 @@ export default function AdminReports({ accessToken }) {
           <h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">Complaint reports</h1>
           <p className="mt-2 text-sm leading-6 text-muted">See complaint volume, outcomes, and workload across campus.</p>
         </div>
-        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[minmax(9rem,1fr)_auto]">
+        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[minmax(9rem,1fr)_auto_auto]">
           <label htmlFor="report-period" className="sr-only">Report time period</label>
           <select
             id="report-period"
@@ -215,6 +247,10 @@ export default function AdminReports({ accessToken }) {
             <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
             Refresh
           </button>
+          <button type="button" onClick={generateInsights} disabled={!report || loading || aiInsightLoading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-3.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10">
+            {aiInsightLoading ? <RefreshCw size={15} className="animate-spin" /> : <Sparkles size={15} />}
+            {aiInsightLoading ? "Analyzing…" : "AI insights"}
+          </button>
         </div>
       </div>
 
@@ -224,6 +260,8 @@ export default function AdminReports({ accessToken }) {
           <span>{error}</span>
         </div>
       )}
+
+      {(aiInsight || aiInsightError) && <section className={`mt-5 rounded-2xl border p-4 sm:p-5 ${aiInsightError ? "border-rose-200 bg-rose-50" : "border-brand/15 bg-gradient-to-br from-brand-soft/60 to-white"}`}><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-brand shadow-sm"><Sparkles size={18} /></span><div className="min-w-0"><h2 className="text-sm font-bold text-ink">{aiInsightSource === "fallback" ? "AI insights unavailable" : "AI report insights"}</h2><p className={`mt-2 whitespace-pre-wrap text-sm leading-6 ${aiInsightError ? "text-rose-800" : "text-muted"}`}>{aiInsightError || aiInsight}</p><p className="mt-2 text-[11px] text-muted">Generated from aggregate counts only; verify insights against the charts.</p></div></div></section>}
 
       {loading && !report ? (
         <div className="mt-6 flex min-h-56 items-center justify-center gap-2 rounded-2xl border border-line bg-white text-sm text-muted">

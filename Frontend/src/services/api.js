@@ -62,6 +62,58 @@ export async function getCurrentUserRequest() {
   return data;
 }
 
+export async function sendAssistantMessageRequest(messages, accessToken) {
+  return complaintRequest(
+    "/api/assistant/chat",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    },
+    accessToken,
+  );
+}
+
+export async function suggestComplaintDescriptionRequest({ title, category }, accessToken) {
+  return complaintRequest(
+    "/api/assistant/complaint-description",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, category }),
+    },
+    accessToken,
+  );
+}
+
+export async function previewComplaintTriageRequest({ title, description, category, building }, accessToken) {
+  return complaintRequest(
+    "/api/assistant/complaint-triage",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, description, category, building }),
+    },
+    accessToken,
+  );
+}
+
+export async function suggestStatusNoteRequest({ title, category, status }, accessToken) {
+  return complaintRequest("/api/assistant/status-note", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, category, status }),
+  }, accessToken);
+}
+
+export async function getAdminReportInsightsRequest(reportData, accessToken) {
+  return complaintRequest("/api/assistant/report-insights", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(reportData),
+  }, accessToken);
+}
+
 export async function updateMyProfileRequest(
   { username, profilePicture, removeProfilePicture = false },
   accessToken,
@@ -545,7 +597,7 @@ export async function removePushSubscriptionRequest(endpoint, accessToken) {
 }
 
 export async function createComplaintRequest(
-  { title, description, category, building, room, image },
+  { title, description, category, building, room, image, triageToken },
   accessToken,
 ) {
   const formData = new FormData();
@@ -555,6 +607,7 @@ export async function createComplaintRequest(
   formData.append("building", building);
   formData.append("room", room);
   formData.append("complaintImage", image);
+  if (triageToken) formData.append("triageToken", triageToken);
 
   return complaintRequest(
     "/api/student/create-complaint",

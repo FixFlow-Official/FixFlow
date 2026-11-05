@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { LockKeyhole, Menu, X } from "lucide-react";
+import DashboardAssistant from "./DashboardAssistant.jsx";
 
 function DashboardNavigation({
   workspaceLabel,
@@ -63,6 +64,8 @@ export default function DashboardShell({
   navItems,
   activeSection,
   onSectionChange,
+  assistantNavItems = [],
+  onAssistantNavigate,
   children,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -152,6 +155,10 @@ export default function DashboardShell({
 
         {children}
       </main>
+      <DashboardAssistant
+        navItems={[...navItems, ...assistantNavItems]}
+        onNavigate={onAssistantNavigate || handleNavigate}
+      />
     </div>
   );
 }
