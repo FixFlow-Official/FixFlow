@@ -43,7 +43,7 @@ async function registerMiddleware(req, res, next) {
   return next();
 }
 
-async function logoutMiddleware(req, res, next) {
+async function verifySessionMiddleware(req, res, next) {
   const refreshToken = req.cookies.refreshToken;
 
   if (!refreshToken) {
@@ -146,4 +146,9 @@ async function verifyAccessToken(req, res, next) {
   }
 }
 
-module.exports = { registerMiddleware , logoutMiddleware , verifyAccessToken };
+module.exports = {
+  registerMiddleware,
+  verifySessionMiddleware,
+  logoutMiddleware: verifySessionMiddleware,
+  verifyAccessToken,
+};

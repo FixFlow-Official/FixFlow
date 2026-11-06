@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken");
 const test = require("node:test");
 const config = require("../src/config/config");
 const sessionModel = require("../src/models/session.model");
-const { logoutMiddleware, verifyAccessToken } = require("../src/middlewares/auth.middleware");
+const { verifySessionMiddleware, verifyAccessToken } = require("../src/middlewares/auth.middleware");
 const { loginController } = require("../src/controllers/auth.controller");
 const {
   MAX_ACTIVE_SESSIONS,
@@ -111,7 +111,7 @@ test("refresh authentication directly loads the session from the token claim", a
       await withStub(sessionModel, "find", () => {
         throw new Error("New refresh tokens must not scan the user's sessions.");
       }, async () => {
-        await logoutMiddleware(req, res, () => { nextCalled = true; });
+        await verifySessionMiddleware(req, res, () => { nextCalled = true; });
       });
     });
   } finally {
@@ -139,7 +139,7 @@ test("refresh authentication forwards database failures instead of returning una
 
   try {
     await withStub(sessionModel, "findOne", async () => { throw databaseError; }, async () => {
-      await logoutMiddleware(req, res, (error) => { forwardedError = error; });
+      await verifySessionMiddleware(req, res, (error) => { forwardedError = error; });
     });
   } finally {
     config.JWT_SECRET = oldSecret;
