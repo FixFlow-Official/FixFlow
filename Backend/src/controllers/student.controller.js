@@ -61,6 +61,7 @@ async function createComplaint(req, res) {
     description,
     category,
     building,
+    floor = "Ground Floor",
     room = "",
   } = req.body;
 
@@ -144,6 +145,7 @@ async function createComplaint(req, res) {
     ...makeComplaintSlaDates(slaPolicy, submittedAt),
     location: {
       building: building.trim(),
+      floor: (floor || "Ground Floor").trim(),
       room: room.trim(),
     },
   });

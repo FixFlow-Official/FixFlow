@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [building, setBuilding] = useState("");
+  const [floor, setFloor] = useState("Ground Floor");
   const [room, setRoom] = useState("");
   const [image, setImage] = useState(null);
 
@@ -184,6 +185,7 @@ export default function DashboardPage() {
     const cleanTitle = draft.title.trim();
     const cleanDescription = draft.description.trim();
     const cleanBuilding = draft.building.trim();
+    const cleanFloor = (draft.floor || floor || "Ground Floor").trim();
     const cleanRoom = (draft.room || "").trim();
     const complaintImage = draft.image || image;
 
@@ -210,6 +212,7 @@ export default function DashboardPage() {
           description: cleanDescription,
           category: draft.category,
           building: cleanBuilding,
+          floor: cleanFloor,
           room: cleanRoom,
           image: complaintImage,
           triageToken: draft.triageToken,
@@ -226,6 +229,7 @@ export default function DashboardPage() {
       setDescription("");
       setCategory("");
       setBuilding("");
+      setFloor("Ground Floor");
       setRoom("");
       setImage(null);
       form?.reset();
@@ -336,6 +340,8 @@ export default function DashboardPage() {
               setCategory={setCategory}
               building={building}
               setBuilding={setBuilding}
+              floor={floor}
+              setFloor={setFloor}
               room={room}
               setRoom={setRoom}
               image={image}

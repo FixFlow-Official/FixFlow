@@ -9,6 +9,7 @@ const staffRouter = require("./routes/staff.routes");
 const complaintConversationRouter = require("./routes/complaintConversation.routes");
 const notificationRouter = require("./routes/notification.routes");
 const assistantRouter = require("./routes/assistant.routes");
+const campusRouter = require("./routes/campus.routes");
 const { isCampusDirectoryReady } = require("./services/campusDirectoryMigration.service");
 const { notFoundHandler, errorHandler } = require("./middlewares/error.middleware");
 const {
@@ -67,6 +68,7 @@ app.use("/api/student", studentRouter);
 app.use("/api/complaints", complaintConversationRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/assistant", assistantRouter);
+app.use("/api/campus", campusRouter);
 
 // Keep unknown API paths and unexpected failures in the same JSON format.
 app.use("/api", notFoundHandler);

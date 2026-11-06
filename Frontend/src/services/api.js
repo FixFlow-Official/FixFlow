@@ -581,7 +581,7 @@ export async function removePushSubscriptionRequest(endpoint, accessToken) {
 }
 
 export async function createComplaintRequest(
-  { title, description, category, building, room, image, triageToken, confirmedCampusIssue },
+  { title, description, category, building, floor, room, image, triageToken, confirmedCampusIssue },
   accessToken,
 ) {
   const formData = new FormData();
@@ -589,6 +589,7 @@ export async function createComplaintRequest(
   formData.append("description", description);
   formData.append("category", category);
   formData.append("building", building);
+  if (floor) formData.append("floor", floor);
   formData.append("room", room);
   formData.append("complaintImage", image);
   if (triageToken) formData.append("triageToken", triageToken);
@@ -797,3 +798,49 @@ export async function updateComplaintStatusRequest(
     accessToken,
   );
 }
+
+// Campus Layout & Spatial GIS API
+export async function getCampusBlocksRequest(accessToken) {
+  return complaintRequest("/api/campus/blocks", { method: "GET" }, accessToken);
+}
+
+export async function getCampusHeatmapRequest(accessToken) {
+  return complaintRequest("/api/campus/heatmap", { method: "GET" }, accessToken);
+}
+
+export async function createCampusBlockRequest(blockData, accessToken) {
+  return complaintRequest(
+    "/api/campus/blocks",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(blockData),
+    },
+    accessToken,
+  );
+}
+
+export async function updateCampusBlockRequest(id, blockData, accessToken) {
+  return complaintRequest(
+    `/api/campus/blocks/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(blockData),
+    },
+    accessToken,
+  );
+}
+
+export async function deleteCampusBlockRequest(id, accessToken) {
+  return complaintRequest(
+    `/api/campus/blocks/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    accessToken,
+  );
+}
+
+export async function initKarnalPresetRequest(accessToken) {
+  return complaintRequest("/api/campus/preset-karnal", { method: "POST" }, accessToken);
+}
+

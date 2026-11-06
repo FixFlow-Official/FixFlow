@@ -105,6 +105,11 @@ const complaintSchema = new mongoose.Schema(
         required: [true, "Building is required"],
         trim: true,
       },
+      floor: {
+        type: String,
+        trim: true,
+        default: "Ground Floor",
+      },
       room: {
         type: String,
         trim: true,

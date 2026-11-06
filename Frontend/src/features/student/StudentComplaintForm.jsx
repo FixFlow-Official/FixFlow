@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, FileImage, LoaderCircle, Plus, Send, Sparkles, Upload } from "lucide-react";
 import ComplaintAiTriage from "../../components/complaints/ComplaintAiTriage.jsx";
-import { previewComplaintTriageRequest, suggestComplaintDescriptionRequest } from "../../services/api.js";
+import {
+  getCampusBlocksRequest,
+  previewComplaintTriageRequest,
+  suggestComplaintDescriptionRequest,
+} from "../../services/api.js";
 
 // Student complaint submission UI. State, validation, and API requests stay in DashboardPage.
 export default function StudentComplaintForm({
@@ -13,6 +17,8 @@ export default function StudentComplaintForm({
   setCategory,
   building,
   setBuilding,
+  floor = "Ground Floor",
+  setFloor,
   room,
   setRoom,
   image,
@@ -34,6 +40,26 @@ export default function StudentComplaintForm({
   const [triageLoading, setTriageLoading] = useState(false);
   const [triageError, setTriageError] = useState("");
   const triageRequestId = useRef(0);
+  const [campusBlocks, setCampusBlocks] = useState([]);
+  const [customBuilding, setCustomBuilding] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function loadBlocks() {
+      try {
+        const res = await getCampusBlocksRequest(accessToken);
+        if (active && res.blocks?.length) {
+          setCampusBlocks(res.blocks);
+        }
+      } catch {
+        // Fallback to text input if offline or API unavailable
+      }
+    }
+    loadBlocks();
+    return () => {
+      active = false;
+    };
+  }, [accessToken]);
 
   useEffect(() => {
     const requestId = ++triageRequestId.current;
@@ -85,6 +111,16 @@ export default function StudentComplaintForm({
       setDraftLoading(false);
     }
   }
+
+  const selectedBlockObj = campusBlocks.find(
+    (b) => b.name === building || b.shortName === building || b.code === building,
+  );
+  const availableFloors = selectedBlockObj?.floors?.length
+    ? selectedBlockObj.floors
+    : [{ name: "Ground Floor", rooms: [] }];
+  const selectedFloorObj =
+    availableFloors.find((f) => f.name === floor) || availableFloors[0];
+  const suggestedRooms = selectedFloorObj?.rooms || [];
 
   return (
             <section className="w-full rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_18px_55px_-36px_rgba(24,35,45,0.38)] ring-1 ring-line/70 sm:rounded-[1.75rem] sm:p-6 lg:p-8">
@@ -197,40 +233,121 @@ export default function StudentComplaintForm({
                   </p>
                 </div>
 
-                <div className="min-w-0">
-                  <label
-                    htmlFor="complaint-building"
-                    className="mb-2 block text-sm font-semibold"
-                  >
-                    Building
-                  </label>
-                  <input
-                    id="complaint-building"
-                    value={building}
-                    onChange={(event) => { setBuilding(event.target.value); invalidateTriagePreview(); }}
-                    maxLength={100}
-                    required
-                    placeholder="For example, Science Block"
-                    className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
-                  />
-                </div>
+                {/* Campus Building, Floor & Room Selection */}
+                <div className="min-w-0 sm:col-span-2 grid gap-3 sm:grid-cols-3">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex items-center justify-between">
+                      <label
+                        htmlFor="complaint-building"
+                        className="block text-sm font-semibold"
+                      >
+                        Building
+                      </label>
+                      {campusBlocks.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomBuilding(!customBuilding);
+                            if (customBuilding) setBuilding("");
+                          }}
+                          className="text-[11px] font-semibold text-brand hover:underline"
+                        >
+                          {customBuilding ? "Choose from list" : "Other"}
+                        </button>
+                      )}
+                    </div>
 
-                <div className="min-w-0">
-                  <label
-                    htmlFor="complaint-room"
-                    className="mb-2 block text-sm font-semibold"
-                  >
-                    Room number{" "}
-                    <span className="font-normal text-muted">(optional)</span>
-                  </label>
-                  <input
-                    id="complaint-room"
-                    value={room}
-                    onChange={(event) => setRoom(event.target.value)}
-                    maxLength={30}
-                    placeholder="For example, Room 204"
-                    className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
-                  />
+                    {!customBuilding && campusBlocks.length > 0 ? (
+                      <select
+                        id="complaint-building"
+                        value={building}
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          if (val === "__custom__") {
+                            setCustomBuilding(true);
+                            setBuilding("");
+                          } else {
+                            setBuilding(val);
+                            const found = campusBlocks.find((b) => b.name === val);
+                            if (found?.floors?.length && setFloor) {
+                              setFloor(found.floors[0].name);
+                            }
+                          }
+                          invalidateTriagePreview();
+                        }}
+                        required
+                        className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+                      >
+                        <option value="">Select campus building</option>
+                        {campusBlocks.map((b) => (
+                          <option key={b._id} value={b.name}>
+                            {b.name}
+                          </option>
+                        ))}
+                        <option value="__custom__">+ Other / Not listed</option>
+                      </select>
+                    ) : (
+                      <input
+                        id="complaint-building"
+                        value={building}
+                        onChange={(event) => {
+                          setBuilding(event.target.value);
+                          invalidateTriagePreview();
+                        }}
+                        maxLength={100}
+                        required
+                        placeholder="e.g. Commerce Block or Canteen"
+                        className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+                      />
+                    )}
+                  </div>
+
+                  <div className="min-w-0">
+                    <label
+                      htmlFor="complaint-floor"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Floor
+                    </label>
+                    <select
+                      id="complaint-floor"
+                      value={floor}
+                      onChange={(event) => {
+                        if (setFloor) setFloor(event.target.value);
+                      }}
+                      className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+                    >
+                      {availableFloors.map((f) => (
+                        <option key={f.name} value={f.name}>
+                          {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="min-w-0">
+                    <label
+                      htmlFor="complaint-room"
+                      className="mb-2 block text-sm font-semibold"
+                    >
+                      Room number{" "}
+                      <span className="font-normal text-muted">(optional)</span>
+                    </label>
+                    <input
+                      id="complaint-room"
+                      value={room}
+                      onChange={(event) => setRoom(event.target.value)}
+                      maxLength={30}
+                      list="campus-rooms-list"
+                      placeholder="e.g. Room 204 or Lab A"
+                      className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+                    />
+                    <datalist id="campus-rooms-list">
+                      {suggestedRooms.map((r) => (
+                        <option key={r} value={r} />
+                      ))}
+                    </datalist>
+                  </div>
                 </div>
 
                 <div className="min-w-0 sm:col-span-2">
