@@ -131,3 +131,46 @@ test("student complaint history searches and paginates the selected view", async
     assert.equal(response.payload.pagination.total, 13);
   });
 });
+
+test("admin complaint search queries denormalized userSnapshot directly", async () => {
+  await withComplaintStubs({ documents: [{ _id: "complaint-admin-search" }], total: 1 }, async (getCaptured) => {
+    const response = makeResponse();
+    await getAdminAssigned(
+      {
+        auth: { role: "admin" },
+        query: { view: "all", search: "Rajesh" },
+      },
+      response,
+    );
+
+    const { capturedFilter } = getCaptured();
+    assert.equal(response.statusCode, 200);
+    assert.ok(Array.isArray(capturedFilter.$or));
+    const orFields = capturedFilter.$or.map((clause) => Object.keys(clause)[0]);
+    assert.ok(orFields.includes("userSnapshot.name"));
+    assert.ok(orFields.includes("userSnapshot.campusId"));
+    // Verifies that studentModel.find in-memory $in query is not present
+    assert.ok(!orFields.includes("user"));
+  });
+});
+
+test("staff complaint search queries denormalized userSnapshot directly", async () => {
+  await withComplaintStubs({ documents: [{ _id: "complaint-staff-search" }], total: 1 }, async (getCaptured) => {
+    const response = makeResponse();
+    await getStaffAssigned(
+      {
+        auth: { id: "507f191e810c19729de860ea", role: "staff" },
+        query: { view: "all", search: "Rajesh" },
+      },
+      response,
+    );
+
+    const { capturedFilter } = getCaptured();
+    assert.equal(response.statusCode, 200);
+    assert.ok(Array.isArray(capturedFilter.$or));
+    const orFields = capturedFilter.$or.map((clause) => Object.keys(clause)[0]);
+    assert.ok(orFields.includes("userSnapshot.name"));
+    assert.ok(orFields.includes("userSnapshot.campusId"));
+    assert.ok(!orFields.includes("user"));
+  });
+});

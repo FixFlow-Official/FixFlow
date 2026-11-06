@@ -1,7 +1,9 @@
+const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const slaPolicyModel = require("../models/slaPolicy.model");
 const slaEventModel = require("../models/slaEvent.model");
 const adminModel = require("../models/admin.model");
+const studentModel = require("../models/student.model");
 const { createNotifications, complaintNotification } = require("./notification.service");
 
 const SLA_CATEGORIES = ["Electrical", "Plumbing", "Cleaning", "Internet", "Furniture", "Other"];
@@ -82,6 +84,55 @@ async function backfillComplaintSlaDates() {
       operations = [];
     }
   }
+  if (operations.length) await complaintModel.bulkWrite(operations, { ordered: false });
+}
+
+async function backfillComplaintUserSnapshots() {
+  const cursor = complaintModel.find({
+    userRef: "student",
+    $or: [
+      { userSnapshot: null },
+      { "userSnapshot.name": null },
+      { "userSnapshot.name": "" },
+    ],
+  }).select("_id user").lean().cursor();
+
+  const studentCache = new Map();
+  let operations = [];
+
+  for await (const complaint of cursor) {
+    if (!complaint.user) continue;
+    const userId = String(complaint.user);
+    let student = studentCache.get(userId);
+    if (student === undefined) {
+      student = await studentModel.findById(complaint.user).select("username rollno email role").lean();
+      studentCache.set(userId, student);
+    }
+
+    if (student) {
+      operations.push({
+        updateOne: {
+          filter: { _id: complaint._id },
+          update: {
+            $set: {
+              userSnapshot: {
+                name: student.username,
+                campusId: String(student.rollno ?? ""),
+                email: student.email,
+                role: "student",
+              },
+            },
+          },
+        },
+      });
+    }
+
+    if (operations.length === 500) {
+      await complaintModel.bulkWrite(operations, { ordered: false });
+      operations = [];
+    }
+  }
+
   if (operations.length) await complaintModel.bulkWrite(operations, { ordered: false });
 }
 
@@ -223,17 +274,128 @@ async function processSlaDeadlines({ now = new Date() } = {}) {
   return { scanned: complaints.length, newEvents };
 }
 
-function startSlaMonitor({ intervalMs = SCAN_INTERVAL_MS } = {}) {
+const LOCK_COLLECTION_NAME = "cluster_locks";
+const SLA_LOCK_KEY = "sla_monitor_lock";
+const DEFAULT_LOCK_TTL_MS = 4 * 60 * 1000;
+
+let lockIndexPromise = null;
+
+async function ensureLockIndexes(database) {
+  if (!database) return null;
+
+  if (!lockIndexPromise) {
+    const collection = database.collection(LOCK_COLLECTION_NAME);
+    lockIndexPromise = Promise.all([
+      collection.createIndex(
+        { lockKey: 1 },
+        { unique: true, name: "cluster_lock_key" },
+      ),
+      collection.createIndex(
+        { expiresAt: 1 },
+        { expireAfterSeconds: 0, name: "cluster_lock_ttl" },
+      ),
+    ]).catch((err) => {
+      lockIndexPromise = null;
+      throw err;
+    });
+  }
+
+  await lockIndexPromise;
+  return database.collection(LOCK_COLLECTION_NAME);
+}
+
+async function acquireClusterLock(lockKey = SLA_LOCK_KEY, ttlMs = DEFAULT_LOCK_TTL_MS) {
+  try {
+    const database = mongoose.connection.db;
+    if (!database || mongoose.connection.readyState !== 1) {
+      return null;
+    }
+
+    const collection = await ensureLockIndexes(database);
+    if (!collection) return null;
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ttlMs);
+    const workerId = `${process.pid}-${Math.random().toString(36).slice(2, 9)}`;
+
+    const result = await collection.findOneAndUpdate(
+      {
+        lockKey,
+        $or: [
+          { expiresAt: { $lte: now } },
+          { expiresAt: { $exists: false } },
+        ],
+      },
+      {
+        $set: {
+          lockKey,
+          acquiredAt: now,
+          expiresAt,
+          acquiredBy: workerId,
+        },
+      },
+      {
+        upsert: true,
+        returnDocument: "after",
+      },
+    );
+
+    const doc = result?.value || result;
+    if (doc && doc.acquiredBy === workerId) {
+      return { lockKey, workerId };
+    }
+    return null;
+  } catch (error) {
+    if (error?.code === 11000) {
+      return null;
+    }
+    console.warn("Could not acquire cluster lock:", error.message);
+    return null;
+  }
+}
+
+async function releaseClusterLock(lock) {
+  if (!lock?.lockKey || !lock?.workerId) return false;
+  try {
+    const database = mongoose.connection.db;
+    if (!database || mongoose.connection.readyState !== 1) return false;
+
+    const collection = database.collection(LOCK_COLLECTION_NAME);
+    const result = await collection.deleteOne({
+      lockKey: lock.lockKey,
+      acquiredBy: lock.workerId,
+    });
+    return (result?.deletedCount || 0) > 0;
+  } catch (error) {
+    console.warn("Could not release cluster lock:", error.message);
+    return false;
+  }
+}
+
+function startSlaMonitor({
+  intervalMs = SCAN_INTERVAL_MS,
+  lockTtlMs = DEFAULT_LOCK_TTL_MS,
+  acquireLock = acquireClusterLock,
+  releaseLock = releaseClusterLock,
+} = {}) {
   let running = false;
   const run = async () => {
     if (running) return;
     running = true;
+    let lock = null;
     try {
+      lock = await acquireLock(SLA_LOCK_KEY, lockTtlMs);
+      if (!lock) {
+        return;
+      }
       const result = await processSlaDeadlines();
       if (result.newEvents) console.info("Complaint SLA monitor recorded events", result);
     } catch (error) {
       console.error("Complaint SLA monitor failed:", error.message);
     } finally {
+      if (lock) {
+        await releaseLock(lock);
+      }
       running = false;
     }
   };
@@ -243,16 +405,22 @@ function startSlaMonitor({ intervalMs = SCAN_INTERVAL_MS } = {}) {
   return () => clearInterval(timer);
 }
 
+const checkComplaintSlaTargets = processSlaDeadlines;
+
 module.exports = {
   ACTIVE_STATUSES,
   DEFAULT_POLICIES,
   SLA_CATEGORIES,
+  acquireClusterLock,
   backfillComplaintSlaDates,
+  backfillComplaintUserSnapshots,
+  checkComplaintSlaTargets,
   ensureSlaPolicies,
   getSlaEventsForComplaint,
   getSlaPolicy,
   makeComplaintSlaDates,
   processSlaDeadlines,
   recalculateActiveComplaintDeadlines,
+  releaseClusterLock,
   startSlaMonitor,
 };

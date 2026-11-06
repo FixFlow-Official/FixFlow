@@ -126,9 +126,16 @@ async function createComplaint(req, res) {
   }
 
   const slaPolicy = await getSlaPolicy(category);
+  const userSnapshot = {
+    name: user.username,
+    campusId: String(user.rollno ?? user.staffId ?? user.adminId ?? ""),
+    email: user.email,
+    role: user.role,
+  };
   const complaint = await complaintModel.create({
     user: user._id,
     userRef: user.role,
+    userSnapshot,
     complaintPictureUrl: result.url,
     complaintTitle: title.trim(),
     complaintDescription: description.trim(),

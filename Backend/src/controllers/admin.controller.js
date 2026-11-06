@@ -10,7 +10,6 @@ const campusDirectoryModel = require("../models/campusDirectory.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
 const {
   escapeRegex,
-  findStudentIdsBySearch,
   getPageMetadata,
   getPageOptions,
   makeSearchRegex,
@@ -33,11 +32,10 @@ function getAssignedViewStatuses(view) {
   return undefined;
 }
 
-async function buildComplaintSearchFilter(search) {
+function buildComplaintSearchFilter(search) {
   const searchRegex = makeSearchRegex(search);
   if (!searchRegex) return {};
 
-  const studentIds = await findStudentIdsBySearch(search, studentModel);
   return {
     $or: [
       { complaintTitle: searchRegex },
@@ -45,10 +43,9 @@ async function buildComplaintSearchFilter(search) {
       { category: searchRegex },
       { "location.building": searchRegex },
       { "location.room": searchRegex },
-      { "assignedDepartment": searchRegex },
+      { assignedDepartment: searchRegex },
       { "userSnapshot.name": searchRegex },
       { "userSnapshot.campusId": searchRegex },
-      { user: { $in: studentIds } },
     ],
   };
 }

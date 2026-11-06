@@ -223,6 +223,8 @@ complaintSchema.index({
 complaintSchema.index({ status: 1, slaResponseDueAt: 1, slaFirstRespondedAt: 1 });
 complaintSchema.index({ status: 1, slaResolutionDueAt: 1 });
 complaintSchema.index({ "aiTriage.priority": 1, status: 1, createdAt: -1 });
+complaintSchema.index({ "userSnapshot.name": 1 });
+complaintSchema.index({ "userSnapshot.campusId": 1 });
 
 const complaintModel = mongoose.model("complaint", complaintSchema);
 
