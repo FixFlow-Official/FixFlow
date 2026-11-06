@@ -7,6 +7,7 @@ const adminModel = require("../models/admin.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
 const { getSlaPolicy, makeComplaintSlaDates } = require("../services/sla.service");
 const { triageComplaint, fingerprintComplaint } = require("../services/complaintTriage.service");
+const { findDuplicates } = require("../services/duplicateDetection.service");
 const {
   getPageMetadata,
   getPageOptions,
@@ -26,6 +27,10 @@ const currentComplaintStatuses = [
   "Closed",
   "Withdrawn",
 ];
+
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
  /**
  *
@@ -116,6 +121,48 @@ async function createComplaint(req, res) {
   if (aiTriage.reviewSignal === "check_relevance" && !aiTriage.safetyConcern && req.body.confirmedCampusIssue !== "true") {
     return res.status(422).json({
       message: "The AI could not identify a clear campus issue in this draft. Add specific details or confirm that this is an actual campus issue so staff can review it.",
+    });
+  }
+
+  // AI & Semantic Duplicate Prevention Check
+  const activeCandidates = await complaintModel
+    .find({
+      status: { $in: activeComplaintStatuses },
+      "location.building": exactBuilding,
+    })
+    .select("_id complaintTitle complaintDescription category location upvoteCount upvotes user status")
+    .lean();
+
+  const duplicateCheck = await findDuplicates(
+    {
+      title: title.trim(),
+      description: description.trim(),
+      category,
+      building: building.trim(),
+      floor,
+      room,
+    },
+    activeCandidates,
+  );
+
+  if (duplicateCheck.isDuplicate && req.body.confirmDistinctIssue !== "true") {
+    const top = duplicateCheck.topDuplicate;
+    const isOwner = String(top.user) === String(user._id);
+    return res.status(409).json({
+      message: isOwner
+        ? `You already have an active complaint for this issue in this location ("${top.complaintTitle}").`
+        : `A similar active complaint is already open in this location ("${top.complaintTitle}"). Please upvote it (+1 Me Too) instead of creating a duplicate report.`,
+      isDuplicate: true,
+      duplicateComplaint: {
+        _id: top._id,
+        title: top.complaintTitle,
+        description: top.complaintDescription,
+        category: top.category,
+        location: top.location,
+        upvoteCount: top.upvoteCount || 0,
+        isOwner,
+      },
+      reason: duplicateCheck.topReason,
     });
   }
 
@@ -269,4 +316,141 @@ async function getComplaint(req, res) {
   });
 }
 
-module.exports = { createComplaint , getComplaint};
+// Find existing open complaints in the same location to prevent duplicates
+async function getSimilarComplaints(req, res) {
+  const { building, floor, room, category, title, description } = req.query;
+
+  if (!building || typeof building !== "string" || !building.trim()) {
+    return res.status(200).json({ complaints: [], isDuplicate: false, topDuplicate: null });
+  }
+
+  const exactBuilding = new RegExp(`^${escapeRegex(building.trim())}$`, "i");
+
+  const query = {
+    status: { $in: activeComplaintStatuses },
+    "location.building": exactBuilding,
+  };
+
+  const results = await complaintModel
+    .find(query)
+    .select(
+      "_id complaintTitle complaintDescription category location status upvotes upvoteCount createdAt complaintPictureUrl user",
+    )
+    .sort({ upvoteCount: -1, createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  const userId = req.auth?.id ? String(req.auth.id) : null;
+
+  const formatted = results.map((c) => {
+    const hasUpvoted = userId
+      ? (c.upvotes || []).some((u) => String(u.user) === userId)
+      : false;
+    const isOwner = userId ? String(c.user) === userId : false;
+
+    return {
+      _id: c._id,
+      title: c.complaintTitle,
+      description: c.complaintDescription,
+      category: c.category,
+      location: c.location,
+      status: c.status,
+      upvoteCount: c.upvoteCount || 0,
+      hasUpvoted,
+      isOwner,
+      createdAt: c.createdAt,
+      complaintPictureUrl: c.complaintPictureUrl,
+    };
+  });
+
+  const duplicateCheck = await findDuplicates(
+    {
+      title: title || "",
+      description: description || "",
+      category: category || "",
+      building: building.trim(),
+      floor: floor || "",
+      room: room || "",
+    },
+    results,
+  );
+
+  const hasContentQuery = Boolean(title?.trim() || category?.trim());
+
+  let responseComplaints = formatted;
+  if (hasContentQuery) {
+    const duplicateIds = new Set(
+      (duplicateCheck.duplicates || []).map((d) => String(d._id)),
+    );
+    if (duplicateCheck.topDuplicate) {
+      duplicateIds.add(String(duplicateCheck.topDuplicate._id));
+    }
+    responseComplaints = formatted.filter((c) => duplicateIds.has(String(c._id)));
+  }
+
+  const topDuplicate = duplicateCheck.topDuplicate
+    ? formatted.find((c) => String(c._id) === String(duplicateCheck.topDuplicate._id)) || null
+    : null;
+
+  return res.status(200).json({
+    complaints: responseComplaints,
+    isDuplicate: duplicateCheck.isDuplicate,
+    topDuplicate,
+    topReason: duplicateCheck.topReason || null,
+  });
+}
+
+// Toggle "Me Too" upvote for an existing active complaint
+async function toggleUpvoteComplaint(req, res) {
+  if (!req.auth || req.auth.role !== "student") {
+    return res.status(403).json({ message: "Only students can upvote complaints." });
+  }
+
+  const { complaintId } = req.params;
+  const complaint = await complaintModel.findById(complaintId);
+
+  if (!complaint) {
+    return res.status(404).json({ message: "Complaint not found." });
+  }
+
+  const terminalStatuses = ["Resolved", "Closed", "Rejected", "Withdrawn"];
+  if (terminalStatuses.includes(complaint.status)) {
+    return res.status(400).json({ message: "Cannot upvote a closed or resolved complaint." });
+  }
+
+  const userId = String(req.auth.id);
+  if (String(complaint.user) === userId) {
+    return res.status(400).json({ message: "You are the creator of this complaint." });
+  }
+
+  const existingUpvote = (complaint.upvotes || []).find((u) => String(u.user) === userId);
+
+  if (existingUpvote) {
+    complaint.upvotes = complaint.upvotes.filter((u) => String(u.user) !== userId);
+    complaint.upvoteCount = Math.max(0, (complaint.upvoteCount || 1) - 1);
+    await complaint.save();
+
+    return res.status(200).json({
+      message: "Upvote removed.",
+      upvoted: false,
+      upvoteCount: complaint.upvoteCount,
+    });
+  }
+
+  complaint.upvotes.push({ user: req.auth.id, upvotedAt: new Date() });
+  complaint.upvoteCount = (complaint.upvoteCount || 0) + 1;
+  await complaint.save();
+
+  return res.status(200).json({
+    message: "Complaint upvoted (+1 Me Too). You will be notified when it is resolved.",
+    upvoted: true,
+    upvoteCount: complaint.upvoteCount,
+  });
+}
+
+module.exports = {
+  createComplaint,
+  getComplaint,
+  getSimilarComplaints,
+  toggleUpvoteComplaint,
+};

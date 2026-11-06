@@ -267,7 +267,7 @@ async function updateComplaintStatus(req, res) {
     await complaint.save();
 
     const statusLabel = status.replaceAll("_", " ");
-    await createNotifications([
+    const notifications = [
       complaintNotification({
         recipient: complaint.user,
         recipientRef: "student",
@@ -276,7 +276,27 @@ async function updateComplaintStatus(req, res) {
         title: "Complaint status updated",
         message: `Your complaint is now ${statusLabel}.${trimmedNote ? ` ${trimmedNote}` : ""}`.slice(0, 300),
       }),
-    ]);
+    ];
+
+    // Also notify all students who upvoted (+1 Me Too) this issue
+    if (complaint.upvotes?.length) {
+      complaint.upvotes.forEach((upvote) => {
+        if (String(upvote.user) !== String(complaint.user)) {
+          notifications.push(
+            complaintNotification({
+              recipient: upvote.user,
+              recipientRef: "student",
+              complaint,
+              type: "status",
+              title: `Upvoted issue is now ${statusLabel}`,
+              message: `The complaint you upvoted ("${complaint.complaintTitle}") is now ${statusLabel}.${trimmedNote ? ` ${trimmedNote}` : ""}`.slice(0, 300),
+            }),
+          );
+        }
+      });
+    }
+
+    await createNotifications(notifications);
 
     return res.status(200).json({
       message: "Complaint status updated.",

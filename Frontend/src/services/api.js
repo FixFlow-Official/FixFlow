@@ -3,12 +3,17 @@
  * to existing page-level error banners.
  */
 export class ApiRequestError extends Error {
-  constructor(message, { status = null, requestId = null, errors = [] } = {}) {
+  constructor(
+    message,
+    { status = null, requestId = null, errors = [], isDuplicate = false, duplicateComplaint = null } = {},
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.requestId = requestId;
     this.errors = errors;
+    this.isDuplicate = isDuplicate;
+    this.duplicateComplaint = duplicateComplaint;
   }
 }
 
@@ -477,6 +482,8 @@ async function complaintRequest(url, options, accessToken) {
       status: response.status,
       requestId,
       errors: validationErrors,
+      isDuplicate: Boolean(data.isDuplicate),
+      duplicateComplaint: data.duplicateComplaint || null,
     });
   }
 
@@ -581,7 +588,18 @@ export async function removePushSubscriptionRequest(endpoint, accessToken) {
 }
 
 export async function createComplaintRequest(
-  { title, description, category, building, floor, room, image, triageToken, confirmedCampusIssue },
+  {
+    title,
+    description,
+    category,
+    building,
+    floor,
+    room,
+    image,
+    triageToken,
+    confirmedCampusIssue,
+    confirmDistinctIssue,
+  },
   accessToken,
 ) {
   const formData = new FormData();
@@ -594,6 +612,7 @@ export async function createComplaintRequest(
   formData.append("complaintImage", image);
   if (triageToken) formData.append("triageToken", triageToken);
   if (confirmedCampusIssue) formData.append("confirmedCampusIssue", "true");
+  if (confirmDistinctIssue) formData.append("confirmDistinctIssue", "true");
 
   return complaintRequest(
     "/api/student/create-complaint",
@@ -843,4 +862,33 @@ export async function deleteCampusBlockRequest(id, accessToken) {
 export async function initKarnalPresetRequest(accessToken) {
   return complaintRequest("/api/campus/preset-karnal", { method: "POST" }, accessToken);
 }
+
+// Student Duplicate Detection & "Me Too" Upvoting API
+export async function getSimilarComplaintsRequest(
+  { building, floor, room, category, title, description } = {},
+  accessToken,
+) {
+  const query = new URLSearchParams();
+  if (building) query.set("building", building);
+  if (floor) query.set("floor", floor);
+  if (room) query.set("room", room);
+  if (category) query.set("category", category);
+  if (title) query.set("title", title);
+  if (description) query.set("description", description);
+
+  return complaintRequest(
+    `/api/student/similar-complaints?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function upvoteComplaintRequest(complaintId, accessToken) {
+  return complaintRequest(
+    `/api/student/complaints/${encodeURIComponent(complaintId)}/upvote`,
+    { method: "POST" },
+    accessToken,
+  );
+}
+
 

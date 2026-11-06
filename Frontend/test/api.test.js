@@ -5,6 +5,8 @@ import {
   addComplaintCommentRequest,
   getComplaintDetailsRequest,
   getComplaintsRequest,
+  getSimilarComplaintsRequest,
+  upvoteComplaintRequest,
 } from "../src/services/api.js";
 
 function jsonResponse(payload, status = 200, headers = {}) {
@@ -155,3 +157,46 @@ test("complaint requests report offline connection failures with a readable mess
     /Could not reach FixFlow\. Check that the backend is running\./,
   );
 });
+
+test("getSimilarComplaintsRequest serializes query parameters correctly", async (t) => {
+  let request;
+  mockFetch(t, async (url, options) => {
+    request = { url, options };
+    return jsonResponse({ complaints: [] });
+  });
+
+  const result = await getSimilarComplaintsRequest(
+    {
+      building: "PG Block",
+      floor: "2nd Floor",
+      room: "Room 204",
+      category: "Plumbing",
+    },
+    "token-xyz",
+  );
+
+  assert.deepEqual(result, { complaints: [] });
+  assert.equal(
+    request.url,
+    "/api/student/similar-complaints?building=PG+Block&floor=2nd+Floor&room=Room+204&category=Plumbing",
+  );
+  assert.equal(request.options.method, "GET");
+  assert.equal(request.options.headers.Authorization, "Bearer token-xyz");
+});
+
+test("upvoteComplaintRequest posts to student upvote endpoint", async (t) => {
+  let request;
+  mockFetch(t, async (url, options) => {
+    request = { url, options };
+    return jsonResponse({ message: "Upvoted", upvoted: true, upvoteCount: 5 });
+  });
+
+  const result = await upvoteComplaintRequest("complaint-999", "token-xyz");
+
+  assert.equal(result.upvoted, true);
+  assert.equal(result.upvoteCount, 5);
+  assert.equal(request.url, "/api/student/complaints/complaint-999/upvote");
+  assert.equal(request.options.method, "POST");
+  assert.equal(request.options.headers.Authorization, "Bearer token-xyz");
+});
+

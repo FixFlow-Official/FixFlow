@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Download, X } from "lucide-react";
+import { Download, ThumbsUp, X } from "lucide-react";
 import ComplaintStatusBadge from "./ComplaintStatusBadge.jsx";
 import ComplaintConversation from "./ComplaintConversation.jsx";
 
@@ -114,6 +114,16 @@ export default function ExpandableComplaintCard({
                   </span>
 
                   <ComplaintStatusBadge status={status} />
+                  {complaint.upvoteCount > 0 && (
+                    <span
+                      title={`${complaint.upvoteCount} student(s) upvoted this complaint`}
+                      className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800"
+                    >
+                      <ThumbsUp size={10} className="fill-emerald-600" />
+                      <span>{complaint.upvoteCount}</span>
+                      <span className="hidden sm:inline">Me Too</span>
+                    </span>
+                  )}
                   {complaint.aiTriage?.priority && (
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${complaint.aiTriage.priority === "P1" ? "bg-rose-100 text-rose-800" : complaint.aiTriage.priority === "P2" ? "bg-amber-100 text-amber-900" : complaint.aiTriage.priority === "P3" ? "bg-sky-100 text-sky-800" : "bg-stone-100 text-stone-700"}`}>
                       AI {complaint.aiTriage.priority} · {complaint.aiTriage.urgency}
@@ -242,6 +252,23 @@ export default function ExpandableComplaintCard({
                       className="max-h-[420px] w-full object-contain sm:max-h-[240px]"
                     />
                   </a>
+                )}
+
+                {/* Me Too Upvote Community Highlight */}
+                {complaint.upvoteCount > 0 && (
+                  <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-teal-50/50 p-3.5 text-xs text-emerald-950">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                      <ThumbsUp size={15} className="fill-white" />
+                    </span>
+                    <div className="min-w-0 flex-1 leading-5">
+                      <p className="font-bold text-emerald-900 sm:text-sm">
+                        {complaint.upvoteCount} {complaint.upvoteCount === 1 ? "student has" : "students have"} backed this issue with &ldquo;Me Too&rdquo;
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-emerald-800/80">
+                        All upvoting students receive automatic status alerts when campus staff update or resolve this complaint.
+                      </p>
+                    </div>
+                  </div>
                 )}
 
                 {/* Complaint description and summary */}

@@ -36,4 +36,16 @@ router.post(
 
 router.get("/get-complaint", verifyAccessToken, studentController.getComplaint);
 
+/**
+ * @route api/student/similar-complaints
+ * @description search open complaints in the same location to avoid duplicates
+ */
+router.get("/similar-complaints", verifyAccessToken, studentController.getSimilarComplaints);
+
+/**
+ * @route api/student/complaints/:complaintId/upvote
+ * @description toggle "Me Too" upvote for an existing complaint
+ */
+router.post("/complaints/:complaintId/upvote", verifyAccessToken, studentController.toggleUpvoteComplaint);
+
 module.exports = router;

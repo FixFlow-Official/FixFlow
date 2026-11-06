@@ -202,6 +202,24 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    upvotes: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "student",
+          required: true,
+        },
+        upvotedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    upvoteCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   {
     timestamps: true,
@@ -230,6 +248,8 @@ complaintSchema.index({ status: 1, slaResolutionDueAt: 1 });
 complaintSchema.index({ "aiTriage.priority": 1, status: 1, createdAt: -1 });
 complaintSchema.index({ "userSnapshot.name": 1 });
 complaintSchema.index({ "userSnapshot.campusId": 1 });
+complaintSchema.index({ "location.building": 1, "location.floor": 1, status: 1 });
+complaintSchema.index({ upvoteCount: -1 });
 
 const complaintModel = mongoose.model("complaint", complaintSchema);
 

@@ -43,9 +43,6 @@ export default function DashboardPage() {
   const [complaintError, setComplaintError] = useState("");
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [submissionTriage, setSubmissionTriage] = useState(null);
-  const [triagePreview, setTriagePreview] = useState(null);
-  const [confirmedCampusIssue, setConfirmedCampusIssue] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [complaintSearch, setComplaintSearch] = useState("");
@@ -73,12 +70,11 @@ export default function DashboardPage() {
     return () => window.clearTimeout(timeoutId);
   }, [complaintSearch]);
 
-  // Keep the submission confirmation and its one-time triage summary brief.
+  // Keep the submission confirmation message visible for a short time.
   useEffect(() => {
     if (!successMessage) return undefined;
     const timeoutId = window.setTimeout(() => {
       setSuccessMessage("");
-      setSubmissionTriage(null);
     }, 6000);
     return () => window.clearTimeout(timeoutId);
   }, [successMessage]);
@@ -158,7 +154,6 @@ export default function DashboardPage() {
     const selectedImage = event.target.files?.[0] ?? null;
     setFormError("");
     setSuccessMessage("");
-    setSubmissionTriage(null);
 
     if (
       selectedImage &&
@@ -217,14 +212,12 @@ export default function DashboardPage() {
           image: complaintImage,
           triageToken: draft.triageToken,
           confirmedCampusIssue: draft.confirmedCampusIssue,
+          confirmDistinctIssue: draft.confirmDistinctIssue,
         },
         accessToken,
       );
 
       setSuccessMessage(result.message || "Complaint submitted successfully.");
-      setSubmissionTriage(result.complaint?.aiTriage || null);
-      setTriagePreview(null);
-      setConfirmedCampusIssue(false);
       setTitle("");
       setDescription("");
       setCategory("");
@@ -259,17 +252,18 @@ export default function DashboardPage() {
     return true;
   }
 
-  async function handleSubmit(event, confirmedCampusIssue = false) {
+  async function handleSubmit(event, confirmedCampusIssue = true, confirmDistinctIssue = false) {
     event.preventDefault();
     await submitComplaint({
       title,
       description,
       category,
       building,
+      floor,
       room,
       image,
-      triageToken: triagePreview?.token,
       confirmedCampusIssue,
+      confirmDistinctIssue,
     }, event.currentTarget);
   }
 
@@ -348,11 +342,6 @@ export default function DashboardPage() {
               handleImageChange={handleImageChange}
               formError={formError}
               successMessage={successMessage}
-              submissionTriage={submissionTriage}
-              confirmedCampusIssue={confirmedCampusIssue}
-              setConfirmedCampusIssue={setConfirmedCampusIssue}
-              triagePreview={triagePreview}
-              setTriagePreview={setTriagePreview}
               accessToken={accessToken}
               submitting={submitting}
               handleSubmit={handleSubmit}
