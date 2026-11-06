@@ -12,13 +12,16 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-transporter.verify((error, success) => {
-  if (error) {
-    console.log("Error connecting to email service ", error);
-  } else {
+async function verifyTransporter() {
+  try {
+    await transporter.verify();
     console.log("Email server is ready to send emails");
+    return true;
+  } catch (error) {
+    console.warn("Could not verify email transporter connection:", error.message || error);
+    return false;
   }
-});
+}
 
 // Function to send email
 const sendEmail = async (to, subject, text, html) => {
@@ -39,4 +42,8 @@ const sendEmail = async (to, subject, text, html) => {
   }
 };
 
+sendEmail.verifyTransporter = verifyTransporter;
+sendEmail.transporter = transporter;
+
 module.exports = sendEmail;
+module.exports.verifyTransporter = verifyTransporter;

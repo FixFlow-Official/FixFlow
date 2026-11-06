@@ -152,14 +152,18 @@ export async function changeMyPasswordRequest(
   );
 }
 
-export async function logoutRequest(accessToken) {
-  let token = accessToken;
+let inFlightRefreshPromise = null;
 
-  if (!token) {
-    let refreshResponse;
+export async function refreshAccessTokenRequest() {
+  if (inFlightRefreshPromise) {
+    return inFlightRefreshPromise;
+  }
+
+  inFlightRefreshPromise = (async () => {
+    let response;
 
     try {
-      refreshResponse = await fetch("/api/auth/token-recreate", {
+      response = await fetch("/api/auth/token-recreate", {
         method: "GET",
         credentials: "include",
       });
@@ -169,16 +173,27 @@ export async function logoutRequest(accessToken) {
       );
     }
 
-    const refreshData = await refreshResponse.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-    if (!refreshResponse.ok) {
+    if (!response.ok || !data.accessToken) {
       throw new Error(
-        refreshData.message ||
-          "Your session has expired. Please sign in again.",
+        data.message || "Your session has expired. Please sign in again.",
       );
     }
 
-    token = refreshData.accessToken;
+    return data.accessToken;
+  })().finally(() => {
+    inFlightRefreshPromise = null;
+  });
+
+  return inFlightRefreshPromise;
+}
+
+export async function logoutRequest(accessToken) {
+  let token = accessToken;
+
+  if (!token) {
+    token = await refreshAccessTokenRequest();
   }
 
   let response;
@@ -210,29 +225,7 @@ export async function logoutAllRequest(accessToken) {
   let token = accessToken;
 
   if (!token) {
-    let refreshResponse;
-
-    try {
-      refreshResponse = await fetch("/api/auth/token-recreate", {
-        method: "GET",
-        credentials: "include",
-      });
-    } catch {
-      throw new Error(
-        "Could not reach FixFlow. Check that the backend is running.",
-      );
-    }
-
-    const refreshData = await refreshResponse.json().catch(() => ({}));
-
-    if (!refreshResponse.ok) {
-      throw new Error(
-        refreshData.message ||
-          "Your session has expired. Please sign in again.",
-      );
-    }
-
-    token = refreshData.accessToken;
+    token = await refreshAccessTokenRequest();
   }
 
   let response;
@@ -411,28 +404,7 @@ async function getComplaintAccessToken(accessToken) {
     return accessToken;
   }
 
-  let response;
-
-  try {
-    response = await fetch("/api/auth/token-recreate", {
-      method: "GET",
-      credentials: "include",
-    });
-  } catch {
-    throw new Error(
-      "Could not reach FixFlow. Check that the backend is running.",
-    );
-  }
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok || !data.accessToken) {
-    throw new Error(
-      data.message || "Your session has expired. Please sign in again.",
-    );
-  }
-
-  return data.accessToken;
+  return refreshAccessTokenRequest();
 }
 
 async function complaintRequest(url, options, accessToken) {
