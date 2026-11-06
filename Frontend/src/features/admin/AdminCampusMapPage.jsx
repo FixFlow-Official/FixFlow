@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
+  ArrowRight,
   Building2,
   CheckCircle2,
   Coffee,
@@ -13,7 +15,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Sliders,
   Sparkles,
   Trash2,
   Trophy,
@@ -40,63 +41,58 @@ const ACCENT_COLORS = {
   emerald: {
     border: "border-emerald-500/40",
     bg: "bg-emerald-500/10",
-    text: "text-emerald-700 dark:text-emerald-300",
-    glow: "shadow-emerald-500/10",
-    badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    text: "text-emerald-700",
+    badge: "bg-emerald-100 text-emerald-800",
   },
   blue: {
     border: "border-blue-500/40",
     bg: "bg-blue-500/10",
-    text: "text-blue-700 dark:text-blue-300",
-    glow: "shadow-blue-500/10",
-    badge: "bg-blue-100 text-blue-800 border-blue-200",
+    text: "text-blue-700",
+    badge: "bg-blue-100 text-blue-800",
   },
   purple: {
     border: "border-purple-500/40",
     bg: "bg-purple-500/10",
-    text: "text-purple-700 dark:text-purple-300",
-    glow: "shadow-purple-500/10",
-    badge: "bg-purple-100 text-purple-800 border-purple-200",
+    text: "text-purple-700",
+    badge: "bg-purple-100 text-purple-800",
   },
   amber: {
     border: "border-amber-500/40",
     bg: "bg-amber-500/10",
-    text: "text-amber-700 dark:text-amber-300",
-    glow: "shadow-amber-500/10",
-    badge: "bg-amber-100 text-amber-800 border-amber-200",
+    text: "text-amber-700",
+    badge: "bg-amber-100 text-amber-800",
   },
   rose: {
     border: "border-rose-500/40",
     bg: "bg-rose-500/10",
-    text: "text-rose-700 dark:text-rose-300",
-    glow: "shadow-rose-500/10",
-    badge: "bg-rose-100 text-rose-800 border-rose-200",
+    text: "text-rose-700",
+    badge: "bg-rose-100 text-rose-800",
   },
   cyan: {
     border: "border-cyan-500/40",
     bg: "bg-cyan-500/10",
-    text: "text-cyan-700 dark:text-cyan-300",
-    glow: "shadow-cyan-500/10",
-    badge: "bg-cyan-100 text-cyan-800 border-cyan-200",
+    text: "text-cyan-700",
+    badge: "bg-cyan-100 text-cyan-800",
   },
   indigo: {
     border: "border-indigo-500/40",
     bg: "bg-indigo-500/10",
-    text: "text-indigo-700 dark:text-indigo-300",
-    glow: "shadow-indigo-500/10",
-    badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
+    text: "text-indigo-700",
+    badge: "bg-indigo-100 text-indigo-800",
   },
 };
 
 export default function AdminCampusMapPage({ accessToken }) {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const [viewMode, setViewMode] = useState("heatmap"); // "heatmap" | "builder"
-  const [selectedBlock, setSelectedBlock] = useState(null);
+  // Centered Inspection Modal State (Card comes in center with blurred background)
+  const [inspectingBlock, setInspectingBlock] = useState(null);
+  const [selectedFloorName, setSelectedFloorName] = useState("");
 
   // Editor Modal State
   const [editorOpen, setEditorOpen] = useState(false);
@@ -106,16 +102,16 @@ export default function AdminCampusMapPage({ accessToken }) {
     shortName: "",
     code: "",
     category: "Academic",
-    accentColor: "emerald",
-    position: { x: 20, y: 20, width: 25, height: 25 },
+    accentColor: "purple",
     floors: [{ name: "Ground Floor", rooms: [] }],
     departments: [],
   });
   const [newRoomInputs, setNewRoomInputs] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Category filter for the map
+  // Filter
   const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
 
   async function loadHeatmap(isRefresh = true) {
     if (isRefresh) setRefreshing(true);
@@ -124,13 +120,13 @@ export default function AdminCampusMapPage({ accessToken }) {
     try {
       const res = await getCampusHeatmapRequest(accessToken);
       setData(res);
-      // Keep selected block updated if already selected
-      if (selectedBlock) {
-        const updated = res.blocks?.find((b) => b._id === selectedBlock._id);
-        if (updated) setSelectedBlock(updated);
+      // Keep inspecting block synced if open
+      if (inspectingBlock) {
+        const updated = res.blocks?.find((b) => b._id === inspectingBlock._id);
+        if (updated) setInspectingBlock(updated);
       }
     } catch (err) {
-      setError(err.message || "Could not load campus spatial layout.");
+      setError(err.message || "Could not load campus facility layout.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -149,7 +145,7 @@ export default function AdminCampusMapPage({ accessToken }) {
         }
       } catch (err) {
         if (active) {
-          setError(err.message || "Could not load campus spatial layout.");
+          setError(err.message || "Could not load campus facility layout.");
           setLoading(false);
         }
       }
@@ -165,9 +161,23 @@ export default function AdminCampusMapPage({ accessToken }) {
   const blocks = useMemo(() => data?.blocks || [], [data?.blocks]);
 
   const filteredBlocks = useMemo(() => {
-    if (categoryFilter === "ALL") return blocks;
-    return blocks.filter((b) => b.category === categoryFilter);
-  }, [blocks, categoryFilter]);
+    return blocks.filter((b) => {
+      const matchesCategory = categoryFilter === "ALL" || b.category === categoryFilter;
+      const matchesSearch =
+        !searchQuery.trim() ||
+        b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (b.code || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (b.shortName || "").toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [blocks, categoryFilter, searchQuery]);
+
+  // Open centered inspection card
+  function handleOpenInspect(block) {
+    setInspectingBlock(block);
+    const floors = block.floorBreakdown || [];
+    setSelectedFloorName(floors[0]?.name || "Ground Floor");
+  }
 
   // Open modal to create a new block
   function openCreateModal() {
@@ -177,8 +187,7 @@ export default function AdminCampusMapPage({ accessToken }) {
       shortName: "",
       code: "",
       category: "Academic",
-      accentColor: "emerald",
-      position: { x: 30, y: 30, width: 24, height: 26 },
+      accentColor: "purple",
       floors: [
         { name: "Ground Floor", rooms: ["Room 101", "Room 102"] },
         { name: "1st Floor", rooms: ["Room 201", "Room 202"] },
@@ -197,13 +206,7 @@ export default function AdminCampusMapPage({ accessToken }) {
       shortName: block.shortName || "",
       code: block.code || "",
       category: block.category || "Academic",
-      accentColor: block.accentColor || "emerald",
-      position: {
-        x: block.position?.x ?? 20,
-        y: block.position?.y ?? 20,
-        width: block.position?.width ?? 25,
-        height: block.position?.height ?? 25,
-      },
+      accentColor: block.accentColor || "purple",
       floors: block.floors?.length
         ? block.floors.map((f) => ({ name: f.name, rooms: [...(f.rooms || [])] }))
         : [{ name: "Ground Floor", rooms: [] }],
@@ -213,7 +216,7 @@ export default function AdminCampusMapPage({ accessToken }) {
     setEditorOpen(true);
   }
 
-  // Handle floor management in the editor
+  // Floor management in editor
   function addFloorToForm() {
     const floorNumber = blockForm.floors.length + 1;
     const name =
@@ -268,7 +271,7 @@ export default function AdminCampusMapPage({ accessToken }) {
     });
   }
 
-  // Save Block (Create or Update)
+  // Save Block
   async function handleSaveBlock(e) {
     e.preventDefault();
     if (!blockForm.name.trim()) return;
@@ -280,10 +283,10 @@ export default function AdminCampusMapPage({ accessToken }) {
     try {
       if (editingBlockId) {
         await updateCampusBlockRequest(editingBlockId, blockForm, accessToken);
-        setSuccessMessage("Building layout updated successfully.");
+        setSuccessMessage("Building updated successfully.");
       } else {
         await createCampusBlockRequest(blockForm, accessToken);
-        setSuccessMessage("Building added to campus layout.");
+        setSuccessMessage("Building added to campus.");
       }
       setEditorOpen(false);
       await loadHeatmap(true);
@@ -296,12 +299,12 @@ export default function AdminCampusMapPage({ accessToken }) {
 
   // Delete Block
   async function handleDeleteBlock(blockId) {
-    if (!window.confirm("Remove this building from the campus layout?")) return;
+    if (!window.confirm("Remove this building from the campus facility directory?")) return;
 
     try {
       await deleteCampusBlockRequest(blockId, accessToken);
       setSuccessMessage("Building removed from campus.");
-      if (selectedBlock?._id === blockId) setSelectedBlock(null);
+      if (inspectingBlock?._id === blockId) setInspectingBlock(null);
       await loadHeatmap(true);
     } catch (err) {
       setError(err.message || "Could not delete building.");
@@ -312,7 +315,7 @@ export default function AdminCampusMapPage({ accessToken }) {
   async function handleResetKarnalPreset() {
     if (
       !window.confirm(
-        "Reset and populate the complete Pt. Chiranjilal Sharma Govt. College, Karnal campus layout?",
+        "Reset and reload the official Pt. Chiranjilal Sharma Govt. College, Karnal campus layout?",
       )
     )
       return;
@@ -320,7 +323,7 @@ export default function AdminCampusMapPage({ accessToken }) {
     try {
       setRefreshing(true);
       await initKarnalPresetRequest(accessToken);
-      setSuccessMessage("Initialized Pt. CLS Govt College Karnal layout preset.");
+      setSuccessMessage("Loaded Pt. CLS Govt College Karnal layout preset.");
       await loadHeatmap(true);
     } catch (err) {
       setError(err.message || "Could not load Karnal preset.");
@@ -329,10 +332,21 @@ export default function AdminCampusMapPage({ accessToken }) {
     }
   }
 
+  // Current floor data for the centered inspection modal
+  const inspectingFloors = inspectingBlock?.floorBreakdown || [];
+  const currentInspectFloor =
+    inspectingFloors.find((f) => f.name === selectedFloorName) || inspectingFloors[0];
+  const InspectingIcon = inspectingBlock
+    ? CATEGORY_ICONS[inspectingBlock.category] || Building2
+    : Building2;
+  const inspectingAccent = inspectingBlock
+    ? ACCENT_COLORS[inspectingBlock.accentColor] || ACCENT_COLORS.purple
+    : ACCENT_COLORS.purple;
+
   return (
     <div className="w-full min-w-0 space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col gap-4 rounded-3xl border border-line bg-gradient-to-br from-white via-white to-brand-soft/20 p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between lg:p-8">
+      {/* Top Banner */}
+      <div className="flex flex-col gap-4 rounded-3xl border border-line bg-gradient-to-br from-white via-white to-brand-soft/20 p-6 shadow-xs sm:flex-row sm:items-center sm:justify-between lg:p-8">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-bold text-brand-dark">
@@ -346,47 +360,19 @@ export default function AdminCampusMapPage({ accessToken }) {
           </div>
 
           <h1 className="mt-2 font-display text-2xl font-black tracking-tight text-ink sm:text-3xl">
-            Campus Spatial GIS & Real-Time Heatmap
+            Live Campus Facility Map
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Live facility complaint density, systemic failure alerts, and real-time 2D block editor.
+            Click on any building card to inspect its rooms, view active complaints, and navigate directly to them.
           </p>
         </div>
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* View Mode Toggle */}
-          <div className="inline-flex rounded-xl border border-line bg-stone-100 p-1 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setViewMode("heatmap")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
-                viewMode === "heatmap"
-                  ? "bg-white text-ink shadow-sm"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              <Flame size={14} className={viewMode === "heatmap" ? "text-amber-500" : ""} />
-              Heatmap
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("builder")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
-                viewMode === "builder"
-                  ? "bg-white text-ink shadow-sm"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              <Sliders size={14} className={viewMode === "builder" ? "text-brand-dark" : ""} />
-              Map Builder
-            </button>
-          </div>
-
           <button
             type="button"
             onClick={openCreateModal}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-dark transition"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-dark transition"
           >
             <Plus size={15} />
             Add Building
@@ -407,27 +393,27 @@ export default function AdminCampusMapPage({ accessToken }) {
             onClick={() => loadHeatmap(true)}
             disabled={refreshing}
             className="grid size-9 place-items-center rounded-xl border border-line bg-white text-muted hover:text-ink hover:bg-stone-50 transition disabled:opacity-50"
-            title="Refresh live heatmap"
+            title="Refresh live data"
           >
             <RefreshCw size={15} className={refreshing ? "animate-spin text-brand" : ""} />
           </button>
         </div>
       </div>
 
-      {/* Metrics Row */}
+      {/* Stats Bar */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-line bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-muted">Total Campus Blocks</p>
+        <div className="rounded-2xl border border-line bg-white p-4 shadow-xs">
+          <p className="text-xs font-semibold text-muted">Campus Buildings</p>
           <p className="mt-1 text-2xl font-black text-ink">{blocks.length}</p>
         </div>
-        <div className="rounded-2xl border border-line bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-line bg-white p-4 shadow-xs">
           <p className="text-xs font-semibold text-muted">Active Complaints</p>
           <p className="mt-1 text-2xl font-black text-brand-dark">
             {data?.totalActiveComplaints ?? 0}
           </p>
         </div>
-        <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-4 shadow-sm">
-          <p className="text-xs font-semibold text-rose-700">Systemic Incidents</p>
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-4 shadow-xs">
+          <p className="text-xs font-semibold text-rose-700">Systemic Hotspots</p>
           <p className="mt-1 flex items-center gap-2 text-2xl font-black text-rose-900">
             {data?.systemicIncidentsCount ?? 0}
             {(data?.systemicIncidentsCount ?? 0) > 0 && (
@@ -435,15 +421,19 @@ export default function AdminCampusMapPage({ accessToken }) {
             )}
           </p>
         </div>
-        <div className="rounded-2xl border border-line bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-muted">Layout Mode</p>
-          <p className="mt-1 text-sm font-bold capitalize text-ink">
-            {viewMode === "heatmap" ? "🔴 Live Heatmap" : "🛠️ Editable Canvas"}
-          </p>
+        <div className="rounded-2xl border border-line bg-white p-4 shadow-xs">
+          <p className="text-xs font-semibold text-muted">Quick Search</p>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search building..."
+            className="mt-1 w-full text-xs font-semibold border-b border-dashed border-stone-300 pb-1 outline-none focus:border-brand"
+          />
         </div>
       </div>
 
-      {/* Feedback Messages */}
+      {/* Messages */}
       {error && (
         <div className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
           <AlertTriangle size={18} />
@@ -467,7 +457,7 @@ export default function AdminCampusMapPage({ accessToken }) {
             onClick={() => setCategoryFilter(cat)}
             className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
               categoryFilter === cat
-                ? "bg-ink text-white shadow-sm"
+                ? "bg-ink text-white shadow-xs"
                 : "border border-line bg-white text-muted hover:text-ink hover:bg-stone-50"
             }`}
           >
@@ -476,65 +466,64 @@ export default function AdminCampusMapPage({ accessToken }) {
         ))}
       </div>
 
-      {/* 2D Interactive Campus Canvas */}
+      {/* Map Effect Grid Container */}
       {loading ? (
-        <div className="flex min-h-[460px] items-center justify-center gap-3 rounded-3xl border border-dashed border-line bg-canvas">
+        <div className="flex min-h-[300px] items-center justify-center gap-3 rounded-2xl sm:rounded-3xl border border-dashed border-line bg-canvas">
           <LoaderCircle size={24} className="animate-spin text-brand" />
           <span className="text-sm font-semibold text-muted">
-            Rendering Pt. CLS Govt College Karnal 2D Campus Map…
+            Loading Pt. CLS Govt College Karnal campus map…
           </span>
         </div>
       ) : (
-        <div className="relative min-h-[560px] w-full overflow-hidden rounded-3xl border-2 border-dashed border-stone-300 bg-stone-50/70 p-4 shadow-inner">
+        <div className="relative w-full rounded-2xl sm:rounded-3xl border-2 border-dashed border-stone-300 bg-stone-50/70 p-3 sm:p-7 shadow-inner overflow-hidden">
           {/* Subtle Blueprint Grid Pattern */}
           <div
             className="pointer-events-none absolute inset-0 opacity-[0.06]"
             style={{
               backgroundImage:
                 "linear-gradient(to right, #000 1px, transparent 1px), linear-gradient(to bottom, #000 1px, transparent 1px)",
-              backgroundSize: "40px 40px",
+              backgroundSize: "36px 36px",
             }}
           />
 
-          {/* Center Campus Landmark: Lawn & Courtyard */}
-          <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center rounded-3xl border border-emerald-300/60 bg-emerald-100/50 px-8 py-6 text-center shadow-sm">
-            <span className="text-xs font-black uppercase tracking-widest text-emerald-800">
-              🌿 Central Campus Lawn & Open Grounds
-            </span>
-            <span className="text-[11px] font-semibold text-emerald-700/80">
-              Pt. Chiranjilal Sharma Govt. College, Karnal
+          {/* Central Campus Landmark Banner */}
+          <div className="relative z-10 mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-xl bg-emerald-100 text-emerald-800">
+                <MapPin size={16} />
+              </span>
+              <div>
+                <h2 className="text-xs sm:text-sm font-bold text-ink">
+                  Pt. Chiranjilal Sharma Govt. College Campus Facility Grid
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-muted">Sector 14, Karnal • Click any card to inspect rooms</p>
+              </div>
+            </div>
+
+            <span className="rounded-full border border-emerald-300/80 bg-emerald-50 px-2.5 py-1 text-[11px] sm:text-xs font-bold text-emerald-800">
+              🌿 Central Campus & Academic Blocks
             </span>
           </div>
 
-          {/* Render 2D Positioned Buildings */}
-          <div className="relative min-h-[520px] w-full">
+          {/* Building Cards Grid (Full width on mobile) */}
+          <div className="relative z-10 grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
             {filteredBlocks.map((block) => {
               const Icon = CATEGORY_ICONS[block.category] || Building2;
-              const accent = ACCENT_COLORS[block.accentColor] || ACCENT_COLORS.emerald;
+              const accent = ACCENT_COLORS[block.accentColor] || ACCENT_COLORS.purple;
               const isDanger = block.heatLevel === "danger";
               const isWarning = block.heatLevel === "warning";
-              const isSelected = selectedBlock?._id === block._id;
+              const floors = block.floorBreakdown || [];
 
               return (
                 <div
                   key={block._id}
-                  onClick={() => setSelectedBlock(block)}
-                  style={{
-                    left: `${block.position?.x ?? 10}%`,
-                    top: `${block.position?.y ?? 10}%`,
-                    width: `${block.position?.width ?? 24}%`,
-                    minHeight: `${(block.position?.height ?? 22) * 5}px`,
-                  }}
-                  className={`group absolute cursor-pointer rounded-2xl border-2 p-3.5 transition-all duration-200 select-none shadow-sm ${
-                    isSelected
-                      ? "ring-4 ring-brand/30 shadow-lg z-30"
-                      : "hover:shadow-md hover:scale-[1.02] z-10"
-                  } ${
+                  onClick={() => handleOpenInspect(block)}
+                  className={`group relative flex flex-col justify-between cursor-pointer rounded-2xl sm:rounded-3xl border-2 p-4 sm:p-6 transition-all duration-200 bg-white shadow-xs hover:shadow-md hover:-translate-y-0.5 w-full ${
                     isDanger
-                      ? "border-rose-500 bg-rose-50/95 shadow-rose-500/20"
+                      ? "border-rose-400 bg-rose-50/30 ring-1 ring-rose-200"
                       : isWarning
-                        ? "border-amber-400 bg-amber-50/90 shadow-amber-500/10"
-                        : "border-stone-200 bg-white"
+                        ? "border-amber-400 bg-amber-50/30 ring-1 ring-amber-200"
+                        : "border-stone-200 hover:border-brand/40"
                   }`}
                 >
                   {/* Danger Radar Ring when Systemic Anomaly detected */}
@@ -545,81 +534,85 @@ export default function AdminCampusMapPage({ accessToken }) {
                     </span>
                   )}
 
-                  {/* Block Header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                  {/* Card Header */}
+                  <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`grid size-10 sm:size-11 place-items-center rounded-xl sm:rounded-2xl ${accent.bg} ${accent.text}`}
+                        >
+                          <Icon size={18} className="sm:size-5" />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-muted">
+                              {block.code || block.category}
+                            </span>
+                            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-bold text-stone-600">
+                              {block.category}
+                            </span>
+                          </div>
+                          <h3 className="mt-0.5 font-display text-base font-bold text-ink group-hover:text-brand-dark sm:text-lg">
+                            {block.name}
+                          </h3>
+                        </div>
+                      </div>
+
+                      {/* Complaint Count Badge */}
                       <span
-                        className={`grid size-7 place-items-center rounded-lg ${accent.bg} ${accent.text}`}
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
+                          isDanger
+                            ? "bg-rose-600 text-white animate-pulse"
+                            : isWarning
+                              ? "bg-amber-500 text-white"
+                              : block.totalActive > 0
+                                ? "bg-emerald-600 text-white"
+                                : "bg-stone-100 text-stone-600"
+                        }`}
                       >
-                        <Icon size={14} />
-                      </span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted">
-                        {block.code || block.category}
+                        {block.totalActive} {block.totalActive === 1 ? "complaint" : "complaints"}
                       </span>
                     </div>
 
-                    {/* Complaint Count Badge */}
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-extrabold ${
-                        isDanger
-                          ? "bg-rose-600 text-white"
-                          : isWarning
-                            ? "bg-amber-500 text-white"
-                            : block.totalActive > 0
-                              ? "bg-emerald-600 text-white"
-                              : "bg-stone-100 text-stone-600"
-                      }`}
-                    >
-                      {block.totalActive} {block.totalActive === 1 ? "issue" : "issues"}
-                    </span>
-                  </div>
-
-                  {/* Building Title */}
-                  <h3 className="mt-2 text-xs font-bold leading-tight text-ink group-hover:text-brand-dark sm:text-sm line-clamp-2">
-                    {block.name}
-                  </h3>
-
-                  {/* Systemic Incident Alert Banner */}
-                  {block.systemicHotspot && (
-                    <div className="mt-2 flex items-center gap-1 rounded-lg bg-rose-100/90 px-2 py-1 text-[11px] font-bold text-rose-800">
-                      <AlertTriangle size={12} className="shrink-0 text-rose-600" />
-                      <span className="truncate">{block.systemicHotspot.message}</span>
-                    </div>
-                  )}
-
-                  {/* Floors & Rooms Summary */}
-                  <div className="mt-2.5 flex items-center justify-between border-t border-stone-100 pt-2 text-[11px] text-muted">
-                    <span className="flex items-center gap-1">
-                      <Layers size={11} />
-                      {block.floors?.length || 1} {block.floors?.length === 1 ? "Floor" : "Floors"}
-                    </span>
-
-                    {viewMode === "builder" && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditModal(block);
-                          }}
-                          className="rounded p-1 text-muted hover:text-ink hover:bg-stone-100"
-                          title="Edit building"
-                        >
-                          <Pencil size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteBlock(block._id);
-                          }}
-                          className="rounded p-1 text-rose-600 hover:bg-rose-100"
-                          title="Delete building"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                    {/* Systemic Hotspot Alert Banner */}
+                    {block.systemicHotspot && (
+                      <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-100/90 px-3 py-2 text-xs font-bold text-rose-900 border border-rose-300">
+                        <Flame size={14} className="shrink-0 text-rose-600" />
+                        <span className="truncate">{block.systemicHotspot.message}</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Card Footer */}
+                  <div className="mt-5 flex items-center justify-between border-t border-stone-100 pt-3 text-xs text-muted">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Layers size={14} />
+                      {floors.length} {floors.length === 1 ? "Floor" : "Floors"} (
+                      {floors.reduce((acc, f) => acc + (f.rooms?.length || 0), 0)} Rooms)
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(block);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-stone-100 hover:text-ink transition"
+                      >
+                        <Pencil size={12} /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteBlock(block._id);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -628,113 +621,223 @@ export default function AdminCampusMapPage({ accessToken }) {
         </div>
       )}
 
-      {/* Selected Block Inspection Drawer */}
-      {selectedBlock && (
-        <section className="rounded-3xl border border-line bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-bold text-brand-dark">
-                  {selectedBlock.category}
-                </span>
-                <span className="text-xs font-semibold text-muted">
-                  Code: {selectedBlock.code || "N/A"}
-                </span>
-              </div>
-              <h2 className="mt-1 font-display text-xl font-bold text-ink sm:text-2xl">
-                {selectedBlock.name}
-              </h2>
-              <p className="mt-0.5 text-xs text-muted">
-                Pt. Chiranjilal Sharma Govt. College Karnal Facility Inspection
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => openEditModal(selectedBlock)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-white px-3 py-1.5 text-xs font-bold text-ink hover:bg-stone-50"
-              >
-                <Pencil size={13} />
-                Edit Layout
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedBlock(null)}
-                className="grid size-8 place-items-center rounded-xl text-muted hover:bg-stone-100 hover:text-ink"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          </div>
-
-          {/* Systemic Incident Highlight */}
-          {selectedBlock.systemicHotspot && (
-            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
-              <Flame size={20} className="shrink-0 text-rose-600" />
-              <div>
-                <p className="font-bold">Systemic Facility Anomaly Detected</p>
-                <p className="text-xs text-rose-800">{selectedBlock.systemicHotspot.message}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Floor & Room Breakdown */}
-          <div className="mt-5 space-y-4">
-            <h3 className="text-sm font-bold text-ink">Floor & Room Infrastructure</h3>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {(selectedBlock.floorBreakdown || []).map((floor) => (
-                <div
-                  key={floor.name}
-                  className="rounded-2xl border border-line bg-stone-50/60 p-4 transition"
+      {/* CENTERED INSPECTION MODAL (FULL SCREEN ON MOBILE) */}
+      {inspectingBlock && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-black/60 backdrop-blur-md animate-fade-in"
+          onClick={() => setInspectingBlock(null)}
+        >
+          <div
+            className="relative h-full sm:h-auto sm:max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-none sm:rounded-3xl border-0 sm:border border-line bg-white p-4 sm:p-8 shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
+              <div className="flex items-center gap-3">
+                <span
+                  className={`grid size-11 sm:size-12 place-items-center rounded-xl sm:rounded-2xl ${inspectingAccent.bg} ${inspectingAccent.text}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-ink">{floor.name}</span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${
-                        floor.count > 0 ? "bg-brand text-white" : "bg-stone-200 text-stone-600"
+                  <InspectingIcon size={22} className="sm:size-6" />
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted">
+                      {inspectingBlock.code || inspectingBlock.category}
+                    </span>
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-bold text-stone-600">
+                      {inspectingBlock.category}
+                    </span>
+                  </div>
+                  <h2 className="mt-0.5 font-display text-lg sm:text-2xl font-black text-ink">
+                    {inspectingBlock.name}
+                  </h2>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span
+                  className={`rounded-full px-2.5 sm:px-3 py-1 text-xs font-extrabold ${
+                    inspectingBlock.totalActive > 0
+                      ? inspectingBlock.heatLevel === "danger"
+                        ? "bg-rose-600 text-white"
+                        : "bg-emerald-600 text-white"
+                      : "bg-stone-100 text-stone-600"
+                  }`}
+                >
+                  {inspectingBlock.totalActive}{" "}
+                  {inspectingBlock.totalActive === 1 ? "complaint" : "complaints"}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setInspectingBlock(null)}
+                  className="grid size-9 place-items-center rounded-xl bg-stone-100 text-muted hover:bg-stone-200 hover:text-ink transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Systemic Hotspot Alert Banner */}
+            {inspectingBlock.systemicHotspot && (
+              <div className="mt-4 flex items-center gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-3.5 sm:p-4 text-xs font-bold text-rose-900 shadow-xs">
+                <Flame size={20} className="shrink-0 text-rose-600" />
+                <div>
+                  <p className="font-extrabold text-sm">Systemic Facility Anomaly</p>
+                  <p>{inspectingBlock.systemicHotspot.message}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Floor Tabs */}
+            <div className="mt-5 space-y-4 flex-1">
+              <div className="flex flex-wrap items-center gap-2 border-b border-stone-200 pb-3">
+                <span className="text-xs font-bold text-muted mr-1">Select Floor:</span>
+                {inspectingFloors.map((floor) => {
+                  const isFloorActive = floor.name === (currentInspectFloor?.name || selectedFloorName);
+                  return (
+                    <button
+                      key={floor.name}
+                      type="button"
+                      onClick={() => setSelectedFloorName(floor.name)}
+                      className={`flex items-center gap-2 rounded-xl px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs font-bold transition ${
+                        isFloorActive
+                          ? "bg-ink text-white shadow-sm"
+                          : "bg-white border border-line text-muted hover:text-ink hover:bg-stone-100"
                       }`}
                     >
-                      {floor.count} {floor.count === 1 ? "active issue" : "active issues"}
+                      <span>{floor.name}</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] ${
+                          floor.count > 0
+                            ? isFloorActive
+                              ? "bg-rose-500 text-white"
+                              : "bg-rose-100 text-rose-800"
+                            : isFloorActive
+                              ? "bg-white/20 text-white"
+                              : "bg-stone-200 text-stone-600"
+                        }`}
+                      >
+                        {floor.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Floor Rooms Grid (Full width per room card on mobile) */}
+              {currentInspectFloor ? (
+                <div className="space-y-4 pt-1 pb-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
+                      Rooms & Facilities on {currentInspectFloor.name}
+                    </h3>
+                    <span className="text-xs font-semibold text-muted">
+                      {currentInspectFloor.rooms?.length || 0} registered rooms
                     </span>
                   </div>
 
-                  {/* Registered Room Numbers */}
-                  <div className="mt-3">
-                    <p className="text-[11px] font-semibold text-muted">Configured Rooms & Labs:</p>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {floor.rooms?.length ? (
-                        floor.rooms.map((room) => (
-                          <span
-                            key={room}
-                            className="rounded-md border border-line bg-white px-2 py-0.5 text-[11px] font-medium text-ink"
-                          >
-                            {room}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-[11px] italic text-muted">No rooms specified</span>
-                      )}
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full">
+                    {(currentInspectFloor.rooms || []).map((room) => {
+                      const hasComplaints = room.complaintsCount > 0;
+
+                      return (
+                        <div
+                          key={room.roomNumber}
+                          className={`rounded-2xl border p-4 transition-all w-full ${
+                            hasComplaints
+                              ? "border-rose-300 bg-white shadow-xs ring-1 ring-rose-200"
+                              : "border-stone-200 bg-stone-50/60"
+                          }`}
+                        >
+                          {/* Room Title & Badge */}
+                          <div className="flex items-center justify-between gap-2 border-b border-stone-100 pb-2">
+                            <span className="font-display font-bold text-sm text-ink">
+                              {room.roomNumber}
+                            </span>
+
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
+                                hasComplaints
+                                  ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              }`}
+                            >
+                              {hasComplaints
+                                ? `${room.complaintsCount} active`
+                                : "✓ All Clear"}
+                            </span>
+                          </div>
+
+                          {/* Complaints inside this Room */}
+                          {hasComplaints ? (
+                            <div className="mt-3 space-y-2">
+                              {room.complaints.map((c) => (
+                                <div
+                                  key={c._id}
+                                  onClick={() => navigate(`/admin/complaints/${c._id}`)}
+                                  className="group/item flex cursor-pointer flex-col gap-1 rounded-xl border border-stone-100 bg-stone-50/80 p-2.5 transition hover:border-brand/40 hover:bg-brand-soft/40 hover:shadow-xs"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="rounded-md bg-stone-200/80 px-1.5 py-0.5 text-[10px] font-bold text-stone-700">
+                                      {c.category}
+                                    </span>
+                                    <span
+                                      className={`text-[10px] font-bold ${
+                                        c.urgency === "Critical"
+                                          ? "text-rose-600 font-extrabold"
+                                          : c.urgency === "High"
+                                            ? "text-amber-600"
+                                            : "text-muted"
+                                      }`}
+                                    >
+                                      {c.urgency}
+                                    </span>
+                                  </div>
+
+                                  <p className="text-xs font-semibold text-ink line-clamp-1 group-hover/item:text-brand-dark">
+                                    {c.title}
+                                  </p>
+
+                                  <div className="flex items-center justify-between pt-1 text-[11px] font-medium text-brand">
+                                    <span>Open Complaint</span>
+                                    <ArrowRight
+                                      size={12}
+                                      className="transition transform group-hover/item:translate-x-0.5"
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs italic text-muted">
+                              No open complaints reported in this room.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
+              ) : (
+                <p className="text-xs text-muted">No floors configured for this building.</p>
+              )}
             </div>
           </div>
-        </section>
+        </div>
       )}
 
-      {/* Add / Edit Building Modal */}
+      {/* Add / Edit Building Modal (FULL SCREEN ON MOBILE) */}
       {editorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-line bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-black/60 backdrop-blur-md">
+          <div className="h-full sm:h-auto sm:max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-none sm:rounded-3xl border-0 sm:border border-line bg-white p-4 sm:p-8 shadow-2xl flex flex-col">
             <div className="flex items-center justify-between border-b border-line pb-4">
               <div>
                 <h3 className="font-display text-lg font-bold text-ink">
-                  {editingBlockId ? "Edit Building Layout" : "Add Building to Campus Map"}
+                  {editingBlockId ? "Edit Building" : "Add New Building"}
                 </h3>
                 <p className="text-xs text-muted">
-                  Configure building details, 2D canvas coordinates, floors, and rooms.
+                  Configure building details, floors, and room numbers.
                 </p>
               </div>
               <button
@@ -756,7 +859,7 @@ export default function AdminCampusMapPage({ accessToken }) {
                     required
                     value={blockForm.name}
                     onChange={(e) => setBlockForm({ ...blockForm, name: e.target.value })}
-                    placeholder="e.g. Commerce Block (Block B)"
+                    placeholder="e.g. PG Block or Commerce Block"
                     className="mt-1.5 w-full rounded-xl border border-line px-3.5 py-2 text-sm outline-none focus:border-brand"
                   />
                 </div>
@@ -766,7 +869,7 @@ export default function AdminCampusMapPage({ accessToken }) {
                     type="text"
                     value={blockForm.shortName}
                     onChange={(e) => setBlockForm({ ...blockForm, shortName: e.target.value })}
-                    placeholder="e.g. Commerce Block"
+                    placeholder="e.g. PG Block"
                     className="mt-1.5 w-full rounded-xl border border-line px-3.5 py-2 text-sm outline-none focus:border-brand"
                   />
                 </div>
@@ -780,7 +883,7 @@ export default function AdminCampusMapPage({ accessToken }) {
                     type="text"
                     value={blockForm.code}
                     onChange={(e) => setBlockForm({ ...blockForm, code: e.target.value })}
-                    placeholder="e.g. COMM-B"
+                    placeholder="e.g. PG-ARTS"
                     className="mt-1.5 w-full rounded-xl border border-line px-3.5 py-2 text-sm uppercase outline-none focus:border-brand"
                   />
                 </div>
@@ -812,87 +915,6 @@ export default function AdminCampusMapPage({ accessToken }) {
                       </option>
                     ))}
                   </select>
-                </div>
-              </div>
-
-              {/* 2D Canvas Position Controls */}
-              <div className="rounded-2xl border border-line bg-stone-50/60 p-4">
-                <p className="text-xs font-bold text-ink">
-                  2D Campus Canvas Coordinates (% of Map)
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div>
-                    <label className="text-[11px] font-semibold text-muted">
-                      X Position ({blockForm.position.x}%)
-                    </label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={75}
-                      value={blockForm.position.x}
-                      onChange={(e) =>
-                        setBlockForm({
-                          ...blockForm,
-                          position: { ...blockForm.position, x: Number(e.target.value) },
-                        })
-                      }
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-muted">
-                      Y Position ({blockForm.position.y}%)
-                    </label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={75}
-                      value={blockForm.position.y}
-                      onChange={(e) =>
-                        setBlockForm({
-                          ...blockForm,
-                          position: { ...blockForm.position, y: Number(e.target.value) },
-                        })
-                      }
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-muted">
-                      Width ({blockForm.position.width}%)
-                    </label>
-                    <input
-                      type="range"
-                      min={15}
-                      max={45}
-                      value={blockForm.position.width}
-                      onChange={(e) =>
-                        setBlockForm({
-                          ...blockForm,
-                          position: { ...blockForm.position, width: Number(e.target.value) },
-                        })
-                      }
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-muted">
-                      Height ({blockForm.position.height}%)
-                    </label>
-                    <input
-                      type="range"
-                      min={15}
-                      max={40}
-                      value={blockForm.position.height}
-                      onChange={(e) =>
-                        setBlockForm({
-                          ...blockForm,
-                          position: { ...blockForm.position, height: Number(e.target.value) },
-                        })
-                      }
-                      className="w-full"
-                    />
-                  </div>
                 </div>
               </div>
 
@@ -957,7 +979,7 @@ export default function AdminCampusMapPage({ accessToken }) {
                         ))}
                       </div>
 
-                      {/* Add Room to this floor */}
+                      {/* Add Room input */}
                       <div className="flex items-center gap-2 pt-1">
                         <input
                           type="text"
@@ -971,7 +993,7 @@ export default function AdminCampusMapPage({ accessToken }) {
                               addRoomToFloor(floorIdx);
                             }
                           }}
-                          placeholder="e.g. Room 204 or Physics Lab (press enter)"
+                          placeholder="e.g. E1, E2, or Room 204 (press enter)"
                           className="flex-1 rounded-lg border border-line px-2.5 py-1 text-xs outline-none focus:border-brand"
                         />
                         <button
@@ -987,7 +1009,7 @@ export default function AdminCampusMapPage({ accessToken }) {
                 </div>
               </div>
 
-              {/* Submit / Cancel Buttons */}
+              {/* Submit Buttons */}
               <div className="flex items-center justify-end gap-2 border-t border-line pt-4">
                 <button
                   type="button"
@@ -999,7 +1021,7 @@ export default function AdminCampusMapPage({ accessToken }) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-dark transition disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-dark transition disabled:opacity-50"
                 >
                   {submitting ? (
                     <LoaderCircle size={14} className="animate-spin" />

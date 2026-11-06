@@ -104,7 +104,6 @@ test("admin can create a new building with floors and room numbers", async () =>
           shortName: "Exam Wing",
           code: "EXAM",
           category: "Academic",
-          position: { x: 50, y: 50, width: 25, height: 25 },
           floors: [
             { name: "Ground Floor", rooms: ["Hall 1", "Hall 2"] },
             { name: "1st Floor", rooms: ["Confidential Room", "Room 101"] },
@@ -140,7 +139,6 @@ test("campus heatmap detects systemic hotspot failure for clustered category iss
       code: "COMM-B",
       category: "Academic",
       accentColor: "blue",
-      position: { x: 38, y: 34, width: 24, height: 28 },
       floors: [
         { name: "Ground Floor", rooms: ["Room B-01", "Room B-02"] },
         { name: "2nd Floor", rooms: ["Room B-21", "Room B-22"] },
@@ -212,6 +210,13 @@ test("campus heatmap detects systemic hotspot failure for clustered category iss
       assert.equal(commBlock.systemicHotspot.category, "Plumbing");
       assert.equal(commBlock.systemicHotspot.floor, "2nd Floor");
       assert.equal(commBlock.systemicHotspot.count, 4);
+
+      const secondFloor = commBlock.floorBreakdown.find((f) => f.name === "2nd Floor");
+      assert.ok(secondFloor);
+      const roomB21 = secondFloor.rooms.find((r) => r.roomNumber === "Room B-21");
+      assert.ok(roomB21);
+      assert.equal(roomB21.complaintsCount, 1);
+      assert.equal(roomB21.complaints[0].title, "Water leakage near washroom");
     },
   );
 });

@@ -42,6 +42,7 @@ export default function StudentComplaintForm({
   const triageRequestId = useRef(0);
   const [campusBlocks, setCampusBlocks] = useState([]);
   const [customBuilding, setCustomBuilding] = useState(false);
+  const [customRoom, setCustomRoom] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -326,27 +327,60 @@ export default function StudentComplaintForm({
                   </div>
 
                   <div className="min-w-0">
-                    <label
-                      htmlFor="complaint-room"
-                      className="mb-2 block text-sm font-semibold"
-                    >
-                      Room number{" "}
-                      <span className="font-normal text-muted">(optional)</span>
-                    </label>
-                    <input
-                      id="complaint-room"
-                      value={room}
-                      onChange={(event) => setRoom(event.target.value)}
-                      maxLength={30}
-                      list="campus-rooms-list"
-                      placeholder="e.g. Room 204 or Lab A"
-                      className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
-                    />
-                    <datalist id="campus-rooms-list">
-                      {suggestedRooms.map((r) => (
-                        <option key={r} value={r} />
-                      ))}
-                    </datalist>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label
+                        htmlFor="complaint-room"
+                        className="block text-sm font-semibold"
+                      >
+                        Room / Facility
+                      </label>
+                      {suggestedRooms.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomRoom(!customRoom);
+                            setRoom("");
+                          }}
+                          className="text-[11px] font-semibold text-brand hover:underline"
+                        >
+                          {customRoom ? "Select from list" : "Other"}
+                        </button>
+                      )}
+                    </div>
+
+                    {!customRoom && suggestedRooms.length > 0 ? (
+                      <select
+                        id="complaint-room"
+                        value={room}
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          if (val === "__custom__") {
+                            setCustomRoom(true);
+                            setRoom("");
+                          } else {
+                            setRoom(val);
+                          }
+                        }}
+                        className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+                      >
+                        <option value="">Select room or lab</option>
+                        {suggestedRooms.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                        <option value="__custom__">+ Other / Not in list</option>
+                      </select>
+                    ) : (
+                      <input
+                        id="complaint-room"
+                        value={room}
+                        onChange={(event) => setRoom(event.target.value)}
+                        maxLength={30}
+                        placeholder="e.g. Washroom or Corridor"
+                        className="min-h-12 w-full min-w-0 rounded-xl border border-line bg-white px-3.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+                      />
+                    )}
                   </div>
                 </div>
 

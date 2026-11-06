@@ -31,12 +31,6 @@ const campusBlockSchema = new mongoose.Schema(
       enum: ["emerald", "blue", "purple", "amber", "rose", "cyan", "indigo"],
       default: "emerald",
     },
-    position: {
-      x: { type: Number, min: 0, max: 90, default: 10 },
-      y: { type: Number, min: 0, max: 90, default: 10 },
-      width: { type: Number, min: 15, max: 80, default: 25 },
-      height: { type: Number, min: 15, max: 80, default: 25 },
-    },
     floors: [
       {
         name: {

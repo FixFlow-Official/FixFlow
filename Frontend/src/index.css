@@ -2,8 +2,17 @@
 @import "tailwindcss";
 
 @layer base {
-  html {
-    scrollbar-gutter: stable;
+  html,
+  body,
+  * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 }
 

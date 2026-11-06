@@ -10,11 +10,6 @@ const activeComplaintStatuses = [
   "On_Hold",
 ];
 
-// Helper to escape regex special characters
-function escapeRegex(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 // Ensure default Pt. CLS Govt College Karnal preset exists if database is empty
 async function ensureDefaultKarnalPreset() {
   const count = await campusBlockModel.countDocuments();
@@ -28,7 +23,7 @@ async function getCampusBlocks(req, res) {
   await ensureDefaultKarnalPreset();
   const blocks = await campusBlockModel
     .find({ isActive: true })
-    .sort({ "position.y": 1, "position.x": 1 })
+    .sort({ name: 1 })
     .lean();
 
   return res.status(200).json({ blocks });
@@ -42,7 +37,6 @@ async function createCampusBlock(req, res) {
     code = "",
     category = "Academic",
     accentColor = "emerald",
-    position = { x: 10, y: 10, width: 25, height: 25 },
     floors = [],
     departments = [],
   } = req.body;
@@ -65,23 +59,17 @@ async function createCampusBlock(req, res) {
     code: code.trim().toUpperCase(),
     category,
     accentColor,
-    position: {
-      x: Number(position?.x ?? 10),
-      y: Number(position?.y ?? 10),
-      width: Number(position?.width ?? 25),
-      height: Number(position?.height ?? 25),
-    },
     floors: formattedFloors,
     departments: Array.isArray(departments) ? departments : [],
   });
 
   return res.status(201).json({
-    message: "Building added to campus layout successfully.",
+    message: "Building added to campus successfully.",
     block,
   });
 }
 
-// PUT /api/campus/blocks/:id - Admin updates building layout, floors, or rooms
+// PUT /api/campus/blocks/:id - Admin updates building, floors, or rooms
 async function updateCampusBlock(req, res) {
   const { id } = req.params;
   const block = await campusBlockModel.findById(id);
@@ -96,7 +84,6 @@ async function updateCampusBlock(req, res) {
     code,
     category,
     accentColor,
-    position,
     floors,
     departments,
     isActive,
@@ -108,15 +95,6 @@ async function updateCampusBlock(req, res) {
   if (category !== undefined) block.category = category;
   if (accentColor !== undefined) block.accentColor = accentColor;
   if (isActive !== undefined) block.isActive = Boolean(isActive);
-
-  if (position) {
-    block.position = {
-      x: Number(position.x ?? block.position.x),
-      y: Number(position.y ?? block.position.y),
-      width: Number(position.width ?? block.position.width),
-      height: Number(position.height ?? block.position.height),
-    };
-  }
 
   if (Array.isArray(floors)) {
     block.floors = floors.map((f) => ({
@@ -132,7 +110,7 @@ async function updateCampusBlock(req, res) {
   await block.save();
 
   return res.status(200).json({
-    message: "Building layout updated successfully.",
+    message: "Building updated successfully.",
     block,
   });
 }
@@ -161,7 +139,7 @@ async function initKarnalPreset(req, res) {
   });
 }
 
-// GET /api/campus/heatmap - Real-time spatial complaint density and systemic hotspot detection
+// GET /api/campus/heatmap - Real-time building cards with floor and room-level complaints
 async function getCampusHeatmap(req, res) {
   await ensureDefaultKarnalPreset();
 
@@ -169,7 +147,7 @@ async function getCampusHeatmap(req, res) {
     campusBlockModel.find({ isActive: true }).lean(),
     complaintModel
       .find({ status: { $in: activeComplaintStatuses } })
-      .select("complaintTitle category location aiTriage status createdAt")
+      .select("_id complaintTitle category location aiTriage status createdAt")
       .lean(),
   ]);
 
@@ -197,11 +175,19 @@ async function getCampusHeatmap(req, res) {
     const categoryCounts = {};
     const floorBreakdown = {};
 
-    // Initialize registered floors for consistent structure
+    // Initialize registered floors and their pre-configured room maps
     (block.floors || []).forEach((floor) => {
+      const roomMap = {};
+      (floor.rooms || []).forEach((r) => {
+        roomMap[r] = {
+          roomNumber: r,
+          complaints: [],
+        };
+      });
+
       floorBreakdown[floor.name] = {
         name: floor.name,
-        rooms: floor.rooms || [],
+        roomMap,
         count: 0,
         categories: {},
       };
@@ -223,7 +209,7 @@ async function getCampusHeatmap(req, res) {
       if (!floorBreakdown[floorName]) {
         floorBreakdown[floorName] = {
           name: floorName,
-          rooms: [],
+          roomMap: {},
           count: 0,
           categories: {},
         };
@@ -231,6 +217,26 @@ async function getCampusHeatmap(req, res) {
       floorBreakdown[floorName].count += 1;
       floorBreakdown[floorName].categories[cat] =
         (floorBreakdown[floorName].categories[cat] || 0) + 1;
+
+      // Attach complaint to the specific room
+      const rawRoom = (c.location?.room || "").trim();
+      const roomKey = rawRoom || "General / Corridor";
+
+      if (!floorBreakdown[floorName].roomMap[roomKey]) {
+        floorBreakdown[floorName].roomMap[roomKey] = {
+          roomNumber: roomKey,
+          complaints: [],
+        };
+      }
+
+      floorBreakdown[floorName].roomMap[roomKey].complaints.push({
+        _id: c._id,
+        title: c.complaintTitle,
+        category: c.category,
+        status: c.status,
+        urgency: c.aiTriage?.urgency || "Normal",
+        createdAt: c.createdAt,
+      });
     });
 
     // Detect systemic anomaly: if >= 3 complaints in the same category on a floor or whole building
@@ -274,12 +280,23 @@ async function getCampusHeatmap(req, res) {
           ? "warning"
           : "normal";
 
+    const formattedFloorBreakdown = Object.values(floorBreakdown).map((f) => ({
+      name: f.name,
+      count: f.count,
+      categories: f.categories,
+      rooms: Object.values(f.roomMap).map((r) => ({
+        roomNumber: r.roomNumber,
+        complaintsCount: r.complaints.length,
+        complaints: r.complaints,
+      })),
+    }));
+
     return {
       ...block,
       totalActive,
       criticalCount,
       categoryCounts,
-      floorBreakdown: Object.values(floorBreakdown),
+      floorBreakdown: formattedFloorBreakdown,
       systemicHotspot,
       heatLevel,
     };

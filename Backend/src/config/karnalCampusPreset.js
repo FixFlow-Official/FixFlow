@@ -6,7 +6,6 @@ module.exports = [
     code: "ADMIN",
     category: "Administrative",
     accentColor: "indigo",
-    position: { x: 38, y: 4, width: 24, height: 22 },
     floors: [
       {
         name: "Ground Floor",
@@ -27,7 +26,6 @@ module.exports = [
     code: "CANTEEN",
     category: "Amenities",
     accentColor: "amber",
-    position: { x: 10, y: 4, width: 24, height: 22 },
     floors: [
       {
         name: "Ground Floor",
@@ -42,7 +40,6 @@ module.exports = [
     code: "SPORTS",
     category: "Sports",
     accentColor: "emerald",
-    position: { x: 66, y: 4, width: 24, height: 22 },
     floors: [
       {
         name: "Ground Floor",
@@ -57,7 +54,6 @@ module.exports = [
     code: "PG-ARTS",
     category: "Academic",
     accentColor: "purple",
-    position: { x: 10, y: 34, width: 26, height: 28 },
     floors: [
       {
         name: "Ground Floor",
@@ -80,7 +76,6 @@ module.exports = [
     code: "COMM-B",
     category: "Academic",
     accentColor: "blue",
-    position: { x: 38, y: 34, width: 24, height: 28 },
     floors: [
       {
         name: "Ground Floor",
@@ -103,7 +98,6 @@ module.exports = [
     code: "SCI-LABS",
     category: "Lab",
     accentColor: "cyan",
-    position: { x: 66, y: 34, width: 24, height: 28 },
     floors: [
       {
         name: "Ground Floor",
@@ -122,7 +116,6 @@ module.exports = [
     code: "IT-LABS",
     category: "Lab",
     accentColor: "blue",
-    position: { x: 10, y: 68, width: 26, height: 26 },
     floors: [
       {
         name: "Ground Floor",
@@ -141,7 +134,6 @@ module.exports = [
     code: "MASS-COMM",
     category: "Academic",
     accentColor: "rose",
-    position: { x: 38, y: 68, width: 24, height: 26 },
     floors: [
       {
         name: "Ground Floor",
@@ -156,7 +148,6 @@ module.exports = [
     code: "LIBRARY",
     category: "Amenities",
     accentColor: "emerald",
-    position: { x: 66, y: 68, width: 24, height: 26 },
     floors: [
       {
         name: "Ground Floor",
