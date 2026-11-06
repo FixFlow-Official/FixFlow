@@ -15,6 +15,63 @@ function escapeHtml(value) {
   });
 }
 
+// Non-blocking toast notifications for user feedback without interrupting the UI flow.
+export function showPdfToast(message, type = "error") {
+  if (typeof document === "undefined") return;
+
+  const toastId = "fixflow-pdf-toast-container";
+  let container = document.getElementById(toastId);
+  if (!container) {
+    container = document.createElement("div");
+    container.id = toastId;
+    container.setAttribute("aria-live", "polite");
+    container.setAttribute("role", "status");
+    container.className =
+      "fixed bottom-5 right-5 z-50 flex max-w-sm flex-col gap-2 pointer-events-none";
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `pointer-events-auto flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-semibold shadow-lg transition-all duration-300 transform translate-y-2 opacity-0 ${
+    type === "error"
+      ? "bg-rose-900 text-white border border-rose-700 shadow-rose-950/20"
+      : type === "success"
+        ? "bg-brand-dark text-white border border-brand shadow-brand-dark/20"
+        : "bg-ink text-white border border-stone-700 shadow-ink/20"
+  }`;
+
+  const textSpan = document.createElement("span");
+  textSpan.textContent = message;
+  toast.appendChild(textSpan);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Dismiss notification");
+  closeBtn.className = "text-white/70 hover:text-white transition text-xs font-bold px-1";
+  closeBtn.textContent = "✕";
+  closeBtn.onclick = () => dismiss();
+  toast.appendChild(closeBtn);
+
+  container.appendChild(toast);
+
+  requestAnimationFrame(() => {
+    toast.classList.remove("translate-y-2", "opacity-0");
+  });
+
+  let timer = setTimeout(dismiss, 5000);
+
+  function dismiss() {
+    clearTimeout(timer);
+    toast.classList.add("translate-y-2", "opacity-0");
+    setTimeout(() => {
+      toast.remove();
+      if (!container.hasChildNodes()) {
+        container.remove();
+      }
+    }, 300);
+  }
+}
+
 // Build and directly download a PDF report for one complaint.
 export async function downloadComplaintPdf(complaint) {
   const history = [...(complaint.statusHistory ?? [])].sort(
@@ -199,13 +256,16 @@ export async function downloadComplaintPdf(complaint) {
       })
       .from(report)
       .save();
+
+    showPdfToast("Complaint PDF downloaded.", "success");
   } catch (error) {
     console.error("Could not generate the complaint PDF:", error);
 
-    window.alert(
+    showPdfToast(
       `Could not download the complaint PDF: ${
         error?.message || "Unknown error"
       }`,
+      "error",
     );
   } finally {
     report.remove();

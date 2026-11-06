@@ -6,7 +6,12 @@ config.validateConfig();
 
 const app = require("./src/app");
 const connectDB = require("./src/config/database");
-const { backfillComplaintSlaDates, ensureSlaPolicies, startSlaMonitor } = require("./src/services/sla.service");
+const {
+  backfillComplaintSlaDates,
+  backfillComplaintUserSnapshots,
+  ensureSlaPolicies,
+  startSlaMonitor,
+} = require("./src/services/sla.service");
 
 const shutdownController = new AbortController();
 const SHUTDOWN_TIMEOUT_MS = 15_000;
@@ -24,6 +29,7 @@ connectDB({ signal: shutdownController.signal })
     if (shutdownController.signal.aborted) return;
     await ensureSlaPolicies();
     await backfillComplaintSlaDates();
+    await backfillComplaintUserSnapshots();
     if (shutdownController.signal.aborted) return;
     stopSlaMonitor = startSlaMonitor();
     console.log("Complaint SLA monitoring is ready");

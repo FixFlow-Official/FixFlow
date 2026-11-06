@@ -74,6 +74,18 @@ export async function sendAssistantMessageRequest(messages, accessToken) {
   );
 }
 
+export async function sendVoiceComplaintTurnRequest({ utterance, draft }, accessToken) {
+  return complaintRequest(
+    "/api/assistant/voice-complaint-turn",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ utterance, draft }),
+    },
+    accessToken,
+  );
+}
+
 export async function suggestComplaintDescriptionRequest({ title, category }, accessToken) {
   return complaintRequest(
     "/api/assistant/complaint-description",
@@ -140,14 +152,18 @@ export async function changeMyPasswordRequest(
   );
 }
 
-export async function logoutRequest(accessToken) {
-  let token = accessToken;
+let inFlightRefreshPromise = null;
 
-  if (!token) {
-    let refreshResponse;
+export async function refreshAccessTokenRequest() {
+  if (inFlightRefreshPromise) {
+    return inFlightRefreshPromise;
+  }
+
+  inFlightRefreshPromise = (async () => {
+    let response;
 
     try {
-      refreshResponse = await fetch("/api/auth/token-recreate", {
+      response = await fetch("/api/auth/token-recreate", {
         method: "GET",
         credentials: "include",
       });
@@ -157,16 +173,27 @@ export async function logoutRequest(accessToken) {
       );
     }
 
-    const refreshData = await refreshResponse.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-    if (!refreshResponse.ok) {
+    if (!response.ok || !data.accessToken) {
       throw new Error(
-        refreshData.message ||
-          "Your session has expired. Please sign in again.",
+        data.message || "Your session has expired. Please sign in again.",
       );
     }
 
-    token = refreshData.accessToken;
+    return data.accessToken;
+  })().finally(() => {
+    inFlightRefreshPromise = null;
+  });
+
+  return inFlightRefreshPromise;
+}
+
+export async function logoutRequest(accessToken) {
+  let token = accessToken;
+
+  if (!token) {
+    token = await refreshAccessTokenRequest();
   }
 
   let response;
@@ -198,29 +225,7 @@ export async function logoutAllRequest(accessToken) {
   let token = accessToken;
 
   if (!token) {
-    let refreshResponse;
-
-    try {
-      refreshResponse = await fetch("/api/auth/token-recreate", {
-        method: "GET",
-        credentials: "include",
-      });
-    } catch {
-      throw new Error(
-        "Could not reach FixFlow. Check that the backend is running.",
-      );
-    }
-
-    const refreshData = await refreshResponse.json().catch(() => ({}));
-
-    if (!refreshResponse.ok) {
-      throw new Error(
-        refreshData.message ||
-          "Your session has expired. Please sign in again.",
-      );
-    }
-
-    token = refreshData.accessToken;
+    token = await refreshAccessTokenRequest();
   }
 
   let response;
@@ -399,28 +404,7 @@ async function getComplaintAccessToken(accessToken) {
     return accessToken;
   }
 
-  let response;
-
-  try {
-    response = await fetch("/api/auth/token-recreate", {
-      method: "GET",
-      credentials: "include",
-    });
-  } catch {
-    throw new Error(
-      "Could not reach FixFlow. Check that the backend is running.",
-    );
-  }
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok || !data.accessToken) {
-    throw new Error(
-      data.message || "Your session has expired. Please sign in again.",
-    );
-  }
-
-  return data.accessToken;
+  return refreshAccessTokenRequest();
 }
 
 async function complaintRequest(url, options, accessToken) {
@@ -597,7 +581,7 @@ export async function removePushSubscriptionRequest(endpoint, accessToken) {
 }
 
 export async function createComplaintRequest(
-  { title, description, category, building, room, image, triageToken },
+  { title, description, category, building, floor, room, image, triageToken, confirmedCampusIssue },
   accessToken,
 ) {
   const formData = new FormData();
@@ -605,9 +589,11 @@ export async function createComplaintRequest(
   formData.append("description", description);
   formData.append("category", category);
   formData.append("building", building);
+  if (floor) formData.append("floor", floor);
   formData.append("room", room);
   formData.append("complaintImage", image);
   if (triageToken) formData.append("triageToken", triageToken);
+  if (confirmedCampusIssue) formData.append("confirmedCampusIssue", "true");
 
   return complaintRequest(
     "/api/student/create-complaint",
@@ -812,3 +798,49 @@ export async function updateComplaintStatusRequest(
     accessToken,
   );
 }
+
+// Campus Layout & Spatial GIS API
+export async function getCampusBlocksRequest(accessToken) {
+  return complaintRequest("/api/campus/blocks", { method: "GET" }, accessToken);
+}
+
+export async function getCampusHeatmapRequest(accessToken) {
+  return complaintRequest("/api/campus/heatmap", { method: "GET" }, accessToken);
+}
+
+export async function createCampusBlockRequest(blockData, accessToken) {
+  return complaintRequest(
+    "/api/campus/blocks",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(blockData),
+    },
+    accessToken,
+  );
+}
+
+export async function updateCampusBlockRequest(id, blockData, accessToken) {
+  return complaintRequest(
+    `/api/campus/blocks/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(blockData),
+    },
+    accessToken,
+  );
+}
+
+export async function deleteCampusBlockRequest(id, accessToken) {
+  return complaintRequest(
+    `/api/campus/blocks/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    accessToken,
+  );
+}
+
+export async function initKarnalPresetRequest(accessToken) {
+  return complaintRequest("/api/campus/preset-karnal", { method: "POST" }, accessToken);
+}
+

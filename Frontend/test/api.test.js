@@ -85,6 +85,31 @@ test("complaint requests obtain a token from the refresh cookie when none is sup
   assert.deepEqual(calls, ["/api/auth/token-recreate", "/api/student/get-complaint"]);
 });
 
+test("concurrent complaint requests deduplicate token refresh calls via mutex", async (t) => {
+  const calls = [];
+  mockFetch(t, async (url) => {
+    calls.push(url);
+    if (url === "/api/auth/token-recreate") {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return jsonResponse({ accessToken: "deduped-token" });
+    }
+    return jsonResponse({ complaints: [] });
+  });
+
+  const [res1, res2, res3] = await Promise.all([
+    getComplaintsRequest(null),
+    getComplaintsRequest(null),
+    getComplaintsRequest(null),
+  ]);
+
+  assert.deepEqual(res1, { complaints: [] });
+  assert.deepEqual(res2, { complaints: [] });
+  assert.deepEqual(res3, { complaints: [] });
+
+  const recreateCalls = calls.filter((url) => url === "/api/auth/token-recreate");
+  assert.equal(recreateCalls.length, 1);
+});
+
 test("complaint requests expose validation messages and support request IDs", async (t) => {
   mockFetch(t, async () => jsonResponse({
     message: "Request validation failed.",

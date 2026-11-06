@@ -78,7 +78,7 @@ router.post(
  * @access public
  */
 
-router.get("/getMe", authMiddleWare.logoutMiddleware, authController.getMe);
+router.get("/getMe", authMiddleWare.verifySessionMiddleware, authController.getMe);
 
 router.patch(
   "/profile",
@@ -100,7 +100,7 @@ router.patch(
  * @access public
  */
 
-router.post("/logout", authMiddleWare.logoutMiddleware, authController.logout);
+router.post("/logout", authMiddleWare.verifySessionMiddleware, authController.logout);
 
 /**
  * @route api/auth/logoutAll
@@ -110,7 +110,7 @@ router.post("/logout", authMiddleWare.logoutMiddleware, authController.logout);
 
 router.post(
   "/logoutAll",
-  authMiddleWare.logoutMiddleware,
+  authMiddleWare.verifySessionMiddleware,
   authController.logoutAll,
 );
 
@@ -122,7 +122,7 @@ router.post(
 
 router.get(
   "/token-recreate",
-  authMiddleWare.logoutMiddleware,
+  authMiddleWare.verifySessionMiddleware,
   authController.tokenRecreate,
 );
 

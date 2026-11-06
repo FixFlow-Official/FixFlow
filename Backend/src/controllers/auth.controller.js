@@ -11,6 +11,7 @@ const staffModel = require("../models/staff.model");
 const adminModel = require("../models/admin.model");
 const campusDirectoryModel = require("../models/campusDirectory.model");
 const blackListTokenModel = require("../models/blackListToken.model");
+const complaintModel = require("../models/complaint.model");
 const uploadFile = require("../services/storage.service");
 const {
   REFRESH_TOKEN_TTL_MS,
@@ -75,6 +76,13 @@ async function updateProfile(req, res) {
       { new: true, runValidators: true },
     );
     if (!user) return res.status(404).json({ message: "Account not found." });
+
+    if (update.username) {
+      await complaintModel.updateMany(
+        { user: user._id, userRef: req.auth.role },
+        { $set: { "userSnapshot.name": update.username } },
+      );
+    }
 
     return res.status(200).json({
       message: "Profile updated successfully.",

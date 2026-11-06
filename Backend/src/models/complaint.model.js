@@ -96,12 +96,19 @@ const complaintSchema = new mongoose.Schema(
       relatedOpenReports: { type: Number, min: 0, default: 0 },
       rationale: { type: String, maxlength: 280, default: null },
       provider: { type: String, enum: ["gemini", "rules"], default: null },
+      reviewSignal: { type: String, enum: ["actionable", "needs_details", "check_relevance"], default: "needs_details" },
+      reviewSignalReason: { type: String, maxlength: 240, default: "" },
     },
     location: {
       building: {
         type: String,
         required: [true, "Building is required"],
         trim: true,
+      },
+      floor: {
+        type: String,
+        trim: true,
+        default: "Ground Floor",
       },
       room: {
         type: String,
@@ -221,6 +228,8 @@ complaintSchema.index({
 complaintSchema.index({ status: 1, slaResponseDueAt: 1, slaFirstRespondedAt: 1 });
 complaintSchema.index({ status: 1, slaResolutionDueAt: 1 });
 complaintSchema.index({ "aiTriage.priority": 1, status: 1, createdAt: -1 });
+complaintSchema.index({ "userSnapshot.name": 1 });
+complaintSchema.index({ "userSnapshot.campusId": 1 });
 
 const complaintModel = mongoose.model("complaint", complaintSchema);
 

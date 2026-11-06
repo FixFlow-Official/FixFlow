@@ -2,9 +2,12 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   DEFAULT_POLICIES,
+  acquireClusterLock,
   getSlaEventsForComplaint,
   makeComplaintSlaDates,
+  releaseClusterLock,
 } = require("../src/services/sla.service");
+const mongoose = require("mongoose");
 
 const policy = { responseHours: 24, resolutionHours: 120, reminderBeforeHours: 4 };
 const complaintId = "507f1f77bcf86cd799439011";
@@ -81,4 +84,58 @@ test("does not evaluate terminal complaints", () => {
   }, policy, new Date("2026-11-03T12:00:00.000Z"));
 
   assert.deepEqual(events, []);
+});
+
+test("acquires distributed cluster lock and releases it cleanly", async () => {
+  const originalDb = mongoose.connection.db;
+  const originalReadyState = mongoose.connection.readyState;
+  let storedLock = null;
+  const mockCollection = {
+    createIndex: async () => {},
+    findOneAndUpdate: async (filter, update) => {
+      if (storedLock && storedLock.expiresAt > new Date()) {
+        const error = new Error("duplicate key");
+        error.code = 11000;
+        throw error;
+      }
+      storedLock = { ...update.$set };
+      return { value: storedLock };
+    },
+    deleteOne: async (filter) => {
+      if (storedLock && storedLock.lockKey === filter.lockKey && storedLock.acquiredBy === filter.acquiredBy) {
+        storedLock = null;
+        return { deletedCount: 1 };
+      }
+      return { deletedCount: 0 };
+    },
+  };
+
+  Object.defineProperty(mongoose.connection, "readyState", { value: 1, configurable: true });
+  Object.defineProperty(mongoose.connection, "db", {
+    value: { collection: () => mockCollection },
+    configurable: true,
+  });
+
+  try {
+    const lock1 = await acquireClusterLock("test_lock", 60_000);
+    assert.ok(lock1);
+    assert.equal(lock1.lockKey, "test_lock");
+    assert.ok(lock1.workerId);
+
+    // Second worker calling concurrently fails
+    const lock2 = await acquireClusterLock("test_lock", 60_000);
+    assert.equal(lock2, null);
+
+    // Releasing first lock frees it up
+    const released = await releaseClusterLock(lock1);
+    assert.equal(released, true);
+
+    // Now another worker can acquire it
+    const lock3 = await acquireClusterLock("test_lock", 60_000);
+    assert.ok(lock3);
+    assert.equal(lock3.lockKey, "test_lock");
+  } finally {
+    Object.defineProperty(mongoose.connection, "readyState", { value: originalReadyState, configurable: true });
+    Object.defineProperty(mongoose.connection, "db", { value: originalDb, configurable: true });
+  }
 });

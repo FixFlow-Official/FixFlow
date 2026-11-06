@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getCurrentUserRequest } from "../services/api.js";
+import { getCurrentUserRequest, refreshAccessTokenRequest } from "../services/api.js";
 import AuthContext from "./authContext.js";
 
 export function AuthProvider({ children }) {
@@ -17,9 +17,15 @@ export function AuthProvider({ children }) {
         if (!cancelled) {
           setUser(data.user);
         }
+
+        const token = await refreshAccessTokenRequest();
+        if (!cancelled) {
+          setAccessToken(token);
+        }
       } catch {
         if (!cancelled) {
           setUser(null);
+          setAccessToken(null);
         }
       } finally {
         if (!cancelled) {

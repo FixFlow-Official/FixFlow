@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
+  AudioLines,
   LoaderCircle,
   MessageCircle,
   Mic,
@@ -12,8 +13,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/useAuth.js";
 import { sendAssistantMessageRequest } from "../../services/api.js";
+import AssistantVoiceMode from "./AssistantVoiceMode.jsx";
 
-const greeting = "Hi! I can guide you around FixFlow and help explain the complaint workflow. I can’t access or change your records.";
+const greeting = "I can guide you around FixFlow and explain the complaint workflow. I cannot browse private records or perform account actions. In student voice mode, I can help prepare a complaint for your review and submit it only after you confirm.";
 
 const navigationAliases = {
   complaints: ["complaint", "complaints", "my complaints", "complaint list"],
@@ -80,7 +82,7 @@ function toSpokenText(markdown) {
     .trim();
 }
 
-export default function DashboardAssistant({ navItems, onNavigate }) {
+export default function DashboardAssistant({ navItems, onNavigate, onComplaintSubmit }) {
   const { user, accessToken } = useAuth();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -88,6 +90,7 @@ export default function DashboardAssistant({ navItems, onNavigate }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [voiceReplies, setVoiceReplies] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [listening, setListening] = useState(false);
   const endOfMessagesRef = useRef(null);
@@ -137,6 +140,7 @@ export default function DashboardAssistant({ navItems, onNavigate }) {
     recognitionRef.current?.abort();
     setListening(false);
     window.speechSynthesis?.cancel();
+    setVoiceMode(false);
     setOpen(false);
     launcherRef.current?.focus();
   }
@@ -158,7 +162,7 @@ export default function DashboardAssistant({ navItems, onNavigate }) {
     const spokenText = toSpokenText(text);
     if (!spokenText) return;
     const utterance = new window.SpeechSynthesisUtterance(spokenText);
-    utterance.lang = /[\u0900-\u097f]/.test(text) ? "hi-IN" : "en-IN";
+    utterance.lang = "en-IN";
     utterance.rate = 0.96;
     utterance.pitch = 1.02;
     const voices = window.speechSynthesis.getVoices();
@@ -216,7 +220,7 @@ export default function DashboardAssistant({ navItems, onNavigate }) {
 
     setVoiceError("");
     const recognition = new SpeechRecognition();
-    recognition.lang = "hi-IN";
+    recognition.lang = "en-IN";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.onresult = (event) => {
@@ -266,7 +270,7 @@ export default function DashboardAssistant({ navItems, onNavigate }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="dashboard-assistant-title"
-          className={`relative z-10 flex h-[100dvh] w-screen origin-bottom flex-col overflow-hidden rounded-none border-0 bg-white shadow-none ring-0 transition-[opacity,transform] duration-200 ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none sm:h-[min(82dvh,52rem)] sm:w-[min(calc(100vw-3rem),42rem)] sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-[0_32px_100px_-28px_rgba(15,23,42,0.55)] sm:ring-1 sm:ring-slate-900/5 ${open ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-[0.97] opacity-0"}`}
+          className={`relative z-10 flex h-[100dvh] w-screen origin-bottom flex-col overflow-hidden rounded-none border-0 bg-white shadow-none ring-0 transition-[opacity,transform] duration-200 ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none sm:h-[min(86dvh,58rem)] sm:w-[min(calc(100vw-3rem),56rem)] sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-[0_32px_100px_-28px_rgba(15,23,42,0.55)] sm:ring-1 sm:ring-slate-900/5 ${open ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-[0.97] opacity-0"}`}
         >
           <header className="relative isolate overflow-hidden border-b border-brand/10 bg-gradient-to-br from-[#e5f4ee] via-white to-[#f0f7f4] px-5 py-5 sm:px-7 sm:py-6">
             <div className="pointer-events-none absolute -right-12 -top-20 -z-10 size-52 rounded-full bg-brand/15 blur-3xl" />
@@ -286,6 +290,7 @@ export default function DashboardAssistant({ navItems, onNavigate }) {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                <button type="button" aria-label="Open voice conversation" title="Voice conversation" onClick={() => setVoiceMode(true)} className="grid size-10 place-items-center rounded-xl text-muted transition hover:bg-white hover:text-brand"><AudioLines size={19} /></button>
                 <button
                   type="button"
                   aria-label={voiceReplies ? "Turn off spoken replies" : "Turn on spoken replies"}
@@ -303,6 +308,7 @@ export default function DashboardAssistant({ navItems, onNavigate }) {
             </div>
           </header>
 
+          {voiceMode ? <AssistantVoiceMode accessToken={accessToken} role={user?.role} messages={messages} setMessages={setMessages} onClose={() => setVoiceMode(false)} onNavigateText={navigateFromText} onComplaintSubmit={onComplaintSubmit} /> : <>
           <div className="assistant-chat-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-[radial-gradient(ellipse_at_top,_#f4faf7_0%,_#ffffff_48%)] px-4 py-5 sm:gap-5 sm:px-6 sm:py-6" aria-live="polite">
             {messages.length === 0 ? (
               <>
@@ -374,6 +380,7 @@ export default function DashboardAssistant({ navItems, onNavigate }) {
             </div>
             <p className="mt-2 px-1 text-[10px] leading-4 text-muted">Avoid sharing personal or sensitive complaint details. AI answers can be incorrect.</p>
           </form>
+          </>}
         </section>
       </div>
 

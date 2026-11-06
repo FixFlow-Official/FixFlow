@@ -1,10 +1,8 @@
 const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
-const studentModel = require("../models/student.model");
 const uploadFile = require("../services/storage.service");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
 const {
-  findStudentIdsBySearch,
   getPageMetadata,
   getPageOptions,
   makeSearchRegex,
@@ -84,10 +82,6 @@ async function getAssignedComplaints(req, res) {
     let searchFilter = {};
 
     if (searchRegex) {
-      const studentIds = await findStudentIdsBySearch(
-        req.query.search,
-        studentModel,
-      );
       searchFilter = {
         $or: [
           { complaintTitle: searchRegex },
@@ -95,7 +89,8 @@ async function getAssignedComplaints(req, res) {
           { category: searchRegex },
           { "location.building": searchRegex },
           { "location.room": searchRegex },
-          { user: { $in: studentIds } },
+          { "userSnapshot.name": searchRegex },
+          { "userSnapshot.campusId": searchRegex },
         ],
       };
     }

@@ -1,7 +1,7 @@
 const config = require("../config/config");
 const jwt = require("jsonwebtoken");
 const complaintModel = require("../models/complaint.model");
-const { AssistantServiceError, generateAssistantReply, generateComplaintDescriptionDraft, generateStatusNoteDraft, generateReportInsights } = require("../services/assistant.service");
+const { AssistantServiceError, generateAssistantReply, generateComplaintDescriptionDraft, generateVoiceComplaintTurn, generateStatusNoteDraft, generateReportInsights } = require("../services/assistant.service");
 const { triageComplaint, fingerprintComplaint } = require("../services/complaintTriage.service");
 
 const allowedRoles = new Set(["student", "staff", "admin"]);
@@ -137,6 +137,37 @@ async function previewComplaintTriage(req, res, next) {
   }
 }
 
+async function voiceComplaintTurn(req, res, next) {
+  try {
+    if (req.auth?.role !== "student") {
+      return res.status(403).json({ message: "Voice complaint creation is available to student accounts." });
+    }
+    const utterance = typeof req.body?.utterance === "string" ? req.body.utterance.trim() : "";
+    if (!utterance || utterance.length > 1200) {
+      return res.status(400).json({ message: "Send a voice transcript of up to 1,200 characters." });
+    }
+    const sourceDraft = req.body?.draft && typeof req.body.draft === "object" && !Array.isArray(req.body.draft) ? req.body.draft : {};
+    const draft = {};
+    for (const field of ["title", "description", "category", "building", "room"]) {
+      const value = sourceDraft[field];
+      if (value !== undefined && typeof value !== "string") {
+        return res.status(400).json({ message: "Complaint draft fields must be text." });
+      }
+      draft[field] = value || "";
+    }
+    const result = await generateVoiceComplaintTurn({
+      utterance,
+      draft,
+      apiKey: config.GEMINI_API_KEY,
+      model: config.GEMINI_MODEL,
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof AssistantServiceError) return res.status(error.status).json({ message: error.message });
+    return next(error);
+  }
+}
+
 async function draftStatusNote(req, res, next) {
   try {
     if (req.auth?.role !== "staff") return res.status(403).json({ message: "Only staff can draft complaint status notes." });
@@ -177,4 +208,4 @@ async function reportInsights(req, res, next) {
   }
 }
 
-module.exports = { chat, draftComplaintDescription, previewComplaintTriage, draftStatusNote, reportInsights, validateMessages };
+module.exports = { chat, draftComplaintDescription, previewComplaintTriage, voiceComplaintTurn, draftStatusNote, reportInsights, validateMessages };

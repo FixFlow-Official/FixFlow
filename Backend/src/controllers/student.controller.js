@@ -61,6 +61,7 @@ async function createComplaint(req, res) {
     description,
     category,
     building,
+    floor = "Ground Floor",
     room = "",
   } = req.body;
 
@@ -91,14 +92,6 @@ async function createComplaint(req, res) {
     });
   }
 
-  const result = await uploadFile(req.file.buffer, title.trim());
-
-  if (!result?.url) {
-    return res.status(502).json({
-      message: "Could not upload the complaint photo. Please try again.",
-    });
-  }
-
   const submittedAt = new Date();
   const triageInput = { title: title.trim(), description: description.trim(), category, building: building.trim() };
   let aiTriage;
@@ -120,10 +113,30 @@ async function createComplaint(req, res) {
     status: { $in: activeComplaintStatuses },
     createdAt: { $gte: new Date(submittedAt.getTime() - 30 * 24 * 60 * 60 * 1000) },
   });
+  if (aiTriage.reviewSignal === "check_relevance" && !aiTriage.safetyConcern && req.body.confirmedCampusIssue !== "true") {
+    return res.status(422).json({
+      message: "The AI could not identify a clear campus issue in this draft. Add specific details or confirm that this is an actual campus issue so staff can review it.",
+    });
+  }
+
+  const result = await uploadFile(req.file.buffer, title.trim());
+  if (!result?.url) {
+    return res.status(502).json({
+      message: "Could not upload the complaint photo. Please try again.",
+    });
+  }
+
   const slaPolicy = await getSlaPolicy(category);
+  const userSnapshot = {
+    name: user.username,
+    campusId: String(user.rollno ?? user.staffId ?? user.adminId ?? ""),
+    email: user.email,
+    role: user.role,
+  };
   const complaint = await complaintModel.create({
     user: user._id,
     userRef: user.role,
+    userSnapshot,
     complaintPictureUrl: result.url,
     complaintTitle: title.trim(),
     complaintDescription: description.trim(),
@@ -132,6 +145,7 @@ async function createComplaint(req, res) {
     ...makeComplaintSlaDates(slaPolicy, submittedAt),
     location: {
       building: building.trim(),
+      floor: (floor || "Ground Floor").trim(),
       room: room.trim(),
     },
   });

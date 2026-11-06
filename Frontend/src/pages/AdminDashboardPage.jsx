@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardList,
   LoaderCircle,
+  MapPin,
   Timer,
   Users,
   UserRound,
@@ -35,6 +36,7 @@ const AdminReports = lazy(() => import("../features/admin/AdminReports.jsx"));
 const AdminUserManagement = lazy(() => import("../features/admin/AdminUserManagement.jsx"));
 const AdminAccountsPage = lazy(() => import("../features/admin/AdminAccountsPage.jsx"));
 const AdminSlaPage = lazy(() => import("../features/admin/AdminSlaPage.jsx"));
+const AdminCampusMapPage = lazy(() => import("../features/admin/AdminCampusMapPage.jsx"));
 
 // Main admin dashboard: complaint queues, assignment actions, and reassignment.
 export default function AdminDashboardPage() {
@@ -385,6 +387,7 @@ export default function AdminDashboardPage() {
       onSectionChange={setActiveSection}
       navItems={[
         { id: "complaints", label: "Complaints", icon: ClipboardList },
+        { id: "campusMap", label: "Campus Map & GIS", icon: MapPin },
         { id: "users", label: "User access", icon: Users },
         { id: "accounts", label: "Accounts", icon: Users },
         { id: "profile", label: "Profile", icon: UserRound },
@@ -398,6 +401,10 @@ export default function AdminDashboardPage() {
     >
       {activeSection === "profile" ? (
         <ProfileSettings />
+      ) : activeSection === "campusMap" ? (
+        <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading campus map…</div>}>
+          <AdminCampusMapPage accessToken={accessToken} />
+        </Suspense>
       ) : activeSection === "users" ? (
         <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading user access…</div>}>
           <AdminUserManagement accessToken={accessToken} />

@@ -20,6 +20,7 @@ const assistantLimiter = rateLimit({
 router.post("/chat", verifyAccessToken, assistantLimiter, assistantController.chat);
 router.post("/complaint-description", verifyAccessToken, assistantLimiter, assistantController.draftComplaintDescription);
 router.post("/complaint-triage", verifyAccessToken, assistantLimiter, assistantController.previewComplaintTriage);
+router.post("/voice-complaint-turn", verifyAccessToken, assistantLimiter, assistantController.voiceComplaintTurn);
 router.post("/status-note", verifyAccessToken, assistantLimiter, assistantController.draftStatusNote);
 router.post("/report-insights", verifyAccessToken, assistantLimiter, assistantController.reportInsights);
 
