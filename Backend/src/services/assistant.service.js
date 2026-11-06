@@ -1,17 +1,19 @@
 const ROLE_GUIDANCE = {
-  student: "The user is a student. Help with submitting and tracking complaints, profile settings, and notification setup. In voice mode, help gather an editable complaint draft and allow submission only through the authenticated complaint flow after the student reviews and confirms it.",
-  staff: "The user is a staff member. Help with reviewing assigned complaints, recording status updates, and communicating clearly with students.",
-  admin: "The user is an administrator. Help with complaint assignment, SLA tracking, reports, directory and account management.",
+  student: "The user is a student. Help with navigating views, submitting and tracking complaints, filling complaint form fields, and profile settings. In voice or text mode, help navigate to sections, gather and fill editable complaint details, and guide them through submission.",
+  staff: "The user is a staff member. Help with navigating to assigned complaints, switching between active and resolved views, recording status updates, and communicating clearly with students.",
+  admin: "The user is an administrator. Help with navigating to Complaints, Live Campus Map & GIS, SLA tracking, reports, user access, and directory management.",
 };
 
 const ASSISTANT_INSTRUCTIONS = [
-  "You are the FixFlow assistant, a concise and professional guide for a campus complaint-management app.",
+  "You are the FixFlow AI assistant, an authorized app copilot for the FixFlow campus facility management platform.",
+  "You have full access to help users navigate between sections (Complaints, Campus Map & GIS, User Access, Accounts, SLA Tracking, Reports, Profile, Create Complaint) and fill in complaint form fields (Title, Category, Building, Floor, Room, Description) based on their voice or text input.",
+  "Never say 'I don't have user access' or 'I cannot perform actions' when asked to navigate, view a section, or fill fields. Confirm the action helpfully.",
+  "You cannot access private records such as account passwords, OTPs, or authentication secrets. Never ask for or repeat passwords, OTPs, or auth tokens.",
   "Respond in clear, professional English by default, even when the user speaks Hindi or Hinglish. Do not write Romanized Hindi or Hinglish. Use Hindi only when the user explicitly requests it.",
   "Use plain text. Do not use Markdown symbols, headings, or decorative formatting in spoken replies.",
   "Help explain how to use FixFlow and give practical complaint-workflow guidance.",
   "FixFlow provides AI complaint triage recommendations for priority, urgency, suggested category, safety concerns, and missing details. Explain these as advisory only; staff/admin make final decisions.",
-  "You cannot access private records or execute arbitrary actions. The student voice complaint workflow may help gather an editable draft, but it must never say a complaint was submitted until the authenticated submission succeeds after the student confirms.",
-  "Do not ask for or repeat passwords, OTPs, student IDs, email addresses, or other identifying complaint details.",
+  "The complaint workflow helps gather and fill editable details; the user reviews the details, attaches a proof photo, and confirms submission.",
   "Do not decide whether a complaint is genuine or make consequential decisions about a person. Explain that staff/admin review is required.",
   "For an immediate safety emergency, tell the user to contact campus security or local emergency services directly.",
 ].join(" ");
@@ -24,16 +26,21 @@ class AssistantServiceError extends Error {
   }
 }
 
-function buildSystemInstruction(role) {
+function buildSystemInstruction(role, userName = "") {
   const roleGuidance = ROLE_GUIDANCE[role];
   if (!roleGuidance) throw new AssistantServiceError("Your account role cannot use the assistant.", 403);
-  return `${ASSISTANT_INSTRUCTIONS} ${roleGuidance}`;
+  const firstName = userName ? userName.trim().split(/\s+/)[0] : "";
+  const nameInstruction = firstName
+    ? ` The user's name is ${firstName}. Greet them by name only if this is the very first turn of the conversation. In ongoing conversation and follow-up turns, DO NOT repeat "Hello ${firstName}" or any greeting; answer questions and confirm actions directly and concisely.`
+    : "";
+  return `${ASSISTANT_INSTRUCTIONS} ${roleGuidance}${nameInstruction}`;
 }
 
 async function generateAssistantReply({
   apiKey,
   model = "gemini-3.5-flash-lite",
   role,
+  userName = "",
   messages,
   fetchImpl = fetch,
   timeoutMs = 20_000,
@@ -44,7 +51,7 @@ async function generateAssistantReply({
     throw new AssistantServiceError("The FixFlow AI assistant is not configured yet. Add GEMINI_API_KEY to Backend/.env and restart the backend.", 503);
   }
 
-  const systemInstruction = `${buildSystemInstruction(role)} ${systemInstructionSuffix}`.trim();
+  const systemInstruction = `${buildSystemInstruction(role, userName)} ${systemInstructionSuffix}`.trim();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   let response;

@@ -67,6 +67,7 @@ export default function DashboardShell({
   assistantNavItems = [],
   onAssistantNavigate,
   onVoiceComplaintSubmit,
+  onFillFormFields,
   children,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -160,6 +161,7 @@ export default function DashboardShell({
         navItems={[...navItems, ...assistantNavItems]}
         onNavigate={onAssistantNavigate || handleNavigate}
         onComplaintSubmit={onVoiceComplaintSubmit}
+        onFillFormFields={onFillFormFields}
       />
     </div>
   );

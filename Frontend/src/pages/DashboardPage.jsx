@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ExpandableComplaintCard from "../components/complaints/ExpandableComplaintCard.jsx";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
@@ -271,12 +271,34 @@ export default function DashboardPage() {
 
 
 
+  // Fill complaint form fields via AI Assistant (Voice or Text)
+  const handleFillFormFields = useCallback((fields) => {
+    if (!fields) return;
+    setActiveSection("complaints");
+    openCreateComplaint();
+    if (fields.title) setTitle(fields.title);
+    if (fields.category) setCategory(fields.category);
+    if (fields.building) setBuilding(fields.building);
+    if (fields.floor) setFloor(fields.floor);
+    if (fields.room) setRoom(fields.room);
+    if (fields.description) setDescription(fields.description);
+  }, []);
+
+  useEffect(() => {
+    function onFillEvent(event) {
+      if (event?.detail) handleFillFormFields(event.detail);
+    }
+    window.addEventListener("fixflow:fill-complaint-form", onFillEvent);
+    return () => window.removeEventListener("fixflow:fill-complaint-form", onFillEvent);
+  }, [handleFillFormFields]);
+
   return (
     <DashboardShell
       workspaceLabel="Student"
       activeSection={activeSection}
       onSectionChange={setActiveSection}
       onVoiceComplaintSubmit={submitComplaint}
+      onFillFormFields={handleFillFormFields}
       assistantNavItems={[
         { id: "newComplaint", label: "New complaint" },
         { id: "myComplaints", label: "My complaints" },

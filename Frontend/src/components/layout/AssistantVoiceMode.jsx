@@ -1,14 +1,26 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AudioLines,
   CheckCircle2,
   LoaderCircle,
   Mic,
   MicOff,
+  Minimize2,
   Pause,
   Upload,
   Volume2,
+  X,
 } from "lucide-react";
+import {
+  extractComplaintFields,
+  extractNavigationFromReply,
+  findNavigationTarget,
+  getUserDisplayName,
+  isExitIntent,
+  splitIntoSentences,
+  stripRepetitiveGreeting,
+} from "./assistantUtils.js";
 import {
   previewComplaintTriageRequest,
   sendAssistantMessageRequest,
@@ -58,17 +70,28 @@ function isCampusIssueConfirmation(text) {
 
 export default function AssistantVoiceMode({
   accessToken,
+  user,
   messages,
   setMessages,
   onClose,
   onNavigateText,
+  navItems = [],
   role,
   onComplaintSubmit,
+  onFillFormFields,
+  isOrbMode = false,
+  setIsOrbMode,
 }) {
+  const [internalOrbMode, setInternalOrbMode] = useState(false);
+  const orbActive =
+    typeof isOrbMode === "boolean" ? isOrbMode : internalOrbMode;
+  const setOrbActive = setIsOrbMode || setInternalOrbMode;
+
   const [phase, setPhase] = useState("ready");
   const [partialText, setPartialText] = useState("");
   const [lastUserText, setLastUserText] = useState("");
   const [reply, setReply] = useState("");
+  const [currentSpokenLine, setCurrentSpokenLine] = useState("");
   const [error, setError] = useState("");
   const [muted, setMuted] = useState(false);
   const [complaintMode, setComplaintMode] = useState(false);
@@ -115,8 +138,13 @@ export default function AssistantVoiceMode({
   function stopVoice() {
     activeRef.current = false;
     window.clearTimeout(replyTimerRef.current);
-    recognitionRef.current?.abort();
+    try {
+      recognitionRef.current?.abort();
+    } catch {
+      // ignore
+    }
     window.speechSynthesis?.cancel();
+    setCurrentSpokenLine("");
     updatePhase("ready");
   }
 
@@ -124,51 +152,99 @@ export default function AssistantVoiceMode({
     () => () => {
       activeRef.current = false;
       window.clearTimeout(replyTimerRef.current);
-      recognitionRef.current?.abort();
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        // ignore
+      }
       window.speechSynthesis?.cancel();
     },
     [],
   );
 
-  function resumeAfterSpeech(text) {
-    window.clearTimeout(replyTimerRef.current);
-    const resume = () => {
-      if (phaseRef.current !== "speaking" || !activeRef.current) return;
-      updatePhase("listening");
-      window.setTimeout(() => startListeningRef.current?.(), 250);
-    };
-    replyTimerRef.current = window.setTimeout(
-      resume,
-      Math.min(30_000, Math.max(4_500, text.length * 85)),
-    );
-  }
-
-  function speakReply(text) {
+  function speakReply(text, onFinished = null) {
     const cleanText = speakable(text);
+    if (!cleanText) {
+      if (onFinished) onFinished();
+      else {
+        updatePhase("listening");
+        window.setTimeout(() => startListeningRef.current?.(), 250);
+      }
+      return;
+    }
+
+    const sentences = splitIntoSentences(cleanText);
+    if (!sentences.length) sentences.push(cleanText);
+
     if (
       muted ||
       !window.speechSynthesis ||
-      !window.SpeechSynthesisUtterance ||
-      !cleanText
+      !window.SpeechSynthesisUtterance
     ) {
-      updatePhase("listening");
-      window.setTimeout(() => startListeningRef.current?.(), 250);
+      setReply(sentences[0]);
+      setCurrentSpokenLine(sentences[0]);
+      if (onFinished) onFinished();
+      else {
+        updatePhase("listening");
+        window.setTimeout(() => startListeningRef.current?.(), 250);
+      }
       return;
     }
+
     window.speechSynthesis.cancel();
-    const utterance = new window.SpeechSynthesisUtterance(cleanText);
-    utterance.lang = "en-IN";
-    utterance.rate = 0.96;
-    utterance.onend = () => {
-      window.clearTimeout(replyTimerRef.current);
-      if (!activeRef.current) return;
-      updatePhase("listening");
-      window.setTimeout(() => startListeningRef.current?.(), 250);
-    };
-    utterance.onerror = utterance.onend;
+    window.clearTimeout(replyTimerRef.current);
     updatePhase("speaking");
-    window.speechSynthesis.speak(utterance);
-    resumeAfterSpeech(cleanText);
+
+    let sentenceIndex = 0;
+
+    function speakCurrentSentence() {
+      if (!activeRef.current) return;
+      if (sentenceIndex >= sentences.length) {
+        window.clearTimeout(replyTimerRef.current);
+        setCurrentSpokenLine("");
+        if (onFinished) {
+          onFinished();
+        } else {
+          updatePhase("listening");
+          window.setTimeout(() => startListeningRef.current?.(), 250);
+        }
+        return;
+      }
+
+      const line = sentences[sentenceIndex];
+      sentenceIndex += 1;
+      setReply(line);
+      setCurrentSpokenLine(line);
+
+      const utterance = new window.SpeechSynthesisUtterance(line);
+      utterance.lang = "en-IN";
+      utterance.rate = 0.96;
+
+      let advanced = false;
+      const advance = () => {
+        if (advanced) return;
+        advanced = true;
+        window.clearTimeout(replyTimerRef.current);
+        window.setTimeout(() => {
+          if (activeRef.current && phaseRef.current === "speaking") {
+            speakCurrentSentence();
+          }
+        }, 120);
+      };
+
+      utterance.onend = advance;
+      utterance.onerror = advance;
+
+      window.speechSynthesis.speak(utterance);
+
+      // Guard timer per sentence to prevent stalling if speech synthesis events don't fire
+      replyTimerRef.current = window.setTimeout(
+        advance,
+        Math.min(18_000, Math.max(3_500, line.length * 90)),
+      );
+    }
+
+    speakCurrentSentence();
   }
 
   function appendAssistantReply(userText, assistantText) {
@@ -364,12 +440,22 @@ export default function AssistantVoiceMode({
     setLastUserText(userText);
     setError("");
 
-    if (/^(stop|stop voice|end voice chat|close voice chat)$/i.test(userText)) {
-      stopVoice();
-      onClose();
+    // 1. Session Termination Intent ("bye", "goodbye", "exit", etc.)
+    if (isExitIntent(userText)) {
+      const callerName = getUserDisplayName(user);
+      const farewell = callerName
+        ? `Goodbye ${callerName}! Let me know if you need any help with campus facilities.`
+        : "Goodbye! Let me know if you need any help with campus facilities.";
+      setReply(farewell);
+      updatePhase("speaking");
+      speakReply(farewell, () => {
+        stopVoice();
+        onClose();
+      });
       return;
     }
 
+    // 2. Complaint drafting conversational mode
     if (complaintModeRef.current) {
       await processComplaintUtterance(userText);
       return;
@@ -387,7 +473,40 @@ export default function AssistantVoiceMode({
       return;
     }
 
-    if (onNavigateText?.(userText)) return;
+    // 3. Navigation command (navigates & smoothly transitions into continuous floating orb)
+    const navResult = onNavigateText?.(userText, true);
+    if (navResult) {
+      const targetName =
+        typeof navResult === "object" ? navResult.label : "the requested section";
+      const navReply = `Opening ${targetName}. I'm right here in the orb listening.`;
+      setReply(navReply);
+      setOrbActive(true);
+      speakReply(navReply);
+      return;
+    }
+
+    // 4. Form filling command (fills title, category, location, and description)
+    const formFields = extractComplaintFields(userText);
+    if (
+      formFields &&
+      (formFields.title ||
+        formFields.category ||
+        formFields.building ||
+        formFields.room)
+    ) {
+      onFillFormFields?.(formFields);
+      window.dispatchEvent(
+        new CustomEvent("fixflow:fill-complaint-form", { detail: formFields }),
+      );
+      onNavigateText?.("create complaint", true);
+      const fieldDesc = `${formFields.title || "Complaint"}${formFields.building ? ` in ${formFields.building}` : ""}${formFields.room ? ` Room ${formFields.room}` : ""}`;
+      const fillReply = `Filled the complaint details for ${fieldDesc}. You can review them, attach a photo, and submit.`;
+      setReply(fillReply);
+      speakReply(fillReply);
+      return;
+    }
+
+    // 5. General AI assistant query
     updatePhase("thinking");
     const displayMessages = [
       ...messagesRef.current,
@@ -398,15 +517,31 @@ export default function AssistantVoiceMode({
     setMessages(displayMessages);
     messagesRef.current = displayMessages;
     try {
-      const data = await sendAssistantMessageRequest(nextMessages, accessToken);
+      const data = await sendAssistantMessageRequest(nextMessages, accessToken, user?.username);
       if (!activeRef.current) return;
-      const assistantMessage = { role: "assistant", text: data.reply };
+      const callerName = getUserDisplayName(user);
+      const cleanedReply = stripRepetitiveGreeting(data.reply, callerName);
+
+      // Fallback: If Gemini interpreted and confirmed navigation
+      const fallbackTarget =
+        extractNavigationFromReply(cleanedReply, navItems) ||
+        findNavigationTarget(cleanedReply, navItems);
+      if (fallbackTarget) {
+        onNavigateText?.(fallbackTarget.label || fallbackTarget.id, true);
+        const navReply = `Opening ${fallbackTarget.label || "the requested section"}. I'm right here in the orb listening.`;
+        setReply(navReply);
+        setOrbActive(true);
+        speakReply(navReply);
+        return;
+      }
+
+      const assistantMessage = { role: "assistant", text: cleanedReply };
       messagesRef.current = [...messagesRef.current, assistantMessage].slice(
         -20,
       );
       setMessages(messagesRef.current);
-      setReply(data.reply);
-      speakReply(data.reply);
+      setReply(cleanedReply);
+      speakReply(cleanedReply);
     } catch (requestError) {
       if (!activeRef.current) return;
       setError(
@@ -433,7 +568,7 @@ export default function AssistantVoiceMode({
       }
       const recognition = new SpeechRecognition();
       recognition.lang = "en-IN";
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
       recognition.onresult = (event) => {
@@ -451,30 +586,39 @@ export default function AssistantVoiceMode({
         setPartialText(interim.trim());
         if (finalText.trim()) {
           updatePhase("thinking");
+          try {
+            recognition.stop();
+          } catch {
+            // ignore
+          }
           void processUtterance(finalText);
         }
       };
       recognition.onerror = (event) => {
-        if (event.error === "no-speech") {
-          updatePhase("listening");
+        // Normal silence or browser pauses; keep voice session alive
+        if (event.error === "no-speech" || event.error === "aborted") {
           return;
         }
-        const errors = {
+        const permanentErrors = {
           "not-allowed":
             "Microphone access is blocked. Allow it for this HTTPS site in browser and phone settings.",
           "service-not-allowed":
             "This browser blocked speech recognition. Try a supported browser or text chat.",
           "audio-capture":
             "No microphone is available. Check microphone access on your device.",
-          network:
-            "Speech recognition needs an internet connection. Check your network and retry.",
         };
-        activeRef.current = false;
-        setError(
-          errors[event.error] ||
-            "Voice input stopped. Check microphone permission and retry.",
-        );
-        updatePhase("ready");
+        if (permanentErrors[event.error]) {
+          activeRef.current = false;
+          setError(permanentErrors[event.error]);
+          updatePhase("ready");
+          return;
+        }
+        if (event.error === "network") {
+          return;
+        }
+        if (phaseRef.current === "ready") {
+          setError("Voice input stopped. Check microphone permission and retry.");
+        }
       };
       recognition.onend = () => {
         if (activeRef.current && phaseRef.current === "listening") {
@@ -485,11 +629,7 @@ export default function AssistantVoiceMode({
       try {
         recognition.start();
       } catch {
-        activeRef.current = false;
-        setError(
-          "Voice input could not start. Check microphone permission and retry.",
-        );
-        updatePhase("ready");
+        // Recognition might already be starting or active; keep session running
       }
     };
   });
@@ -513,10 +653,14 @@ export default function AssistantVoiceMode({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());
       if (!activeRef.current) return;
+      const callerName = getUserDisplayName(user);
+      const nameGreeting = callerName ? `Hello ${callerName}, ` : "Hello! ";
       const greeting =
         role === "student"
-          ? "Hello. I am your FixFlow assistant. Ask a question or say, create a complaint, to report a campus issue by voice."
-          : "Hello. I am your FixFlow assistant. Ask me about the sections and workflow in your workspace.";
+          ? `${nameGreeting}this is your FixFlow assistant. How can I help you today? You can ask me to navigate, fill complaint details, or say "create a complaint".`
+          : role === "admin"
+            ? `${nameGreeting}this is your FixFlow assistant. How can I help you in your admin dashboard today? You can ask me to open Campus Map, SLA tracking, reports, or users.`
+            : `${nameGreeting}this is your FixFlow assistant. How can I help you in your staff dashboard today? You can ask me to open assigned complaints or show resolved complaints.`;
       setReply(greeting);
       updatePhase("speaking");
       speakReply(greeting);
@@ -564,8 +708,102 @@ export default function AssistantVoiceMode({
     triagePreview?.triage?.reviewSignal === "check_relevance" &&
     !triagePreview?.triage?.safetyConcern;
 
+  // Render Continuous Floating Orb Portal when minimized
+  if (orbActive && typeof document !== "undefined") {
+    return createPortal(
+      <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end gap-2.5 pointer-events-auto">
+        {/* Live speech feedback pill */}
+        {(partialText || (phase === "speaking" && (currentSpokenLine || reply))) && (
+          <div className="max-w-xs animate-in fade-in slide-in-from-bottom-2 duration-200 rounded-2xl border border-line/80 bg-white/95 px-4 py-2.5 text-xs text-ink shadow-xl backdrop-blur-md">
+            <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand">
+              <span
+                className={`size-1.5 rounded-full ${phase === "speaking" ? "bg-brand animate-ping" : "bg-emerald-500 animate-pulse"}`}
+              />
+              {phase === "speaking" ? "FixFlow Assistant" : "Listening…"}
+            </div>
+            <p className="font-semibold leading-relaxed">
+              {phase === "speaking" ? (currentSpokenLine || reply) : partialText}
+            </p>
+          </div>
+        )}
+
+        {/* Floating Animated Orb Widget */}
+        <div className="relative flex items-center gap-2">
+          {/* Animated Radar Ripple Rings */}
+          <span className="pointer-events-none absolute -inset-2 rounded-full border border-emerald-400/50 animate-ping opacity-60" />
+          <span className="pointer-events-none absolute -inset-4 rounded-full border border-emerald-400/30 animate-pulse" />
+
+          {/* Main Glowing Orb */}
+          <button
+            type="button"
+            onClick={() => setOrbActive(false)}
+            title="FixFlow Voice Assistant is active · Tap to expand"
+            aria-label="Expand voice assistant"
+            className="floating-voice-orb group relative flex size-16 cursor-pointer items-center justify-center rounded-full bg-gradient-to-tr from-[#164d43] via-[#267b66] to-[#55b996] shadow-2xl shadow-brand/40 transition hover:scale-105 active:scale-95"
+          >
+            <span className="voice-orb-light pointer-events-none absolute top-2 left-2 size-4 rounded-full bg-white/40 blur-xs" />
+
+            {/* Live Animated Soundbars */}
+            <div className="flex items-center gap-1">
+              <span className="soundbar-1 w-1 rounded-full bg-white shadow-xs" />
+              <span className="soundbar-2 w-1 rounded-full bg-white shadow-xs" />
+              <span className="soundbar-3 w-1 rounded-full bg-white shadow-xs" />
+              <span className="soundbar-4 w-1 rounded-full bg-white shadow-xs" />
+            </div>
+
+            {/* Continuous active indicator dot */}
+            <span className="absolute -top-1 -right-1 size-3.5 rounded-full border-2 border-white bg-emerald-400 animate-pulse" />
+          </button>
+
+          {/* End voice session button */}
+          <button
+            type="button"
+            onClick={() => {
+              stopVoice();
+              onClose();
+            }}
+            title="End voice session (or say 'bye')"
+            aria-label="End voice session"
+            className="flex size-7 items-center justify-center rounded-full border border-line bg-white/95 text-stone-500 shadow-md transition hover:bg-rose-50 hover:text-rose-600"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
+  // Full Voice Dialog View
   return (
     <div className="assistant-voice-scroll flex min-h-0 flex-1 flex-col overflow-y-auto bg-white px-5 py-5 sm:px-8">
+      {/* Top action bar: Minimize to Orb, Mute */}
+      <div className="flex items-center justify-between pb-2">
+        <button
+          type="button"
+          onClick={() => setOrbActive(true)}
+          title="Minimize to continuous floating orb"
+          className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-muted transition hover:border-brand/30 hover:text-brand"
+        >
+          <Minimize2 size={13} />
+          <span>Minimize to Orb</span>
+        </button>
+
+        {phase !== "ready" && (
+          <button
+            type="button"
+            onClick={() => {
+              setMuted((current) => !current);
+              window.speechSynthesis?.cancel();
+            }}
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-muted transition hover:border-brand/30 hover:text-brand"
+          >
+            <Volume2 size={13} />
+            <span>{muted ? "Unmute" : "Mute"}</span>
+          </button>
+        )}
+      </div>
+
       <div className="flex flex-col items-center text-center">
         <p className="inline-flex items-center gap-2 rounded-full border border-line bg-canvas px-3.5 py-2 text-xs font-semibold text-muted">
           <span
@@ -584,37 +822,22 @@ export default function AssistantVoiceMode({
             <AudioLines size={28} className="relative z-10 text-white" />
           </span>
         </div>
-        <h3 className="max-w-2xl font-display text-xl font-bold leading-8 text-ink sm:text-2xl">
+        <h3 className="max-w-2xl font-display text-xl font-bold leading-8 text-ink sm:text-2xl transition-all duration-200">
           {phase === "ready"
-            ? "Talk to your FixFlow assistant"
+            ? `Talk to your FixFlow assistant${getUserDisplayName(user) ? `, ${getUserDisplayName(user)}` : ""}`
             : phase === "listening"
               ? partialText || "I’m listening…"
               : phase === "thinking"
                 ? submitting
                   ? "Submitting your complaint…"
                   : "One moment while I think…"
-                : reply || "FixFlow is speaking"}
+                : currentSpokenLine || reply || "FixFlow is speaking"}
         </h3>
         {lastUserText && (
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted">
             You said: “{lastUserText}”
           </p>
         )}
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          {phase !== "ready" && (
-            <button
-              type="button"
-              onClick={() => {
-                setMuted((current) => !current);
-                window.speechSynthesis?.cancel();
-              }}
-              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-line bg-white px-3.5 text-xs font-semibold text-muted transition hover:border-brand/30 hover:text-brand"
-            >
-              <Volume2 size={14} />
-              {muted ? "Turn voice on" : "Mute voice"}
-            </button>
-          )}
-        </div>
       </div>
 
       {complaintMode && (
@@ -734,10 +957,6 @@ export default function AssistantVoiceMode({
             <CheckCircle2 size={17} />
             {submitting ? "Submitting…" : "Confirm and submit complaint"}
           </button>
-          <p className="mt-2 text-[11px] leading-5 text-muted">
-            AI cannot determine whether a report is truthful. This check only
-            asks for clarification; staff review all complaints.
-          </p>
         </section>
       )}
 
@@ -749,11 +968,13 @@ export default function AssistantVoiceMode({
           {error}
         </p>
       )}
+
       <p className="mx-auto mt-4 max-w-xl text-center text-[11px] leading-5 text-muted">
-        Voice recognition is handled by your browser and may use its speech
-        service. FixFlow sends recognized text to the assistant; it does not
-        store raw audio.
+        Say <span className="font-semibold text-ink">"open campus map"</span>,{" "}
+        <span className="font-semibold text-ink">"fill complaint..."</span>, or{" "}
+        <span className="font-semibold text-ink">"bye"</span> to end the session anytime.
       </p>
+
       <div className="mx-auto mt-5 flex items-center gap-3">
         {phase === "ready" ? (
           <button

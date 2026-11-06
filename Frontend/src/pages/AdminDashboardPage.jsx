@@ -385,6 +385,18 @@ export default function AdminDashboardPage() {
       workspaceLabel="Administrator"
       activeSection={activeSection}
       onSectionChange={setActiveSection}
+      assistantNavItems={[
+        { id: "campusMap", label: "Campus Map & GIS" },
+        { id: "sla", label: "SLA tracking" },
+        { id: "reports", label: "Reports" },
+        { id: "users", label: "User access" },
+        { id: "accounts", label: "Accounts" },
+        { id: "complaints", label: "Complaints" },
+        { id: "profile", label: "Profile" },
+      ]}
+      onAssistantNavigate={(item) => {
+        setActiveSection(item.id);
+      }}
       navItems={[
         { id: "complaints", label: "Complaints", icon: ClipboardList },
         { id: "campusMap", label: "Campus Map & GIS", icon: MapPin },

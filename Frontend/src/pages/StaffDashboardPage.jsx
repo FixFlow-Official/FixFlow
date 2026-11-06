@@ -51,6 +51,10 @@ const staffNavItems = [
 const staffAssistantItems = [
   { id: "activeComplaints", label: "Active complaints" },
   { id: "resolvedComplaints", label: "Resolved complaints" },
+  { id: "assignedStatus", label: "Assigned complaints" },
+  { id: "inProgressStatus", label: "In progress complaints" },
+  { id: "underReviewStatus", label: "Under review complaints" },
+  { id: "onHoldStatus", label: "On hold complaints" },
 ];
 
 export default function StaffDashboardPage() {
@@ -242,12 +246,39 @@ export default function StaffDashboardPage() {
       onSectionChange={setActiveSection}
       assistantNavItems={staffAssistantItems}
       onAssistantNavigate={(item) => {
-        if (item.id === "resolvedComplaints" || item.id === "activeComplaints") {
+        if (item.id === "resolvedComplaints") {
           setActiveSection("complaints");
-          handleViewChange(item.id === "resolvedComplaints" ? "resolved" : "current");
+          handleViewChange("resolved");
+        } else if (item.id === "activeComplaints") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("all");
+          setPage(1);
+        } else if (item.id === "assignedStatus") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("Assigned");
+          setPage(1);
+        } else if (item.id === "inProgressStatus") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("In_Progress");
+          setPage(1);
+        } else if (item.id === "underReviewStatus") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("Under_Review");
+          setPage(1);
+        } else if (item.id === "onHoldStatus") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("On_Hold");
+          setPage(1);
+        } else if (item.id === "profile") {
+          setActiveSection("profile");
+        } else {
+          setActiveSection("complaints");
         }
-        else if (item.id === "profile") setActiveSection("profile");
-        else setActiveSection("complaints");
       }}
       navItems={staffNavItems}
     >
