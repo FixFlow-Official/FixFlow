@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/useAuth.js";
 import { downloadComplaintPdf } from "../utils/complaintPdf.js";
+import { validateImageFile } from "../utils/fileValidation.js";
 import {
   createComplaintRequest,
   getComplaintsRequest,
@@ -155,21 +156,14 @@ export default function DashboardPage() {
     setFormError("");
     setSuccessMessage("");
 
-    if (
-      selectedImage &&
-      !["image/jpeg", "image/png", "image/webp"].includes(selectedImage.type)
-    ) {
-      setImage(null);
-      event.target.value = "";
-      setFormError("Choose a JPG, PNG, or WebP image.");
-      return;
-    }
-
-    if (selectedImage && selectedImage.size > MAX_IMAGE_SIZE) {
-      setImage(null);
-      event.target.value = "";
-      setFormError("The image must be 5 MB or smaller.");
-      return;
+    if (selectedImage) {
+      const check = validateImageFile(selectedImage);
+      if (!check.valid) {
+        setImage(null);
+        event.target.value = "";
+        setFormError(check.error);
+        return;
+      }
     }
 
     setImage(selectedImage);

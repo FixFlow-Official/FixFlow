@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import StaffComplaintCard from "../features/staff/StaffComplaintCard.jsx";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
+import { ComplaintCardSkeleton } from "../components/common/SkeletonLoader.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import {
   AlertCircle,
@@ -431,9 +432,8 @@ export default function StaffDashboardPage() {
 
           {/* Loading, empty, filtered-empty, and complaint list states */}
           {loading ? (
-            <div className="mt-5 flex min-h-48 items-center justify-center gap-3 rounded-2xl border border-line bg-white text-sm text-muted">
-              <LoaderCircle size={20} className="animate-spin text-brand" />
-              Loading complaints…
+            <div className="mt-5">
+              <ComplaintCardSkeleton count={3} />
             </div>
           ) : complaintsForView.length === 0 ? (
             <ComplaintEmptyState

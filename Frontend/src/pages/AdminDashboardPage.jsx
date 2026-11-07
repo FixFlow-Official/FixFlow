@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
+import { ComplaintCardSkeleton } from "../components/common/SkeletonLoader.jsx";
 import UnassignedComplaintCard from "../features/admin/UnassignedComplaintCard.jsx";
 import AdminAssignedComplaintCard from "../features/admin/AdminAssignedComplaintCard.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
@@ -555,9 +556,8 @@ export default function AdminDashboardPage() {
           {/* Unassigned complaint queue */}
           {activeQueue === "unassigned" ? (
             loading ? (
-              <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-muted">
-                <LoaderCircle size={21} className="animate-spin text-brand" />
-                Loading complaints…
+              <div className="py-2">
+                <ComplaintCardSkeleton count={3} />
               </div>
             ) : complaints.length === 0 ? (
               <ComplaintEmptyState
@@ -594,9 +594,8 @@ export default function AdminDashboardPage() {
               </div>
             )
           ) : assignedLoading ? (
-            <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-muted">
-              <LoaderCircle size={21} className="animate-spin text-brand" />
-              Loading assigned complaints…
+            <div className="py-2">
+              <ComplaintCardSkeleton count={3} />
             </div>
           ) : assignedError ? (
             <p

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ImagePlus, LoaderCircle, Sparkles } from "lucide-react";
 import { suggestStatusNoteRequest } from "../../services/api.js";
+import { validateImageFile } from "../../utils/fileValidation.js";
 
 // Status controls for one active staff complaint. The dashboard owns request state and saving.
 export default function StaffComplaintStatusForm({
@@ -24,6 +25,7 @@ export default function StaffComplaintStatusForm({
   const [suggestion, setSuggestion] = useState(null);
   const [suggestionError, setSuggestionError] = useState("");
   const [suggesting, setSuggesting] = useState(false);
+  const [fileValidationError, setFileValidationError] = useState("");
   if (isResolved) return null;
 
   async function suggestNote() {
@@ -134,16 +136,34 @@ export default function StaffComplaintStatusForm({
                               <input
                                 id={`resolution-proof-${complaintId}`}
                                 type="file"
-                                accept="image/*"
+                                accept="image/jpeg,image/png,image/webp"
                                 className="sr-only"
                                 onChange={(event) => {
                                   const file = event.target.files?.[0] ?? null;
+                                  setFileValidationError("");
+                                  if (file) {
+                                    const check = validateImageFile(file);
+                                    if (!check.valid) {
+                                      event.target.value = "";
+                                      setFileValidationError(check.error);
+                                      setResolutionProofs((current) => ({
+                                        ...current,
+                                        [complaintId]: null,
+                                      }));
+                                      return;
+                                    }
+                                  }
                                   setResolutionProofs((current) => ({
                                     ...current,
                                     [complaintId]: file,
                                   }));
                                 }}
                               />
+                              {fileValidationError && (
+                                <p role="alert" className="mt-2 text-xs text-rose-700">
+                                  {fileValidationError}
+                                </p>
+                              )}
                             </div>
                           )}
 
