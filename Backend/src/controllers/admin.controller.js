@@ -8,6 +8,7 @@ const adminModel = require("../models/admin.model");
 const sessionModel = require("../models/session.model");
 const campusDirectoryModel = require("../models/campusDirectory.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
+const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
 const {
   escapeRegex,
   getPageMetadata,
@@ -524,6 +525,12 @@ async function assignComplaint(req, res) {
       }),
     ]);
 
+    void dispatchTimelineAlerts({
+      complaint,
+      event: "assigned",
+      actorName: staff.username,
+    });
+
     return res.status(200).json({
       message: "Complaint assigned successfully.",
       complaint,
@@ -643,6 +650,12 @@ async function reassignComplaint(req, res) {
           ]
         : []),
     ]);
+
+    void dispatchTimelineAlerts({
+      complaint,
+      event: "assigned",
+      actorName: staff.username,
+    });
 
     return res.status(200).json({
       message: "Complaint reassigned successfully.",

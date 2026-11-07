@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   KeyRound,
   LoaderCircle,
+  Phone,
   Save,
   ShieldCheck,
   Trash2,
@@ -44,6 +45,9 @@ export default function ProfileSettings() {
   const fileInputRef = useRef(null);
   const previewUrlRef = useRef("");
   const [username, setUsername] = useState(user?.username || "");
+  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "");
+  const [smsNotificationsEnabled, setSmsNotificationsEnabled] = useState(user?.smsNotificationsEnabled ?? true);
+  const [whatsAppNotificationsEnabled, setWhatsAppNotificationsEnabled] = useState(user?.whatsAppNotificationsEnabled ?? true);
   const [profilePicture, setProfilePicture] = useState(null);
   const [photoPreview, setPhotoPreview] = useState("");
   const [removeProfilePicture, setRemoveProfilePicture] = useState(false);
@@ -91,11 +95,21 @@ export default function ProfileSettings() {
     setProfileBusy(true);
     try {
       const result = await updateMyProfileRequest(
-        { username, profilePicture, removeProfilePicture },
+        {
+          username,
+          profilePicture,
+          removeProfilePicture,
+          phoneNumber,
+          smsNotificationsEnabled,
+          whatsAppNotificationsEnabled,
+        },
         accessToken,
       );
       setUser(result.user);
       setUsername(result.user.username || "");
+      setPhoneNumber(result.user.phoneNumber || "");
+      setSmsNotificationsEnabled(result.user.smsNotificationsEnabled ?? true);
+      setWhatsAppNotificationsEnabled(result.user.whatsAppNotificationsEnabled ?? true);
       setProfilePicture(null);
       setRemoveProfilePicture(false);
       setConfirmProfileSave(false);
@@ -185,6 +199,55 @@ export default function ProfileSettings() {
             <ProfileField label={user?.role === "student" ? "Roll number" : user?.role === "staff" ? "Staff ID" : "Admin ID"} value={user?.campusId} />
             <ProfileField label={user?.role === "student" ? "Course" : user?.role === "staff" ? "Department" : "Designation"} value={user?.detail} />
             <ProfileField label="Account type" value={roleLabel} />
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-line bg-canvas/40 p-4 sm:p-5">
+            <div className="flex items-center gap-2 text-ink">
+              <Phone size={18} className="text-brand" />
+              <h3 className="font-display text-sm font-bold">
+                WhatsApp & SMS Timeline Updates
+              </h3>
+            </div>
+            <p className="mt-1 text-xs text-muted leading-relaxed">
+              Receive instant lightweight status updates directly on WhatsApp and SMS (e.g. technician assignment, parts ordered, fix ready).
+            </p>
+
+            <div className="mt-3">
+              <label htmlFor="profile-phone" className="block text-xs font-semibold text-muted">
+                Mobile Number (with country code)
+              </label>
+              <input
+                id="profile-phone"
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="+91 98765 43210"
+                maxLength={20}
+                className="mt-1 min-h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-4 text-xs font-semibold text-ink">
+              <label className="inline-flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={whatsAppNotificationsEnabled}
+                  onChange={(e) => setWhatsAppNotificationsEnabled(e.target.checked)}
+                  className="size-4 rounded border-line text-emerald-700 accent-emerald-700"
+                />
+                <span>WhatsApp status alerts (98% read rate)</span>
+              </label>
+
+              <label className="inline-flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={smsNotificationsEnabled}
+                  onChange={(e) => setSmsNotificationsEnabled(e.target.checked)}
+                  className="size-4 rounded border-line text-brand accent-brand"
+                />
+                <span>SMS updates</span>
+              </label>
+            </div>
           </div>
 
           <button type="submit" disabled={profileBusy} className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto">

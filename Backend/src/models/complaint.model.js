@@ -260,6 +260,46 @@ const complaintSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    smsUpdates: [
+      {
+        channel: {
+          type: String,
+          enum: ["sms", "whatsapp"],
+          default: "whatsapp",
+        },
+        recipientPhone: {
+          type: String,
+          required: true,
+        },
+        recipientName: {
+          type: String,
+          default: "Student",
+        },
+        event: {
+          type: String,
+          enum: ["assigned", "in_progress", "status_update", "resolved", "reopened"],
+          required: true,
+        },
+        message: {
+          type: String,
+          required: true,
+          maxlength: 500,
+        },
+        sentAt: {
+          type: Date,
+          default: Date.now,
+        },
+        status: {
+          type: String,
+          enum: ["sent", "delivered", "simulated", "failed"],
+          default: "sent",
+        },
+        providerMessageId: {
+          type: String,
+          default: null,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

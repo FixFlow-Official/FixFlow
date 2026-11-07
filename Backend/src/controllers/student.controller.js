@@ -5,6 +5,7 @@ const uploadFile = require("../services/storage.service");
 const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
+const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
 const { getSlaPolicy, makeComplaintSlaDates } = require("../services/sla.service");
 const { triageComplaint, fingerprintComplaint } = require("../services/complaintTriage.service");
 const { findDuplicates } = require("../services/duplicateDetection.service");
@@ -559,6 +560,13 @@ async function reopenComplaint(req, res) {
   });
 
   await complaint.save();
+
+  void dispatchTimelineAlerts({
+    complaint,
+    event: "reopened",
+    actorName: req.user?.fullName || req.auth.name || "Student",
+    note: reason,
+  });
 
   return res.status(200).json({
     message: "Complaint reopened. Staff has been notified.",

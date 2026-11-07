@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const uploadFile = require("../services/storage.service");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
+const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
 const {
   getPageMetadata,
   getPageOptions,
@@ -297,6 +298,13 @@ async function updateComplaintStatus(req, res) {
     }
 
     await createNotifications(notifications);
+
+    void dispatchTimelineAlerts({
+      complaint,
+      event: status === "Resolved" ? "resolved" : status === "In_Progress" ? "in_progress" : "status_update",
+      actorName: req.user?.username,
+      note: trimmedNote,
+    });
 
     return res.status(200).json({
       message: "Complaint status updated.",

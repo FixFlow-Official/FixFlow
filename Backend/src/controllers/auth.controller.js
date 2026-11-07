@@ -35,6 +35,9 @@ function serializeCurrentUser(user) {
     campusId: user.rollno ?? user.staffId ?? user.adminId ?? null,
     detail: user.course ?? user.department ?? user.designation ?? null,
     profilePictureUrl: user.profilePictureUrl || null,
+    phoneNumber: user.phoneNumber || null,
+    smsNotificationsEnabled: user.smsNotificationsEnabled ?? true,
+    whatsAppNotificationsEnabled: user.whatsAppNotificationsEnabled ?? true,
   };
 }
 
@@ -55,6 +58,16 @@ async function updateProfile(req, res) {
 
   try {
     const update = { username };
+    if (req.body.phoneNumber !== undefined) {
+      const rawPhone = String(req.body.phoneNumber || "").trim();
+      update.phoneNumber = rawPhone.length > 0 ? rawPhone.slice(0, 20) : null;
+    }
+    if (req.body.smsNotificationsEnabled !== undefined) {
+      update.smsNotificationsEnabled = req.body.smsNotificationsEnabled === true || req.body.smsNotificationsEnabled === "true";
+    }
+    if (req.body.whatsAppNotificationsEnabled !== undefined) {
+      update.whatsAppNotificationsEnabled = req.body.whatsAppNotificationsEnabled === true || req.body.whatsAppNotificationsEnabled === "true";
+    }
     if (req.file) {
       const uploadResult = await uploadFile(
         req.file.buffer,

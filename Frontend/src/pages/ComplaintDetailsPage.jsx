@@ -5,7 +5,7 @@ import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintConversation from "../components/complaints/ComplaintConversation.jsx";
 import ComplaintImageLink from "../components/complaints/ComplaintImageLink.jsx";
 import ComplaintStatusBadge from "../components/complaints/ComplaintStatusBadge.jsx";
-import ComplaintStatusTimeline from "../components/complaints/ComplaintStatusTimeline.jsx";
+import ComplaintLiveTimeline from "../components/complaints/ComplaintLiveTimeline.jsx";
 import ComplaintResolutionVerification from "../components/complaints/ComplaintResolutionVerification.jsx";
 import { useAuth } from "../context/useAuth.js";
 import { useAssistantContext } from "../context/assistantContext.jsx";
@@ -176,7 +176,7 @@ function ComplaintDetailsContent({ complaintId }) {
                 )}
               </div>
 
-              <ComplaintStatusTimeline history={complaint.statusHistory} title="Status history" includeActorRole emptyMessage="No status updates are available yet." />
+              <ComplaintLiveTimeline complaint={complaint} history={complaint.statusHistory} includeActorRole />
             </div>
 
             <ComplaintConversation complaint={complaint} />

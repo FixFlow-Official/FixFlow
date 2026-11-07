@@ -1,6 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import ComplaintImageLink from "../../components/complaints/ComplaintImageLink.jsx";
-import ComplaintStatusTimeline from "../../components/complaints/ComplaintStatusTimeline.jsx";
+import ComplaintLiveTimeline from "../../components/complaints/ComplaintLiveTimeline.jsx";
 import ComplaintAiTriage from "../../components/complaints/ComplaintAiTriage.jsx";
 import ComplaintResolutionVerification from "../../components/complaints/ComplaintResolutionVerification.jsx";
 import { formatDate } from "../../utils/complaintConfig.js";
@@ -167,11 +167,10 @@ export default function StudentComplaintDetails({ complaint, accessToken, onUpda
             )}
           </div>
 
-          <aside className="min-w-0 rounded-2xl border border-line bg-canvas/50 p-4">
-            <ComplaintStatusTimeline
+          <aside className="min-w-0">
+            <ComplaintLiveTimeline
+              complaint={complaint}
               history={history}
-              title="Status history"
-              emptyMessage="No status updates are available yet."
             />
           </aside>
         </div>

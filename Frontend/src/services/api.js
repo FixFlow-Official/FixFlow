@@ -158,13 +158,27 @@ export async function getAdminReportInsightsRequest(reportData, accessToken) {
 }
 
 export async function updateMyProfileRequest(
-  { username, profilePicture, removeProfilePicture = false },
+  {
+    username,
+    profilePicture,
+    removeProfilePicture = false,
+    phoneNumber,
+    smsNotificationsEnabled,
+    whatsAppNotificationsEnabled,
+  },
   accessToken,
 ) {
   const formData = new FormData();
   formData.append("username", username);
   if (profilePicture) formData.append("profilePicture", profilePicture);
   if (removeProfilePicture) formData.append("removeProfilePicture", "true");
+  if (phoneNumber !== undefined) formData.append("phoneNumber", phoneNumber || "");
+  if (smsNotificationsEnabled !== undefined) {
+    formData.append("smsNotificationsEnabled", String(smsNotificationsEnabled));
+  }
+  if (whatsAppNotificationsEnabled !== undefined) {
+    formData.append("whatsAppNotificationsEnabled", String(whatsAppNotificationsEnabled));
+  }
   return complaintRequest("/api/auth/profile", { method: "PATCH", body: formData }, accessToken);
 }
 
