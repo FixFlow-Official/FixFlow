@@ -8,7 +8,7 @@ const router = express.Router();
 const assistantLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 12,
-  keyGenerator: (req) => `user:${req.auth.id}`,
+  keyGenerator: (req) => (req.auth?.id ? `user:${req.auth.id}` : `ip:${req.ip || "unknown"}`),
   standardHeaders: "draft-8",
   legacyHeaders: false,
   store: new MongoRateLimitStore("assistant"),

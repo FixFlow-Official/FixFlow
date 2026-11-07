@@ -52,6 +52,11 @@ test("maps malformed JSON and duplicate database keys to safe API errors", () =>
     errorHandler({ type: "entity.parse.failed" }, req, malformedJson, assert.fail);
     assert.equal(malformedJson.statusCode, 400);
     assert.deepEqual(malformedJson.body, {
+      type: "about:blank",
+      title: "Bad Request",
+      status: 400,
+      detail: "Request body contains invalid JSON.",
+      instance: "/api/users",
       message: "Request body contains invalid JSON.",
       requestId: "request-123",
     });
@@ -60,6 +65,11 @@ test("maps malformed JSON and duplicate database keys to safe API errors", () =>
     errorHandler({ code: 11000, message: "private database detail" }, req, duplicate, assert.fail);
     assert.equal(duplicate.statusCode, 409);
     assert.deepEqual(duplicate.body, {
+      type: "about:blank",
+      title: "Conflict",
+      status: 409,
+      detail: "A record with these details already exists.",
+      instance: "/api/users",
       message: "A record with these details already exists.",
       requestId: "request-123",
     });
@@ -79,6 +89,11 @@ test("hides unexpected error details and provides JSON for unknown API paths", (
     errorHandler(new Error("secret database connection string"), req, res, assert.fail);
     assert.equal(res.statusCode, 500);
     assert.deepEqual(res.body, {
+      type: "about:blank",
+      title: "Internal Server Error",
+      status: 500,
+      detail: "An unexpected server error occurred.",
+      instance: "/api/private",
       message: "An unexpected server error occurred.",
       requestId: "request-456",
     });
@@ -89,6 +104,11 @@ test("hides unexpected error details and provides JSON for unknown API paths", (
     notFoundHandler(req, notFound);
     assert.equal(notFound.statusCode, 404);
     assert.deepEqual(notFound.body, {
+      type: "about:blank",
+      title: "Not Found",
+      status: 404,
+      detail: "API route not found.",
+      instance: "/api/private",
       message: "API route not found.",
       requestId: "request-456",
     });
@@ -106,14 +126,28 @@ test("maps oversized uploads and Mongoose validation errors", () => {
     const oversized = createResponse();
     errorHandler({ code: "LIMIT_FILE_SIZE" }, req, oversized, assert.fail);
     assert.equal(oversized.statusCode, 413);
+    assert.equal(oversized.body.title, "Payload Too Large");
+    assert.equal(oversized.body.detail, "The uploaded request is too large.");
 
     const validation = createResponse();
     errorHandler(new mongoose.Error.ValidationError(), req, validation, assert.fail);
     assert.equal(validation.statusCode, 400);
     assert.deepEqual(validation.body, {
+      type: "about:blank",
+      title: "Bad Request",
+      status: 400,
+      detail: "Request contains invalid data.",
+      instance: "/api/complaints",
       message: "Request contains invalid data.",
       requestId: "request-789",
     });
+
+    const serviceUnavailable = createResponse();
+    errorHandler({ status: 503, message: "Database temporarily unavailable.", isClientSafe: true }, req, serviceUnavailable, assert.fail);
+    assert.equal(serviceUnavailable.statusCode, 503);
+    assert.equal(serviceUnavailable.body.title, "Service Unavailable");
+    assert.equal(serviceUnavailable.body.detail, "Database temporarily unavailable.");
+    assert.equal(serviceUnavailable.body.status, 503);
   } finally {
     console.error = originalConsoleError;
   }

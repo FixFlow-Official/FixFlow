@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
@@ -429,6 +430,7 @@ async function loginController(req, res) {
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
   const refreshToken = jwt.sign(
     {
+      tid: crypto.randomUUID(),
       id: user.id,
       role: user.role,
       sessionId: String(sessionId),
@@ -654,8 +656,18 @@ async function tokenRecreate(req, res, next) {
       },
     );
 
+    if (req.isGraceToken) {
+      // Racing request: session was already rotated moments ago within the grace window.
+      // Return a fresh access token for the active session without clobbering the new refresh token.
+      return res.status(200).json({
+        message: "Token refreshed successfully",
+        accessToken,
+      });
+    }
+
     const newRefreshToken = jwt.sign(
       {
+        tid: crypto.randomUUID(),
         id: decoded.id || decoded._id,
         role: decoded.role,
         sessionId: String(targetSession._id),
@@ -666,8 +678,9 @@ async function tokenRecreate(req, res, next) {
       },
     );
 
+    const now = new Date();
     const newRefreshTokenHash = await bcrypt.hash(newRefreshToken, 10);
-    const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+    const newExpiresAt = new Date(now.getTime() + REFRESH_TOKEN_TTL_MS);
     const rotatedSession = await sessionModel.findOneAndUpdate(
       {
         _id: targetSession._id,
@@ -675,9 +688,16 @@ async function tokenRecreate(req, res, next) {
         userRef: decoded.role,
         revoked: false,
         refreshTokenHash: targetSession.refreshTokenHash,
-        expiresAt: { $gt: new Date() },
+        expiresAt: { $gt: now },
       },
-      { $set: { refreshTokenHash: newRefreshTokenHash, expiresAt: newExpiresAt } },
+      {
+        $set: {
+          previousRefreshTokenHash: targetSession.refreshTokenHash,
+          rotatedAt: now,
+          refreshTokenHash: newRefreshTokenHash,
+          expiresAt: newExpiresAt,
+        },
+      },
       { new: true },
     );
     if (!rotatedSession) {

@@ -51,8 +51,14 @@ function buildComplaintSearchFilter(search) {
 }
 
 function isTransactionUnsupportedError(error) {
+  if (!error) return false;
+  if (error.code === 20 || error.codeName === "IllegalOperation") return true;
+  const msg = String(error.message || "");
   return (
-    error?.code === 20 && /transaction numbers are only allowed/i.test(error.message || "")
+    /transaction numbers are only allowed/i.test(msg) ||
+    /does not support transactions/i.test(msg) ||
+    /transactions are not supported/i.test(msg) ||
+    /cannot run transaction on standalone/i.test(msg)
   );
 }
 
