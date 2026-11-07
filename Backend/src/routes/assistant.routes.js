@@ -1,5 +1,5 @@
 const express = require("express");
-const { rateLimit } = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const { verifyAccessToken } = require("../middlewares/auth.middleware");
 const MongoRateLimitStore = require("../middlewares/mongoRateLimitStore");
 const assistantController = require("../controllers/assistant.controller");
@@ -8,7 +8,9 @@ const router = express.Router();
 const assistantLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 12,
-  keyGenerator: (req) => (req.auth?.id ? `user:${req.auth.id}` : `ip:${req.ip || "unknown"}`),
+  keyGenerator: (req) =>
+    req.auth?.id ? `user:${req.auth.id}` : `ip:${ipKeyGenerator(req.ip || "127.0.0.1")}`,
+  validate: { keyGeneratorIpFallback: false },
   standardHeaders: "draft-8",
   legacyHeaders: false,
   store: new MongoRateLimitStore("assistant"),
