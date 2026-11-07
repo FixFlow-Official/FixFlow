@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { LoaderCircle } from "lucide-react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout.jsx";
 import ProtectedRoute from "./components/auth/ProtectedRoute.jsx";
 import { AuthProvider } from "./context/AuthProvider.jsx";
@@ -18,6 +18,13 @@ const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage.jsx"));
 const ComplaintDetailsPage = lazy(() => import("./pages/ComplaintDetailsPage.jsx"));
 
 
+function ReportRedirectHandler() {
+  const [searchParams] = useSearchParams();
+  const query = searchParams.toString();
+  const target = `/student/dashboard?action=create${query ? `&${query}` : ""}`;
+  return <Navigate to={target} replace />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -27,6 +34,7 @@ export default function App() {
           <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/report" element={<ReportRedirectHandler />} />
           <Route
             path="/login"
             element={

@@ -67,7 +67,8 @@ export default function LoginPage() {
 
       setUser(data.user);
       setAccessToken(data.accessToken);
-      navigate(destination);
+      const urlRedirect = new URLSearchParams(window.location.search).get("redirectTo");
+      navigate(urlRedirect || destination);
     } catch (error) {
       setError(error.message);
     } finally {

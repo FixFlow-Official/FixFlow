@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ExpandableComplaintCard from "../components/complaints/ExpandableComplaintCard.jsx";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
@@ -7,12 +8,14 @@ import StudentComplaintsPanel from "../features/student/StudentComplaintsPanel.j
 import StudentComplaintDetails from "../features/student/StudentComplaintDetails.jsx";
 import StudentComplaintForm from "../features/student/StudentComplaintForm.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
+import QrScannerModal from "../components/common/QrScannerModal.jsx";
 import {
   ArrowLeft,
   ArrowUpRight,
   Inbox,
   LoaderCircle,
   MessageSquareText,
+  QrCode,
   UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/useAuth.js";
@@ -45,6 +48,12 @@ export default function DashboardPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [searchParams] = useSearchParams();
+  const initBuilding = searchParams.get("building") || "";
+  const initFloor = searchParams.get("floor") || "Ground Floor";
+  const initRoom = searchParams.get("room") || "";
+  const isQrSource = searchParams.get("source") === "qr_door" || Boolean(initBuilding && initRoom);
+
   const [complaintSearch, setComplaintSearch] = useState("");
   const [page, setPage] = useState("create");
   const [complaintFilter, setComplaintFilter] = useState("current");
@@ -55,10 +64,21 @@ export default function DashboardPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
-  const [building, setBuilding] = useState("");
-  const [floor, setFloor] = useState("Ground Floor");
-  const [room, setRoom] = useState("");
+  const [building, setBuilding] = useState(initBuilding);
+  const [floor, setFloor] = useState(initFloor);
+  const [room, setRoom] = useState(initRoom);
   const [image, setImage] = useState(null);
+  const [qrPrefilled, setQrPrefilled] = useState(isQrSource);
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+
+  function handleQrScan(locationData) {
+    if (locationData.building) setBuilding(locationData.building);
+    if (locationData.floor) setFloor(locationData.floor);
+    if (locationData.room) setRoom(locationData.room);
+    setPage("create");
+    setQrPrefilled(true);
+  }
+
   const { setScreenContext } = useAssistantContext();
 
   useEffect(() => {
@@ -469,13 +489,22 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={openMyComplaints}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-line/80 bg-white/85 px-4 text-sm font-semibold text-ink shadow-sm transition hover:border-brand/30 hover:bg-white hover:shadow-md sm:w-auto"
-                >
-                  My complaints <ArrowUpRight size={16} />
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setQrScannerOpen(true)}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-brand/20 bg-brand/5 px-4 text-sm font-semibold text-brand shadow-xs transition hover:bg-brand hover:text-white sm:w-auto"
+                  >
+                    <QrCode size={16} /> Scan Door QR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openMyComplaints}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-line/80 bg-white/85 px-4 text-sm font-semibold text-ink shadow-sm transition hover:border-brand/30 hover:bg-white hover:shadow-md sm:w-auto"
+                  >
+                    My complaints <ArrowUpRight size={16} />
+                  </button>
+                </div>
               </div>
             </section>
 
@@ -499,7 +528,16 @@ export default function DashboardPage() {
               accessToken={accessToken}
               submitting={submitting}
               handleSubmit={handleSubmit}
+              qrPrefilled={qrPrefilled}
+              onOpenQrScanner={() => setQrScannerOpen(true)}
             />
+
+            {qrScannerOpen && (
+              <QrScannerModal
+                onScan={handleQrScan}
+                onClose={() => setQrScannerOpen(false)}
+              />
+            )}
 
             <section className="mt-6 w-full rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_18px_55px_-36px_rgba(24,35,45,0.38)] ring-1 ring-line/70 sm:mt-8 sm:rounded-[1.75rem] sm:p-6 lg:p-8">
               <div className="mb-5 flex items-center gap-3">

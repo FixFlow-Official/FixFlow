@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, FileImage, LoaderCircle, Plus, Send, Sparkles, ThumbsUp, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileImage, LoaderCircle, Plus, QrCode, Send, Sparkles, ThumbsUp, Upload } from "lucide-react";
 import ComplaintStatusBadge from "../../components/complaints/ComplaintStatusBadge.jsx";
 import {
   getCampusBlocksRequest,
@@ -30,6 +30,8 @@ export default function StudentComplaintForm({
   accessToken,
   submitting,
   handleSubmit,
+  qrPrefilled = false,
+  onOpenQrScanner,
 }) {
   const [draftSuggestion, setDraftSuggestion] = useState(null);
   const [draftLoading, setDraftLoading] = useState(false);
@@ -313,6 +315,25 @@ export default function StudentComplaintForm({
         </div>
 
         {/* Campus Building, Floor & Room Selection */}
+        {qrPrefilled && (
+          <div className="sm:col-span-2 flex items-center justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-6 place-items-center rounded-full bg-emerald-600 text-xs font-bold text-white">
+                ✓
+              </span>
+              <div>
+                <p className="font-bold">Location Auto-Filled via Door QR Code</p>
+                <p className="text-xs text-emerald-800">
+                  {building || "Campus"} · {floor || "Ground Floor"} · Room {room || "Selected"}
+                </p>
+              </div>
+            </div>
+            <span className="rounded-full bg-emerald-200/90 px-2.5 py-0.5 text-[11px] font-bold text-emerald-950">
+              Door Verified
+            </span>
+          </div>
+        )}
+
         <div className="min-w-0 sm:col-span-2 grid gap-3 sm:grid-cols-3">
           <div className="min-w-0">
             <div className="mb-2 flex items-center justify-between">
@@ -322,20 +343,32 @@ export default function StudentComplaintForm({
               >
                 Building
               </label>
-              {campusBlocks.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomBuilding(!customBuilding);
-                    if (customBuilding) setBuilding("");
-                    setTopDuplicate(null);
-                    setOverrideDuplicate(false);
-                  }}
-                  className="text-[11px] font-semibold text-brand hover:underline"
-                >
-                  {customBuilding ? "Choose from list" : "Other"}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {onOpenQrScanner && (
+                  <button
+                    type="button"
+                    onClick={onOpenQrScanner}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-brand hover:underline"
+                    title="Scan Classroom Door QR Code"
+                  >
+                    <QrCode size={12} /> Scan QR
+                  </button>
+                )}
+                {campusBlocks.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomBuilding(!customBuilding);
+                      if (customBuilding) setBuilding("");
+                      setTopDuplicate(null);
+                      setOverrideDuplicate(false);
+                    }}
+                    className="text-[11px] font-semibold text-brand hover:underline"
+                  >
+                    {customBuilding ? "Choose from list" : "Other"}
+                  </button>
+                )}
+              </div>
             </div>
 
             {!customBuilding && campusBlocks.length > 0 ? (
