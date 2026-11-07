@@ -574,6 +574,71 @@ async function reopenComplaint(req, res) {
   });
 }
 
+// Surface active campus issues sorted by upvote count to eliminate duplicate tickets
+async function getTrendingComplaints(req, res) {
+  if (!req.auth || req.auth.role !== "student") {
+    return res.status(403).json({ message: "Only students can view campus trending issues." });
+  }
+
+  const activeStatuses = [
+    "Submitted",
+    "Under_Review",
+    "Assigned",
+    "In_Progress",
+    "On_Hold",
+  ];
+
+  const filter = {
+    status: { $in: activeStatuses },
+  };
+
+  if (req.query.building) {
+    filter["location.building"] = req.query.building;
+  }
+  if (req.query.category) {
+    filter.category = req.query.category;
+  }
+
+  const searchRegex = makeSearchRegex(req.query.search);
+  if (searchRegex) {
+    filter.$or = [
+      { complaintTitle: searchRegex },
+      { complaintDescription: searchRegex },
+      { category: searchRegex },
+      { "location.building": searchRegex },
+      { "location.room": searchRegex },
+    ];
+  }
+
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+
+  const complaints = await complaintModel
+    .find(filter)
+    .sort({ upvoteCount: -1, createdAt: -1 })
+    .limit(limit)
+    .select(
+      "complaintTitle complaintDescription category location status upvotes upvoteCount createdAt aiTriage user userSnapshot ticketNumber"
+    );
+
+  const studentId = String(req.auth.id);
+  const formatted = complaints.map((doc) => {
+    const hasUpvoted = (doc.upvotes || []).some((u) => String(u.user) === studentId);
+    const isOwner = String(doc.user) === studentId;
+    const obj = doc.toObject();
+    delete obj.upvotes;
+    return {
+      ...obj,
+      hasUpvoted,
+      isOwner,
+    };
+  });
+
+  return res.status(200).json({
+    complaints: formatted,
+    total: formatted.length,
+  });
+}
+
 module.exports = {
   createComplaint,
   getComplaint,
@@ -581,4 +646,5 @@ module.exports = {
   toggleUpvoteComplaint,
   verifyComplaintResolution,
   reopenComplaint,
+  getTrendingComplaints,
 };

@@ -931,6 +931,15 @@ export async function upvoteComplaintRequest(complaintId, accessToken) {
   );
 }
 
+export async function getTrendingComplaintsRequest(params = {}, accessToken) {
+  const query = new URLSearchParams();
+  if (params.building) query.set("building", params.building);
+  if (params.category) query.set("category", params.category);
+  if (params.search) query.set("search", params.search);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return complaintRequest(`/api/student/trending-complaints${suffix}`, { method: "GET" }, accessToken);
+}
+
 export async function verifyComplaintResolutionRequest(
   complaintId,
   { rating, feedback },

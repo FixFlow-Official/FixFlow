@@ -14,6 +14,7 @@ import {
   formatStaffVoiceNoteRequest,
   verifyComplaintResolutionRequest,
   reopenComplaintRequest,
+  getTrendingComplaintsRequest,
 } from "../src/services/api.js";
 
 function jsonResponse(payload, status = 200, headers = {}) {
@@ -380,5 +381,29 @@ test("reopenComplaintRequest submits reopen reason and updates complaint status"
   assert.equal(res.complaint.status, "In_Progress");
   assert.equal(res.complaint.reopenedCount, 1);
 });
+
+test("getTrendingComplaintsRequest fetches active campus complaints sorted by votes", async (t) => {
+  let capturedUrl;
+  mockFetch(t, async (url) => {
+    capturedUrl = url;
+    return jsonResponse({
+      complaints: [
+        { _id: "c1", complaintTitle: "Wi-Fi down", upvoteCount: 12, hasUpvoted: true },
+      ],
+      total: 1,
+    });
+  });
+
+  const res = await getTrendingComplaintsRequest(
+    { category: "Internet", search: "Wi-Fi" },
+    "student-token",
+  );
+
+  assert.match(capturedUrl, /\/api\/student\/trending-complaints\?category=Internet&search=Wi-Fi/);
+  assert.equal(res.total, 1);
+  assert.equal(res.complaints[0].upvoteCount, 12);
+  assert.equal(res.complaints[0].hasUpvoted, true);
+});
+
 
 

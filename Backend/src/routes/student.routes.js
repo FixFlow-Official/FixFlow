@@ -43,6 +43,12 @@ router.get("/get-complaint", verifyAccessToken, studentController.getComplaint);
 router.get("/similar-complaints", verifyAccessToken, studentController.getSimilarComplaints);
 
 /**
+ * @route api/student/trending-complaints
+ * @description active public campus issues sorted by upvote count to prevent duplicate tickets
+ */
+router.get("/trending-complaints", verifyAccessToken, studentController.getTrendingComplaints);
+
+/**
  * @route api/student/complaints/:complaintId/upvote
  * @description toggle "Me Too" upvote for an existing complaint
  */

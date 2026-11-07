@@ -9,9 +9,11 @@ import StudentComplaintDetails from "../features/student/StudentComplaintDetails
 import StudentComplaintForm from "../features/student/StudentComplaintForm.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import QrScannerModal from "../components/common/QrScannerModal.jsx";
+import CampusTrendingFeed from "../features/student/CampusTrendingFeed.jsx";
 import {
   ArrowLeft,
   ArrowUpRight,
+  Flame,
   Inbox,
   LoaderCircle,
   MessageSquareText,
@@ -454,16 +456,22 @@ export default function DashboardPage() {
       assistantNavItems={[
         { id: "newComplaint", label: "New complaint" },
         { id: "myComplaints", label: "My complaints" },
+        { id: "trendingFeed", label: "Campus trending" },
       ]}
       onAssistantNavigate={(item) => {
-        if (item.id === "newComplaint" || item.id === "myComplaints") {
+        if (item.id === "newComplaint" || item.id === "myComplaints" || item.id === "trendingFeed") {
           setActiveSection("complaints");
           if (item.id === "newComplaint") openCreateComplaint();
+          else if (item.id === "trendingFeed") setPage("trending");
           else openMyComplaints();
+        } else if (item.id === "trending") {
+          setActiveSection("complaints");
+          setPage("trending");
         } else setActiveSection(item.id);
       }}
       navItems={[
         { id: "complaints", label: "Complaints", icon: MessageSquareText },
+        { id: "trending", label: "Campus Trending", icon: Flame },
         { id: "profile", label: "Profile", icon: UserRound },
       ]}
     >
@@ -490,6 +498,14 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setPage("trending")}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-sm font-semibold text-amber-900 shadow-2xs transition hover:bg-amber-100 sm:w-auto"
+                  >
+                    <Flame size={16} className="text-amber-600" />
+                    Trending Issues
+                  </button>
                   <button
                     type="button"
                     onClick={() => setQrScannerOpen(true)}
@@ -584,6 +600,20 @@ export default function DashboardPage() {
               )}
             </section>
           </>
+        ) : page === "trending" ? (
+          <div className="space-y-5">
+            <button
+              type="button"
+              onClick={() => setPage("create")}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand"
+            >
+              <ArrowLeft size={16} /> Back to report issue
+            </button>
+            <CampusTrendingFeed
+              accessToken={accessToken}
+              onSelectComplaint={openComplaintDetails}
+            />
+          </div>
         ) : page === "mine" ? (
           <StudentComplaintsPanel
             openCreateComplaint={openCreateComplaint}
