@@ -95,6 +95,14 @@ export default function DashboardShell({
     setMobileMenuOpen(false);
   }
 
+  const allAssistantNavItems = Array.from(
+    new Map(
+      [...navItems, ...assistantNavItems]
+        .filter((item) => item && item.id)
+        .map((item) => [item.id, item])
+    ).values()
+  );
+
   return (
     <div className="flex min-h-[calc(100vh-68px)] w-full bg-canvas">
       {/* Desktop navigation: full-height sidebar attached to the left edge */}
@@ -158,7 +166,7 @@ export default function DashboardShell({
         {children}
       </main>
       <DashboardAssistant
-        navItems={[...navItems, ...assistantNavItems]}
+        navItems={allAssistantNavItems}
         onNavigate={onAssistantNavigate || handleNavigate}
         onComplaintSubmit={onVoiceComplaintSubmit}
         onFillFormFields={onFillFormFields}

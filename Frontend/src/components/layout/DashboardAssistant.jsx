@@ -341,7 +341,7 @@ export default function DashboardAssistant({
     <>
       <div
         aria-hidden={!open || voiceOrbMode}
-        inert={!open ? "" : undefined}
+        inert={!open ? true : undefined}
         className={`fixed inset-0 z-40 grid place-items-center p-0 sm:p-6 ${open && !voiceOrbMode ? "pointer-events-auto" : "pointer-events-none"}`}
       >
         <button

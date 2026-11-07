@@ -7,6 +7,8 @@ import {
   getComplaintsRequest,
   getSimilarComplaintsRequest,
   upvoteComplaintRequest,
+  loginRequest,
+  getCurrentUserRequest,
 } from "../src/services/api.js";
 
 function jsonResponse(payload, status = 200, headers = {}) {
@@ -198,5 +200,63 @@ test("upvoteComplaintRequest posts to student upvote endpoint", async (t) => {
   assert.equal(request.url, "/api/student/complaints/complaint-999/upvote");
   assert.equal(request.options.method, "POST");
   assert.equal(request.options.headers.Authorization, "Bearer token-xyz");
+});
+
+test("ApiRequestError exposes status, requestId, and duplicate ticket metadata", () => {
+  const err = new ApiRequestError("Duplicate issue found", {
+    status: 409,
+    requestId: "req-12345",
+    errors: ["Matching active ticket exists"],
+    isDuplicate: true,
+    duplicateComplaint: { _id: "comp-dup-1" },
+  });
+
+  assert.equal(err.name, "ApiRequestError");
+  assert.equal(err.message, "Duplicate issue found");
+  assert.equal(err.status, 409);
+  assert.equal(err.requestId, "req-12345");
+  assert.deepEqual(err.errors, ["Matching active ticket exists"]);
+  assert.equal(err.isDuplicate, true);
+  assert.deepEqual(err.duplicateComplaint, { _id: "comp-dup-1" });
+});
+
+test("loginRequest sends credentials and parses response payload", async (t) => {
+  let captured;
+  mockFetch(t, async (url, options) => {
+    captured = { url, options };
+    return jsonResponse({ user: { id: "u1", role: "student" }, accessToken: "tok-1" });
+  });
+
+  const res = await loginRequest({ email: "user@example.com", password: "secretPassword", type: "student" });
+  assert.equal(res.accessToken, "tok-1");
+  assert.equal(captured.url, "/api/auth/login");
+  assert.equal(captured.options.method, "POST");
+  assert.equal(captured.options.credentials, "include");
+});
+
+test("loginRequest rejects with friendly message on server error or network dropout", async (t) => {
+  mockFetch(t, async () => jsonResponse({ message: "Invalid credentials" }, 401));
+  await assert.rejects(
+    loginRequest({ email: "fail@example.com", password: "wrong", type: "student" }),
+    /Invalid credentials/,
+  );
+
+  mockFetch(t, async () => { throw new TypeError("Failed to fetch"); });
+  await assert.rejects(
+    loginRequest({ email: "fail@example.com", password: "wrong", type: "student" }),
+    /Could not reach FixFlow\. Check that the backend is running\./,
+  );
+});
+
+test("getCurrentUserRequest returns profile or handles network failure", async (t) => {
+  mockFetch(t, async () => jsonResponse({ user: { id: "u2", username: "testuser" } }));
+  const res = await getCurrentUserRequest();
+  assert.equal(res.user.username, "testuser");
+
+  mockFetch(t, async () => { throw new TypeError("Failed to fetch"); });
+  await assert.rejects(
+    getCurrentUserRequest(),
+    /Could not reach FixFlow\. Check that the backend is running\./,
+  );
 });
 
