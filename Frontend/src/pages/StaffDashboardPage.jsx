@@ -86,11 +86,53 @@ export default function StaffDashboardPage() {
   useEffect(() => {
     setScreenContext({
       currentSection: `staff-${activeSection}-${complaintView}`,
+      pageTitle: complaintView === "current" ? "Assigned Work Orders" : "Resolved Work Orders",
       activeFilters: { view: complaintView, status: complaintFilter, search: complaintSearch },
-      selectedComplaint: expandedComplaintId ? { id: expandedComplaintId } : null,
-      availableActions: ["filter", "navigate", "openComplaint", "clearFilters"],
+      selectedComplaint: expandedComplaintId
+        ? {
+            id: expandedComplaintId,
+            status: selectedStatuses[expandedComplaintId] || "Assigned",
+            note: notes[expandedComplaintId] || "",
+          }
+        : null,
+      visibleComplaints: (complaints || []).slice(0, 10).map((c, index) => ({
+        index: index + 1,
+        id: c._id,
+        title: c.title,
+        status: c.status,
+        category: c.category,
+        department: c.department,
+        building: c.building,
+        room: c.room,
+        priority: c.priority,
+      })),
+      interactiveElements: [
+        "viewTabs: current (Assigned), resolved (Resolved)",
+        "statusFilterSelect: all, Assigned, In_Progress, Under_Review, Resolved",
+        "searchComplaintsInput",
+        "complaintCards: expand/collapse to review history and actions",
+        "statusUpdateForm: statusDropdown (In_Progress, Under_Review, Resolved), technicianVoiceNote, proofUpload, saveButton",
+      ],
+      availableActions: [
+        "filter",
+        "clearFilters",
+        "navigate",
+        "openComplaint",
+        "switchTab",
+        "updateStatus",
+      ],
     });
-  }, [activeSection, complaintView, complaintFilter, complaintSearch, expandedComplaintId, setScreenContext]);
+  }, [
+    activeSection,
+    complaintView,
+    complaintFilter,
+    complaintSearch,
+    expandedComplaintId,
+    complaints,
+    selectedStatuses,
+    notes,
+    setScreenContext,
+  ]);
 
   useEffect(() => {
     function handleSetFilters(e) {
@@ -106,20 +148,57 @@ export default function StaffDashboardPage() {
     }
 
     function handleOpenComplaint(e) {
-      const { id } = e.detail || {};
-      if (id) setExpandedComplaintId(id);
+      const { id, index, title: targetTitle } = e.detail || {};
+      let targetId = id;
+      if (!targetId && index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < complaints.length) {
+          targetId = complaints[idx]._id;
+        }
+      } else if (!targetId && targetTitle) {
+        const found = complaints.find((c) =>
+          c.title?.toLowerCase().includes(targetTitle.toLowerCase()),
+        );
+        if (found) targetId = found._id;
+      }
+      if (targetId) setExpandedComplaintId(targetId);
+    }
+
+    function handleSwitchTab(e) {
+      const { tab, view } = e.detail || {};
+      const target = tab || view;
+      if (target === "resolved") setComplaintView("resolved");
+      else if (target === "current" || target === "assigned") setComplaintView("current");
+    }
+
+    function handleUpdateStatus(e) {
+      const { id, status, note } = e.detail || {};
+      const targetId = id || expandedComplaintId;
+      if (targetId) {
+        setExpandedComplaintId(targetId);
+        if (status) {
+          setSelectedStatuses((current) => ({ ...current, [targetId]: status }));
+        }
+        if (note !== undefined) {
+          setNotes((current) => ({ ...current, [targetId]: note }));
+        }
+      }
     }
 
     window.addEventListener("fixflow:set-filters", handleSetFilters);
     window.addEventListener("fixflow:clear-filters", handleClearFilters);
     window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+    window.addEventListener("fixflow:switch-tab", handleSwitchTab);
+    window.addEventListener("fixflow:update-status", handleUpdateStatus);
 
     return () => {
       window.removeEventListener("fixflow:set-filters", handleSetFilters);
       window.removeEventListener("fixflow:clear-filters", handleClearFilters);
       window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+      window.removeEventListener("fixflow:switch-tab", handleSwitchTab);
+      window.removeEventListener("fixflow:update-status", handleUpdateStatus);
     };
-  }, []);
+  }, [complaints, expandedComplaintId]);
 
   const loadComplaints = useCallback(async () => {
     const requestId = ++latestRequestId.current;

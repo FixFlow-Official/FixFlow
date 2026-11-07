@@ -27,6 +27,7 @@ import {
   deleteCampusBlockRequest,
   initKarnalPresetRequest,
 } from "../../services/api.js";
+import { useAssistantContext } from "../../context/assistantContext.jsx";
 
 const CATEGORY_ICONS = {
   Academic: GraduationCap,
@@ -171,6 +172,108 @@ export default function AdminCampusMapPage({ accessToken }) {
       return matchesCategory && matchesSearch;
     });
   }, [blocks, categoryFilter, searchQuery]);
+
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: "admin-campus-map",
+      pageTitle: "Live Campus GIS Map & Facility Heatmap",
+      activeFilters: { category: categoryFilter, search: searchQuery },
+      selectedBuilding: inspectingBlock
+        ? {
+            name: inspectingBlock.name,
+            code: inspectingBlock.code,
+            category: inspectingBlock.category,
+            floor: selectedFloorName,
+            activeComplaints: inspectingBlock.activeComplaints || 0,
+          }
+        : null,
+      visibleBuildings: (filteredBlocks || []).slice(0, 10).map((b, index) => ({
+        index: index + 1,
+        name: b.name,
+        code: b.code,
+        category: b.category,
+        activeComplaints: b.activeComplaints,
+      })),
+      interactiveElements: [
+        "categoryFilterPills: ALL, Academic, Lab, Administrative, Amenities, Sports",
+        "searchBuildingsInput",
+        "buildingCards: tap to view floor plan and active issues",
+        "inspectionModal: floorSelector, roomList, directComplaintLinks",
+        "addBuildingButton",
+      ],
+      availableActions: [
+        "filter",
+        "clearFilters",
+        "selectBuilding",
+        "selectFloor",
+        "closeModal",
+        "navigate",
+      ],
+    });
+  }, [categoryFilter, searchQuery, inspectingBlock, selectedFloorName, filteredBlocks, setScreenContext]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { category, search } = e.detail || {};
+      if (category) setCategoryFilter(category);
+      if (search !== undefined) setSearchQuery(search);
+    }
+
+    function handleClearFilters() {
+      setCategoryFilter("ALL");
+      setSearchQuery("");
+    }
+
+    function handleSelectBuilding(e) {
+      const { id, name, code, index } = e.detail || {};
+      let found = null;
+      if (index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < filteredBlocks.length) {
+          found = filteredBlocks[idx];
+        }
+      } else if (id || code) {
+        found = blocks.find(
+          (b) => b._id === id || b.code?.toLowerCase() === (id || code)?.toLowerCase(),
+        );
+      } else if (name) {
+        found = blocks.find((b) =>
+          b.name?.toLowerCase().includes(name.toLowerCase()),
+        );
+      }
+      if (found) {
+        setInspectingBlock(found);
+        const floors = found.floorBreakdown || [];
+        setSelectedFloorName(floors[0]?.name || "Ground Floor");
+      }
+    }
+
+    function handleSelectFloor(e) {
+      const { floor } = e.detail || {};
+      if (floor) setSelectedFloorName(floor);
+    }
+
+    function handleCloseModal() {
+      setInspectingBlock(null);
+      setEditorOpen(false);
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:select-building", handleSelectBuilding);
+    window.addEventListener("fixflow:select-floor", handleSelectFloor);
+    window.addEventListener("fixflow:close-modal", handleCloseModal);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:select-building", handleSelectBuilding);
+      window.removeEventListener("fixflow:select-floor", handleSelectFloor);
+      window.removeEventListener("fixflow:close-modal", handleCloseModal);
+    };
+  }, [blocks, filteredBlocks]);
 
   // Open centered inspection card
   function handleOpenInspect(block) {

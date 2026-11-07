@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateImageFile, MAX_IMAGE_SIZE, ALLOWED_IMAGE_TYPES } from "../src/utils/fileValidation.js";
+import { validateImageFile } from "../src/utils/fileValidation.js";
 
 test("validateImageFile accepts valid JPEG, PNG, and WebP files", () => {
   const validJpg = { name: "proof.jpg", type: "image/jpeg", size: 1024 * 500 };

@@ -79,7 +79,7 @@ export default function DashboardAssistant({
   onFillFormFields,
 }) {
   const { user, accessToken } = useAuth();
-  const { screenContext, dispatchAction } = useAssistantContext();
+  const { screenContext, dispatchActions } = useAssistantContext();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState([]);
@@ -151,12 +151,10 @@ export default function DashboardAssistant({
   }
 
   function navigateFromText(textOrItem, fromVoice = false) {
-    let navigationTarget = null;
-    if (typeof textOrItem === "object" && textOrItem !== null && textOrItem.id) {
-      navigationTarget = textOrItem;
-    } else {
-      navigationTarget = findNavigationTarget(textOrItem, navItems);
-    }
+    const navigationTarget =
+      typeof textOrItem === "object" && textOrItem !== null && textOrItem.id
+        ? textOrItem
+        : findNavigationTarget(textOrItem, navItems);
     if (!navigationTarget) return null;
     const reply = `Opening ${navigationTarget.label}.`;
     setMessages((current) =>
@@ -271,22 +269,9 @@ export default function DashboardAssistant({
             onNavigate?.(action.params.target);
           } else if (action.type === "fillForm") {
             onFillFormFields?.(action.params);
-            window.dispatchEvent(
-              new CustomEvent("fixflow:fill-complaint-form", { detail: action.params }),
-            );
-          } else if (action.type === "filter") {
-            window.dispatchEvent(
-              new CustomEvent("fixflow:set-filters", { detail: action.params }),
-            );
-          } else if (action.type === "clearFilters") {
-            window.dispatchEvent(new CustomEvent("fixflow:clear-filters"));
-          } else if (action.type === "openComplaint") {
-            window.dispatchEvent(
-              new CustomEvent("fixflow:open-complaint", { detail: action.params }),
-            );
           }
-          dispatchAction?.(action);
         }
+        await dispatchActions?.(data.actions);
       }
 
       const fallbackTarget =

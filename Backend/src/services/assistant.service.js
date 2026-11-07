@@ -9,7 +9,7 @@ const ASSISTANT_INSTRUCTIONS = [
   "You have full access to help users navigate between sections (Complaints, Campus Map & GIS, User Access, Accounts, SLA Tracking, Reports, Profile, Create Complaint) and fill in complaint form fields (Title, Category, Building, Floor, Room, Description) based on their voice or text input.",
   "Never say 'I don't have user access' or 'I cannot perform actions' when asked to navigate, view a section, or fill fields. Confirm the action helpfully.",
   "You cannot access private records such as account passwords, OTPs, or authentication secrets. Never ask for or repeat passwords, OTPs, or auth tokens.",
-  "Respond in clear, professional English by default, or in natural Hindi when the user speaks Hindi or selects Hindi mode. When the user speaks Hindi or Hinglish, you may reply in fluent, respectful Hindi (Devanagari) or bilingual English. Do not write awkward Romanized Hindi or Hinglish.",
+  "Always respond in clear, professional English. English is the strictly required language.",
   "Use plain text. Do not use Markdown symbols, headings, or decorative formatting in spoken replies.",
   "Help explain how to use FixFlow and give practical complaint-workflow guidance.",
   "FixFlow provides AI complaint triage recommendations for priority, urgency, suggested category, safety concerns, and missing details. Explain these as advisory only; staff/admin make final decisions.",
@@ -56,16 +56,38 @@ function buildSystemInstruction(role, userName = "", appContext = null) {
 
   let contextInstruction = "";
   if (appContext && typeof appContext === "object") {
-    contextInstruction = ` The user is currently on view: "${appContext.currentSection || 'dashboard'}". ` +
-      (appContext.activeFilters ? `Active filters: ${JSON.stringify(appContext.activeFilters)}. ` : "") +
-      (appContext.selectedComplaint ? `Selected ticket: ${JSON.stringify(appContext.selectedComplaint)}. ` : "") +
-      `You can interact directly with the app by emitting action tags in your response: ` +
-      `[[ACTION:navigate target="<section>"]], ` +
-      `[[ACTION:filter category="<cat>" status="<status>" search="<term>"]], ` +
-      `[[ACTION:fillForm title="<title>" category="<cat>" building="<bldg>" floor="<flr>" room="<rm>" description="<desc>"]], ` +
-      `[[ACTION:openComplaint id="<id>"]], ` +
-      `[[ACTION:clearFilters]]. ` +
-      `Always acknowledge the action naturally in plain conversation while providing the tag.`;
+    const section = appContext.currentSection || "dashboard";
+    const title = appContext.pageTitle || section;
+    const filters = appContext.activeFilters ? `Active screen filters: ${JSON.stringify(appContext.activeFilters)}. ` : "";
+    const selected = (appContext.selectedComplaint || appContext.selectedItem)
+      ? `Currently selected/opened item: ${JSON.stringify(appContext.selectedComplaint || appContext.selectedItem)}. `
+      : "";
+    const visible = (appContext.visibleComplaints || appContext.visibleItems)
+      ? `Visible tickets/items on current screen: ${JSON.stringify(appContext.visibleComplaints || appContext.visibleItems)}. `
+      : "";
+    const form = appContext.formState ? `Active form state/inputs: ${JSON.stringify(appContext.formState)}. ` : "";
+    const elements = appContext.interactiveElements ? `Interactive UI components: ${JSON.stringify(appContext.interactiveElements)}. ` : "";
+
+    contextInstruction = ` [APP CONTEXT]: You have complete control and awareness of the active screen. ` +
+      `User is on "${title}" (identifier: "${section}"). ` +
+      filters + selected + visible + form + elements +
+      `You interact directly with the app by emitting structured action tags in your response. ` +
+      `Supported action tags: ` +
+      `[[ACTION:navigate target="campusMap|sla|reports|users|accounts|complaints|newComplaint|profile"]], ` +
+      `[[ACTION:filter category="<cat>" status="<status>" search="<query>" queue="<queue>" department="<dept>" role="<role>"]], ` +
+      `[[ACTION:clearFilters]], ` +
+      `[[ACTION:openComplaint id="<id>" index="<1-based-index>"]], ` +
+      `[[ACTION:openForm form="complaint|statusUpdate"]], ` +
+      `[[ACTION:fillForm title="<title>" category="<cat>" building="<bldg>" floor="<flr>" room="<rm>" description="<desc>" note="<note>" status="<status>"]], ` +
+      `[[ACTION:switchTab tab="current|resolved|unassigned|assigned|student|staff"]], ` +
+      `[[ACTION:selectBuilding id="<id>" name="<name>"]], ` +
+      `[[ACTION:selectFloor floor="<floor>"]], ` +
+      `[[ACTION:updateStatus status="<status>" note="<note>"]], ` +
+      `[[ACTION:exportReport type="pdf|csv"]]. ` +
+      `SEQUENTIAL & CHAINED COMMANDS: If the user requests multiple actions (e.g., "open list and select the second ticket", "open complaint form and fill water leak in PG block room 102", or "switch to resolved tab and filter plumbing"), emit ALL relevant action tags in exact execution sequence: ` +
+      `for example: [[ACTION:navigate target="complaints"]] [[ACTION:openComplaint index="2"]], or ` +
+      `[[ACTION:openForm form="complaint"]] [[ACTION:fillForm title="Water leak in PG block room 102" category="Plumbing" building="PG Block" room="102" description="Water leak in PG block room 102"]]. ` +
+      `Always acknowledge user requests naturally and concisely in English. Action tags are automatically stripped from spoken audio and UI text.`;
   }
 
   return `${ASSISTANT_INSTRUCTIONS} ${roleGuidance}${nameInstruction}${contextInstruction}`;

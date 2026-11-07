@@ -82,14 +82,53 @@ export default function AdminDashboardPage() {
   const [reassigning, setReassigning] = useState(false);
   const { setScreenContext } = useAssistantContext();
 
+  const selectedAssignedComplaint = assignedComplaints.find(
+    (complaint) => complaint._id === selectedAssignedComplaintId,
+  );
+
+  const activeComplaintList = activeQueue === "unassigned" ? complaints : assignedComplaints;
+
   useEffect(() => {
     setScreenContext({
       currentSection: `admin-${activeSection}-${activeQueue}`,
+      pageTitle: activeQueue === "unassigned" ? "Admin Triage Queue (Unassigned Complaints)" : "Admin Assigned Complaints Management",
       activeFilters: { queue: activeQueue, filter: assignedFilter, search: assignedSearch },
-      selectedComplaint: selectedAssignedComplaint ? { id: selectedAssignedComplaint._id } : null,
-      availableActions: ["filter", "navigate", "openComplaint", "clearFilters"],
+      selectedComplaint: selectedAssignedComplaint ? { id: selectedAssignedComplaint._id, title: selectedAssignedComplaint.title } : null,
+      visibleComplaints: (activeComplaintList || []).slice(0, 10).map((c, index) => ({
+        index: index + 1,
+        id: c._id,
+        title: c.title,
+        status: c.status,
+        category: c.category,
+        building: c.building,
+        room: c.room,
+      })),
+      interactiveElements: [
+        "queueTabs: unassigned (Triage), assigned (Active / In-progress)",
+        "assignedStatusFilter: all, Assigned, In_Progress, Under_Review, Resolved",
+        "searchTicketsInput",
+        "departmentDropdown",
+        "assignStaffButton",
+        "reassignStaffModal",
+      ],
+      availableActions: [
+        "filter",
+        "clearFilters",
+        "navigate",
+        "openComplaint",
+        "switchQueue",
+        "switchTab",
+      ],
     });
-  }, [activeSection, activeQueue, assignedFilter, assignedSearch, selectedAssignedComplaint, setScreenContext]);
+  }, [
+    activeSection,
+    activeQueue,
+    assignedFilter,
+    assignedSearch,
+    selectedAssignedComplaint,
+    activeComplaintList,
+    setScreenContext,
+  ]);
 
   useEffect(() => {
     function handleSetFilters(e) {
@@ -105,24 +144,43 @@ export default function AdminDashboardPage() {
     }
 
     function handleOpenComplaint(e) {
-      const { id } = e.detail || {};
-      if (id) setSelectedAssignedComplaintId(id);
+      const { id, index, title: targetTitle } = e.detail || {};
+      const targetList = activeQueue === "unassigned" ? complaints : assignedComplaints;
+      let targetId = id;
+      if (!targetId && index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < targetList.length) {
+          targetId = targetList[idx]._id;
+        }
+      } else if (!targetId && targetTitle) {
+        const found = targetList.find((c) =>
+          c.title?.toLowerCase().includes(targetTitle.toLowerCase()),
+        );
+        if (found) targetId = found._id;
+      }
+      if (targetId) setSelectedAssignedComplaintId(targetId);
+    }
+
+    function handleSwitchTab(e) {
+      const { queue, tab } = e.detail || {};
+      const target = queue || tab;
+      if (target === "unassigned" || target === "assigned") {
+        setActiveQueue(target);
+      }
     }
 
     window.addEventListener("fixflow:set-filters", handleSetFilters);
     window.addEventListener("fixflow:clear-filters", handleClearFilters);
     window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+    window.addEventListener("fixflow:switch-tab", handleSwitchTab);
 
     return () => {
       window.removeEventListener("fixflow:set-filters", handleSetFilters);
       window.removeEventListener("fixflow:clear-filters", handleClearFilters);
       window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+      window.removeEventListener("fixflow:switch-tab", handleSwitchTab);
     };
-  }, []);
-
-  const selectedAssignedComplaint = assignedComplaints.find(
-    (complaint) => complaint._id === selectedAssignedComplaintId,
-  );
+  }, [activeQueue, complaints, assignedComplaints]);
 
   const filteredAssignedComplaints = assignedComplaints;
   const visibleAssignedComplaints = assignedComplaints;

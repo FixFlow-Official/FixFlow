@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { getAdminComplaintReportsRequest, getAdminReportInsightsRequest } from "../../services/api.js";
 import { formatStatus } from "../../utils/complaintConfig.js";
+import { useAssistantContext } from "../../context/assistantContext.jsx";
 
 const periodOptions = [
   { value: "30d", label: "Last 30 days" },
@@ -148,6 +149,45 @@ export default function AdminReports({ accessToken }) {
   const [aiInsightError, setAiInsightError] = useState("");
   const [aiInsightLoading, setAiInsightLoading] = useState(false);
   const requestIdRef = useRef(0);
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: "admin-reports",
+      pageTitle: "Executive Reports, Resolution Trends & KPI Analytics",
+      activeFilters: { period },
+      reportSummary: report?.summary || null,
+      interactiveElements: [
+        "periodFilterPills: 30d, 90d, 12m, all",
+        "generateAiInsightsButton",
+        "metricCards: Total complaints, avg resolution time, open backlog, resolution rate",
+        "categoryBreakdownBars",
+      ],
+      availableActions: ["filter", "clearFilters", "navigate"],
+    });
+  }, [period, report, setScreenContext]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { period: targetPeriod, filter } = e.detail || {};
+      const next = targetPeriod || filter;
+      if (next && ["30d", "90d", "12m", "all"].includes(next)) {
+        setPeriod(next);
+      }
+    }
+
+    function handleClearFilters() {
+      setPeriod("90d");
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+    };
+  }, []);
 
   const loadReport = useCallback(async () => {
     const requestId = ++requestIdRef.current;

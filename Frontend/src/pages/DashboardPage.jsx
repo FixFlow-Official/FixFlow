@@ -24,8 +24,6 @@ import {
   getComplaintsRequest,
 } from "../services/api.js";
 
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-
 const activeComplaintStatuses = [
   "Submitted",
   "Under_Review",
@@ -66,11 +64,65 @@ export default function DashboardPage() {
   useEffect(() => {
     setScreenContext({
       currentSection: `student-${activeSection}-${page}`,
+      pageTitle: page === "create" ? "Submit New Complaint" : "My Complaints & Campus Facility Status",
       activeFilters: { page, complaintFilter, complaintSearch },
-      selectedComplaint: selectedComplaint ? { id: selectedComplaint._id, title: selectedComplaint.title } : null,
-      availableActions: ["filter", "navigate", "fillForm", "openComplaint", "clearFilters"],
+      selectedComplaint: selectedComplaint
+        ? { id: selectedComplaint._id, title: selectedComplaint.title, status: selectedComplaint.status }
+        : null,
+      visibleComplaints: (complaints || []).slice(0, 10).map((c, index) => ({
+        index: index + 1,
+        id: c._id,
+        title: c.title,
+        category: c.category,
+        status: c.status,
+        building: c.building,
+        room: c.room,
+      })),
+      formState: page === "create"
+        ? {
+            isOpen: true,
+            title,
+            category,
+            building,
+            floor,
+            room,
+            description,
+            hasImage: Boolean(image),
+          }
+        : { isOpen: false },
+      interactiveElements: [
+        "complaintSearchInput",
+        "filterPills: all, current, resolved, closed",
+        "newComplaintButton",
+        "complaintCards: view status and details",
+        "complaintFormModal: title, category, building, floor, room, description, uploadProofImage, aiDiagnoseButton",
+      ],
+      availableActions: [
+        "filter",
+        "clearFilters",
+        "navigate",
+        "openComplaint",
+        "openForm",
+        "fillForm",
+        "switchTab",
+      ],
     });
-  }, [activeSection, page, complaintFilter, complaintSearch, selectedComplaint, setScreenContext]);
+  }, [
+    activeSection,
+    page,
+    complaintFilter,
+    complaintSearch,
+    selectedComplaint,
+    complaints,
+    title,
+    category,
+    building,
+    floor,
+    room,
+    description,
+    image,
+    setScreenContext,
+  ]);
 
   useEffect(() => {
     function handleSetFilters(e) {
@@ -86,14 +138,37 @@ export default function DashboardPage() {
     }
 
     function handleOpenComplaint(e) {
-      const { id } = e.detail || {};
+      const { id, index, title: targetTitle } = e.detail || {};
+      let found = null;
       if (id) {
-        const found = complaints.find((c) => c._id === id);
-        if (found) {
-          setSelectedComplaint(found);
-          setPage("mine");
+        found = complaints.find((c) => c._id === id);
+      } else if (index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < complaints.length) {
+          found = complaints[idx];
         }
+      } else if (targetTitle) {
+        found = complaints.find((c) =>
+          c.title?.toLowerCase().includes(targetTitle.toLowerCase()),
+        );
       }
+      if (found) {
+        setSelectedComplaint(found);
+        setPage("mine");
+      }
+    }
+
+    function handleOpenForm(e) {
+      const { form } = e.detail || {};
+      if (!form || form === "complaint") {
+        setPage("create");
+      }
+    }
+
+    function handleSwitchTab(e) {
+      const { tab } = e.detail || {};
+      if (tab === "create") setPage("create");
+      else if (tab === "mine" || tab === "complaints") setPage("mine");
     }
 
     function handleFillForm(e) {
@@ -110,12 +185,16 @@ export default function DashboardPage() {
     window.addEventListener("fixflow:set-filters", handleSetFilters);
     window.addEventListener("fixflow:clear-filters", handleClearFilters);
     window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+    window.addEventListener("fixflow:open-form", handleOpenForm);
+    window.addEventListener("fixflow:switch-tab", handleSwitchTab);
     window.addEventListener("fixflow:fill-complaint-form", handleFillForm);
 
     return () => {
       window.removeEventListener("fixflow:set-filters", handleSetFilters);
       window.removeEventListener("fixflow:clear-filters", handleClearFilters);
       window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+      window.removeEventListener("fixflow:open-form", handleOpenForm);
+      window.removeEventListener("fixflow:switch-tab", handleSwitchTab);
       window.removeEventListener("fixflow:fill-complaint-form", handleFillForm);
     };
   }, [complaints]);
