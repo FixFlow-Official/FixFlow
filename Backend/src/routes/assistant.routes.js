@@ -11,7 +11,7 @@ const assistantLimiter = rateLimit({
   limit: 12,
   keyGenerator: (req) =>
     req.auth?.id ? `user:${req.auth.id}` : `ip:${ipKeyGenerator(req.ip || "127.0.0.1")}`,
-  validate: { keyGeneratorIpFallback: false },
+  validate: { ip: false },
   standardHeaders: "draft-8",
   legacyHeaders: false,
   store: new MongoRateLimitStore("assistant"),

@@ -448,9 +448,129 @@ async function toggleUpvoteComplaint(req, res) {
   });
 }
 
+// Student verifies resolution with 1 to 5 stars (CSAT) and optional feedback
+async function verifyComplaintResolution(req, res) {
+  if (!req.auth || req.auth.role !== "student") {
+    return res.status(403).json({ message: "Only students can verify complaint resolution." });
+  }
+
+  const { complaintId } = req.params;
+  const { rating, feedback } = req.body;
+
+  const complaint = await complaintModel.findById(complaintId);
+  if (!complaint) {
+    return res.status(404).json({ message: "Complaint not found." });
+  }
+
+  if (String(complaint.user) !== String(req.auth.id)) {
+    return res.status(403).json({ message: "Only the student who submitted this complaint can verify its resolution." });
+  }
+
+  if (complaint.status !== "Resolved") {
+    return res.status(400).json({ message: "Can only verify resolution for complaints currently marked as Resolved." });
+  }
+
+  const numRating = Number(rating);
+  if (!Number.isInteger(numRating) || numRating < 1 || numRating > 5) {
+    return res.status(400).json({ message: "A rating between 1 and 5 stars is required." });
+  }
+
+  complaint.resolutionVerified = true;
+  complaint.resolutionVerifiedAt = new Date();
+  complaint.csatRating = numRating;
+  complaint.csatFeedback = feedback ? String(feedback).trim().slice(0, 1000) : "";
+
+  complaint.statusHistory.push({
+    status: "Resolved",
+    note: `Student verified fix: ${numRating}/5 stars.${feedback ? ` Feedback: "${feedback.trim()}"` : ""}`,
+    changedBy: req.auth.id,
+    changedByRole: "student",
+    changedBySnapshot: {
+      name: req.user?.fullName || req.auth.name || "Student",
+      campusId: req.user?.campusId || req.auth.campusId || "",
+    },
+    changedAt: new Date(),
+  });
+
+  await complaint.save();
+
+  return res.status(200).json({
+    message: "Resolution verified. Thank you for your feedback!",
+    complaint,
+  });
+}
+
+// Student reopens an inadequate resolution with reason and optional proof photo
+async function reopenComplaint(req, res) {
+  if (!req.auth || req.auth.role !== "student") {
+    return res.status(403).json({ message: "Only students can reopen complaints." });
+  }
+
+  const { complaintId } = req.params;
+  const reason = (req.body?.reason || "").trim();
+
+  if (!reason) {
+    return res.status(400).json({ message: "Please explain why the issue is not resolved." });
+  }
+
+  const complaint = await complaintModel.findById(complaintId);
+  if (!complaint) {
+    return res.status(404).json({ message: "Complaint not found." });
+  }
+
+  if (String(complaint.user) !== String(req.auth.id)) {
+    return res.status(403).json({ message: "Only the student who submitted this complaint can reopen it." });
+  }
+
+  if (complaint.status !== "Resolved") {
+    return res.status(400).json({ message: "Can only reopen complaints currently marked as Resolved." });
+  }
+
+  let reopenProofUrl = null;
+  if (req.file) {
+    try {
+      const uploadResult = await uploadFile(req.file.buffer, `reopen_${complaintId}`);
+      reopenProofUrl = uploadResult?.url || null;
+    } catch {
+      // Allow proceeding even if cloud storage upload fails or mock
+      reopenProofUrl = null;
+    }
+  }
+
+  complaint.status = "In_Progress";
+  complaint.resolutionVerified = false;
+  complaint.reopenedCount = (complaint.reopenedCount || 0) + 1;
+  complaint.reopenedAt = new Date();
+  complaint.reopenReason = reason.slice(0, 1000);
+  if (reopenProofUrl) {
+    complaint.reopenProofUrl = reopenProofUrl;
+  }
+
+  complaint.statusHistory.push({
+    status: "In_Progress",
+    note: `Reopened by student: ${reason}`,
+    changedBy: req.auth.id,
+    changedByRole: "student",
+    changedBySnapshot: {
+      name: req.user?.fullName || req.auth.name || "Student",
+      campusId: req.user?.campusId || req.auth.campusId || "",
+    },
+    changedAt: new Date(),
+  });
+
+  await complaint.save();
+
+  return res.status(200).json({
+    message: "Complaint reopened. Staff has been notified.",
+    complaint,
+  });
+}
+
 module.exports = {
   createComplaint,
   getComplaint,
   getSimilarComplaints,
   toggleUpvoteComplaint,
+  verifyComplaintResolution,
+  reopenComplaint,
 };

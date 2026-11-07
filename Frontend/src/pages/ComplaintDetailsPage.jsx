@@ -6,6 +6,7 @@ import ComplaintConversation from "../components/complaints/ComplaintConversatio
 import ComplaintImageLink from "../components/complaints/ComplaintImageLink.jsx";
 import ComplaintStatusBadge from "../components/complaints/ComplaintStatusBadge.jsx";
 import ComplaintStatusTimeline from "../components/complaints/ComplaintStatusTimeline.jsx";
+import ComplaintResolutionVerification from "../components/complaints/ComplaintResolutionVerification.jsx";
 import { useAuth } from "../context/useAuth.js";
 import { useAssistantContext } from "../context/assistantContext.jsx";
 import { getComplaintDetailsRequest } from "../services/api.js";
@@ -164,6 +165,14 @@ function ComplaintDetailsContent({ complaintId }) {
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-900">{complaint.resolutionNote || "No resolution note was recorded."}</p>
                     {complaint.resolutionProofUrl && <ComplaintImageLink src={complaint.resolutionProofUrl} alt={`Resolution proof for ${complaint.complaintTitle}`} ariaLabel="Open resolution proof photo" className="mt-3 inline-flex max-w-full overflow-hidden rounded-xl border border-emerald-200" imageClassName="max-h-72 max-w-full object-contain" />}
                   </section>
+                )}
+
+                {user?.role === "student" && (
+                  <ComplaintResolutionVerification
+                    complaint={complaint}
+                    accessToken={accessToken}
+                    onUpdate={(updated) => setComplaint((prev) => ({ ...prev, ...updated }))}
+                  />
                 )}
               </div>
 

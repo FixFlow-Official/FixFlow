@@ -48,4 +48,25 @@ router.get("/similar-complaints", verifyAccessToken, studentController.getSimila
  */
 router.post("/complaints/:complaintId/upvote", verifyAccessToken, studentController.toggleUpvoteComplaint);
 
+/**
+ * @route api/student/complaints/:complaintId/verify-resolution
+ * @description student confirms resolution with 1-5 star CSAT rating
+ */
+router.post(
+  "/complaints/:complaintId/verify-resolution",
+  verifyAccessToken,
+  studentController.verifyComplaintResolution,
+);
+
+/**
+ * @route api/student/complaints/:complaintId/reopen
+ * @description student reopens inadequate repair with explanation and optional proof photo
+ */
+router.post(
+  "/complaints/:complaintId/reopen",
+  verifyAccessToken,
+  uploadSingleImage("image"),
+  studentController.reopenComplaint,
+);
+
 module.exports = router;

@@ -917,4 +917,40 @@ export async function upvoteComplaintRequest(complaintId, accessToken) {
   );
 }
 
+export async function verifyComplaintResolutionRequest(
+  complaintId,
+  { rating, feedback },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/student/complaints/${encodeURIComponent(complaintId)}/verify-resolution`,
+    {
+      method: "POST",
+      body: JSON.stringify({ rating, feedback }),
+    },
+    accessToken,
+  );
+}
+
+export async function reopenComplaintRequest(
+  complaintId,
+  { reason, imageFile },
+  accessToken,
+) {
+  const formData = new FormData();
+  formData.append("reason", reason);
+  if (imageFile) {
+    formData.append("image", imageFile);
+  }
+
+  return complaintRequest(
+    `/api/student/complaints/${encodeURIComponent(complaintId)}/reopen`,
+    {
+      method: "POST",
+      body: formData,
+    },
+    accessToken,
+  );
+}
+
 

@@ -64,6 +64,46 @@ const complaintSchema = new mongoose.Schema(
       ref: "staff",
       default: null,
     },
+    // CSAT & Resolution Verification
+    csatRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: null,
+    },
+    csatFeedback: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null,
+    },
+    resolutionVerified: {
+      type: Boolean,
+      default: false,
+    },
+    resolutionVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+    reopenedCount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    reopenedAt: {
+      type: Date,
+      default: null,
+    },
+    reopenReason: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null,
+    },
+    reopenProofUrl: {
+      type: String,
+      default: null,
+    },
     complaintTitle: {
       type: String,
       required: [true, "Complaint Title is required"],

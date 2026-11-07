@@ -12,6 +12,8 @@ import {
   sendAssistantMessageRequest,
   diagnoseComplaintImageRequest,
   formatStaffVoiceNoteRequest,
+  verifyComplaintResolutionRequest,
+  reopenComplaintRequest,
 } from "../src/services/api.js";
 
 function jsonResponse(payload, status = 200, headers = {}) {
@@ -330,4 +332,53 @@ test("formatStaffVoiceNoteRequest formats spoken technician notes", async (t) =>
   assert.equal(capturedBody.utterance, "valve change kar diya paani check kiya");
   assert.equal(capturedBody.status, "In_Progress");
 });
+
+test("verifyComplaintResolutionRequest submits rating and verification feedback", async (t) => {
+  let capturedUrl;
+  let capturedBody;
+  mockFetch(t, async (url, options) => {
+    capturedUrl = url;
+    capturedBody = JSON.parse(options.body);
+    return jsonResponse({
+      message: "Complaint resolution verified successfully.",
+      complaint: { _id: "c123", resolutionVerified: true, csatRating: 5 },
+    });
+  });
+
+  const res = await verifyComplaintResolutionRequest(
+    "c123",
+    { rating: 5, feedback: "Work is done nicely!" },
+    "student-jwt",
+  );
+
+  assert.equal(capturedUrl, "/api/student/complaints/c123/verify-resolution");
+  assert.equal(capturedBody.rating, 5);
+  assert.equal(capturedBody.feedback, "Work is done nicely!");
+  assert.equal(res.complaint.resolutionVerified, true);
+});
+
+test("reopenComplaintRequest submits reopen reason and updates complaint status", async (t) => {
+  let capturedUrl;
+  let capturedMethod;
+  mockFetch(t, async (url, options) => {
+    capturedUrl = url;
+    capturedMethod = options.method;
+    return jsonResponse({
+      message: "Complaint has been reopened for maintenance staff.",
+      complaint: { _id: "c123", status: "In_Progress", reopenedCount: 1 },
+    });
+  });
+
+  const res = await reopenComplaintRequest(
+    "c123",
+    { reason: "Tap is still leaking from the base.", imageFile: null },
+    "student-jwt",
+  );
+
+  assert.equal(capturedUrl, "/api/student/complaints/c123/reopen");
+  assert.equal(capturedMethod, "POST");
+  assert.equal(res.complaint.status, "In_Progress");
+  assert.equal(res.complaint.reopenedCount, 1);
+});
+
 

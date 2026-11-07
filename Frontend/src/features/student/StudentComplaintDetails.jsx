@@ -2,9 +2,10 @@ import { CheckCircle2 } from "lucide-react";
 import ComplaintImageLink from "../../components/complaints/ComplaintImageLink.jsx";
 import ComplaintStatusTimeline from "../../components/complaints/ComplaintStatusTimeline.jsx";
 import ComplaintAiTriage from "../../components/complaints/ComplaintAiTriage.jsx";
+import ComplaintResolutionVerification from "../../components/complaints/ComplaintResolutionVerification.jsx";
 import { formatDate } from "../../utils/complaintConfig.js";
 
-export default function StudentComplaintDetails({ complaint }) {
+export default function StudentComplaintDetails({ complaint, accessToken, onUpdate }) {
     const status = complaint.status || "Submitted";
     const history = [...(complaint.statusHistory ?? [])].sort(
       (a, b) => new Date(a.changedAt) - new Date(b.changedAt),
@@ -147,6 +148,12 @@ export default function StudentComplaintDetails({ complaint }) {
                 )}
               </section>
             )}
+
+            <ComplaintResolutionVerification
+              complaint={complaint}
+              accessToken={accessToken}
+              onUpdate={onUpdate}
+            />
 
             {(complaint.rejectedReason || complaint.onHoldReason) && (
               <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">

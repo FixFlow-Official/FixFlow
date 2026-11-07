@@ -129,6 +129,22 @@ export default function ExpandableComplaintCard({
                       AI {complaint.aiTriage.priority} · {complaint.aiTriage.urgency}
                     </span>
                   )}
+                  {complaint.status === "Resolved" && (
+                    complaint.resolutionVerified ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        ★ {complaint.csatRating || 5}/5 Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-900 animate-pulse">
+                        Verify Fix Needed
+                      </span>
+                    )
+                  )}
+                  {complaint.reopenedCount > 0 && complaint.status !== "Resolved" && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                      Reopened #{complaint.reopenedCount}
+                    </span>
+                  )}
                 </span>
 
                 <span className="mt-1 block break-words text-sm text-muted">

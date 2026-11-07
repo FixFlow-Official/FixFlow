@@ -612,7 +612,16 @@ export default function DashboardPage() {
             onDownloadPdf={downloadComplaintPdf}
             summary="Your complaint record, updates, and resolution details."
           >
-            <StudentComplaintDetails complaint={selectedComplaint} />
+            <StudentComplaintDetails
+              complaint={selectedComplaint}
+              accessToken={accessToken}
+              onUpdate={(updated) => {
+                setSelectedComplaint(updated);
+                setComplaints((prev) =>
+                  prev.map((c) => (c._id === updated._id ? { ...c, ...updated } : c)),
+                );
+              }}
+            />
           </ExpandableComplaintCard>
         ) : (
           <section className="w-full rounded-3xl border border-white/90 bg-white/95 p-6 text-center shadow-sm ring-1 ring-line/70 sm:p-8">
