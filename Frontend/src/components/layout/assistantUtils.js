@@ -23,6 +23,11 @@ export const navigationAliases = {
     "campus facilities",
     "live campus map",
     "campus map page",
+    "show campus map",
+    "view campus map",
+    "open map",
+    "see campus map",
+    "college map",
   ],
   users: [
     "user access",
@@ -67,23 +72,41 @@ export const navigationAliases = {
     "profile page",
     "my profile page",
     "user profile",
+    "take me to profile",
+    "take me to my profile",
+    "go to profile",
+    "go to my profile",
   ],
   newComplaint: [
     "new complaint",
     "submit complaint",
+    "submit a complaint",
     "create complaint",
+    "create a complaint",
     "report issue",
+    "report an issue",
+    "report problem",
+    "report a problem",
     "file complaint",
+    "file a complaint",
     "raise complaint",
+    "raise a complaint",
     "new issue",
     "lodge complaint",
+    "lodge a complaint",
+    "make a complaint",
     "complain",
   ],
   myComplaints: [
     "my complaints",
     "complaint history",
     "track complaints",
+    "track complaint",
     "track a complaint",
+    "track my complaints",
+    "check complaints",
+    "view my complaints",
+    "see my complaints",
     "my issues",
     "my tickets",
     "my complaints page",
@@ -148,33 +171,47 @@ export function isQuestion(text) {
   const trimmed = text.trim();
   if (!trimmed) return false;
 
-  // If query ends in '?' check if it is an explicit navigation command (e.g. "can you open campus map?")
-  if (trimmed.endsWith("?")) {
-    if (
-      /^(?:please\s+)?(?:can\s+you|could\s+you|would\s+you)?\s*(?:please\s+)?(?:open|go\s+to|navigate\s+to|switch\s+to|take\s+me\s+to)\b/i.test(
-        trimmed,
-      )
-    ) {
-      return false;
-    }
+  // Question / informational inquiry starters that must not trigger navigation
+  if (
+    /^(?:what|how|why|who|when|where|which|is\s+there|are\s+there|tell\s+me|explain|help\s+me|show\s+me\s+how|show\s+me\s+what|can\s+you\s+check|do\s+i\s+have)\b/i.test(
+      trimmed,
+    )
+  ) {
     return true;
   }
 
-  // Question / informational inquiry starters that must not trigger navigation
-  return /^(?:what|how|why|who|when|where|which|is\s+there|are\s+there|tell\s+me|explain|help\s+me|show\s+me\s+how|show\s+me\s+what)\b/i.test(
-    trimmed,
-  );
+  // Polite action requests phrased with question words (e.g., "can you open campus map?")
+  if (
+    /^(?:please\s+)?(?:can\s+you|could\s+you|would\s+you)?\s*(?:please\s+)?(?:open|go\s+to|navigate\s+to|switch\s+to|take\s+me\s+to|bring\s+up|show\s+me|display|view)\b/i.test(
+      trimmed,
+    )
+  ) {
+    return false;
+  }
+
+  // If query ends in '?' and wasn't a polite request, treat as question
+  if (trimmed.endsWith("?")) {
+    return true;
+  }
+
+  return false;
 }
 
 export function splitIntoSentences(text) {
   if (!text || typeof text !== "string") return [];
   const cleaned = text.trim();
   if (!cleaned) return [];
-  const rawParts = cleaned.split(/(?<=[.!?])\s+|\n+/);
+
+  // Protect common abbreviations and numeric patterns from sentence splitting
+  const protectedText = cleaned
+    .replace(/\b(no|dr|mr|ms|mrs|prof|sr|jr|vs|etc|i\.e|e\.g|approx|dept)\./gi, (m) => m.slice(0, -1) + "\u2024")
+    .replace(/(\d+)\.(\d+)/g, "$1\u2024$2");
+
+  const rawParts = protectedText.split(/(?<=[.!?])\s+|\n+/);
   const result = [];
   for (const part of rawParts) {
-    const trimmed = part.trim();
-    if (trimmed) result.push(trimmed);
+    const restored = part.replace(/\u2024/g, ".").trim();
+    if (restored) result.push(restored);
   }
   return result.length > 0 ? result : [cleaned];
 }
@@ -182,16 +219,31 @@ export function splitIntoSentences(text) {
 export function stripRepetitiveGreeting(text, name) {
   if (!text || typeof text !== "string") return "";
   let res = text.trim();
-  if (name) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    res = res.replace(
-      new RegExp(`^(?:hello|hi|hey)\\s*(?:${escaped}|there)?\\s*[,!.]*\\s*`, "i"),
-      "",
-    );
-  } else {
-    res = res.replace(/^(?:hello|hi|hey)\s*(?:there)?\\s*[,!.]*\\s*/i, "");
+
+  const names = [];
+  if (name && typeof name === "string") {
+    const trimmed = name.trim();
+    if (trimmed) {
+      names.push(trimmed);
+      const first = trimmed.split(/\s+/)[0];
+      if (first && first !== trimmed) names.push(first);
+    }
   }
-  return res.trim() || text.trim();
+
+  const namePattern =
+    names.length > 0
+      ? `(?:\\s+(?:${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}))?`
+      : "(?:\\s+there)?";
+
+  const greetingRegex = new RegExp(
+    `^(?:hello|hi|hey|good\\s+morning|good\\s+afternoon|good\\s+evening|greetings|welcome\\s+back)${namePattern}\\s*[,!.]*\\s*`,
+    "i",
+  );
+
+  res = res.replace(greetingRegex, "").trim();
+  res = res.replace(/^[,!.\s]+/, "").trim();
+
+  return res || text.trim();
 }
 
 export function extractNavigationFromReply(text, navItems) {
@@ -199,7 +251,7 @@ export function extractNavigationFromReply(text, navItems) {
   const value = normalize(text);
 
   const match = value.match(
-    /\b(?:navigating|navigate|opening|open|taking\s+you\s+to|switching\s+to|heading\s+to)\s+(?:you\s+to\s+)?(?:the\s+|your\s+)?(.+?)(?:\s+right\s+away|\s+now|\s+page|\.|$)/i,
+    /\b(?:navigating|navigate|opening|open|taking\s+you\s+to|i\s+will\s+take\s+you\s+to|switching\s+to|heading\s+to|redirecting\s+you\s+to|showing\s+you|here\s+is|i\s+have\s+opened|let\s+me\s+open)\s+(?:you\s+to\s+)?(?:the\s+|your\s+)?(.+?)(?:\s+right\s+away|\s+now|\s+for\s+you|\s+page|\.|$)/i,
   );
   if (!match) return null;
 
@@ -230,17 +282,17 @@ export function findNavigationTarget(text, navItems) {
   const value = normalize(text);
 
   let target = value.match(
-    /\b(?:open|go\s+to|navigate\s+to|switch\s+to|take\s+me\s+to)\s+(?:the\s+)?(.+)$/i,
+    /\b(?:open|go\s+to|navigate\s+to|switch\s+to|take\s+me\s+to|bring\s+up|show\s+me|display|view)\s+(?:the\s+)?(.+)$/i,
   )?.[1];
 
   if (!target) {
     target = value.match(
-      /\b(?:show|view)\s+(?:the\s+)?(campus\s+map|map|gis|facility\s+map|live\s+map|my\s+complaints|complaints?|all\s+complaints|reports?|analytics|sla(?:\s+tracking)?|escalations|profile|users?|user\s+access|accounts?|active\s+complaints|resolved\s+complaints|assigned\s+complaints|in\s+progress|under\s+review|on\s+hold)$/i,
+      /\b(?:show|view|display)\s+(?:the\s+)?(campus\s+map|map|gis|facility\s+map|live\s+map|my\s+complaints|complaints?|all\s+complaints|reports?|analytics|sla(?:\s+tracking)?|escalations|profile|users?|user\s+access|accounts?|active\s+complaints|resolved\s+complaints|assigned\s+complaints|in\s+progress|under\s+review|on\s+hold)$/i,
     )?.[1];
   }
 
   if (!target) {
-    target = value.match(/(?:^|.*?\b)(.+?)\s+(?:kholo|dikhao|par\s+jao|chalo)$/i)?.[1];
+    target = value.match(/(?:^|.*?\b)(.+?)\s+(?:kholo|khol\s+do|kholiye|dikhao|dikhaiye|par\s+jao|par\s+chalo|le\s+chalo|chalo)$/i)?.[1];
   }
 
   const isExplicit = Boolean(target);

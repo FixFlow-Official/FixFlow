@@ -113,6 +113,7 @@ export default function AssistantVoiceMode({
   const imageRef = useRef(null);
   const campusConfirmedRef = useRef(false);
   const submittingRef = useRef(false);
+  const activeUtteranceRef = useRef(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -138,11 +139,18 @@ export default function AssistantVoiceMode({
   function stopVoice() {
     activeRef.current = false;
     window.clearTimeout(replyTimerRef.current);
-    try {
-      recognitionRef.current?.abort();
-    } catch {
-      // ignore
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.abort();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
     }
+    activeUtteranceRef.current = null;
     window.speechSynthesis?.cancel();
     setCurrentSpokenLine("");
     updatePhase("ready");
@@ -152,11 +160,18 @@ export default function AssistantVoiceMode({
     () => () => {
       activeRef.current = false;
       window.clearTimeout(replyTimerRef.current);
-      try {
-        recognitionRef.current?.abort();
-      } catch {
-        // ignore
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+        recognitionRef.current = null;
       }
+      activeUtteranceRef.current = null;
       window.speechSynthesis?.cancel();
     },
     [],
@@ -181,7 +196,7 @@ export default function AssistantVoiceMode({
       !window.speechSynthesis ||
       !window.SpeechSynthesisUtterance
     ) {
-      setReply(sentences[0]);
+      setReply(cleanText);
       setCurrentSpokenLine(sentences[0]);
       if (onFinished) onFinished();
       else {
@@ -201,6 +216,7 @@ export default function AssistantVoiceMode({
       if (!activeRef.current) return;
       if (sentenceIndex >= sentences.length) {
         window.clearTimeout(replyTimerRef.current);
+        activeUtteranceRef.current = null;
         setCurrentSpokenLine("");
         if (onFinished) {
           onFinished();
@@ -219,11 +235,25 @@ export default function AssistantVoiceMode({
       const utterance = new window.SpeechSynthesisUtterance(line);
       utterance.lang = "en-IN";
       utterance.rate = 0.96;
+      utterance.pitch = 1.02;
+
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice =
+        voices.find(
+          (voice) => voice.lang?.toLowerCase() === utterance.lang.toLowerCase(),
+        ) ||
+        voices.find((voice) =>
+          voice.lang?.toLowerCase().startsWith(utterance.lang.slice(0, 2)),
+        );
+      if (preferredVoice) utterance.voice = preferredVoice;
+
+      activeUtteranceRef.current = utterance;
 
       let advanced = false;
       const advance = () => {
         if (advanced) return;
         advanced = true;
+        activeUtteranceRef.current = null;
         window.clearTimeout(replyTimerRef.current);
         window.setTimeout(() => {
           if (activeRef.current && phaseRef.current === "speaking") {
@@ -527,7 +557,7 @@ export default function AssistantVoiceMode({
         extractNavigationFromReply(cleanedReply, navItems) ||
         findNavigationTarget(cleanedReply, navItems);
       if (fallbackTarget) {
-        onNavigateText?.(fallbackTarget.label || fallbackTarget.id, true);
+        onNavigateText?.(fallbackTarget, true);
         const navReply = `Opening ${fallbackTarget.label || "the requested section"}. I'm right here in the orb listening.`;
         setReply(navReply);
         setOrbActive(true);
@@ -566,6 +596,19 @@ export default function AssistantVoiceMode({
         updatePhase("ready");
         return;
       }
+
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+        recognitionRef.current = null;
+      }
+
       const recognition = new SpeechRecognition();
       recognition.lang = "en-IN";
       recognition.continuous = true;
@@ -629,7 +672,10 @@ export default function AssistantVoiceMode({
       try {
         recognition.start();
       } catch {
-        // Recognition might already be starting or active; keep session running
+        // If recognition failed to start (e.g. InvalidStateError), retry after backoff
+        if (activeRef.current && phaseRef.current === "listening") {
+          window.setTimeout(() => startListeningRef.current?.(), 400);
+        }
       }
     };
   });
@@ -970,9 +1016,25 @@ export default function AssistantVoiceMode({
       )}
 
       <p className="mx-auto mt-4 max-w-xl text-center text-[11px] leading-5 text-muted">
-        Say <span className="font-semibold text-ink">"open campus map"</span>,{" "}
-        <span className="font-semibold text-ink">"fill complaint..."</span>, or{" "}
-        <span className="font-semibold text-ink">"bye"</span> to end the session anytime.
+        {role === "student" ? (
+          <>
+            Say <span className="font-semibold text-ink">"create complaint"</span>,{" "}
+            <span className="font-semibold text-ink">"show my complaints"</span>, or{" "}
+            <span className="font-semibold text-ink">"bye"</span> to end the session anytime.
+          </>
+        ) : role === "staff" ? (
+          <>
+            Say <span className="font-semibold text-ink">"show assigned complaints"</span>,{" "}
+            <span className="font-semibold text-ink">"show resolved complaints"</span>, or{" "}
+            <span className="font-semibold text-ink">"bye"</span> to end the session anytime.
+          </>
+        ) : (
+          <>
+            Say <span className="font-semibold text-ink">"open campus map"</span>,{" "}
+            <span className="font-semibold text-ink">"SLA tracking"</span>, or{" "}
+            <span className="font-semibold text-ink">"bye"</span> to end the session anytime.
+          </>
+        )}
       </p>
 
       <div className="mx-auto mt-5 flex items-center gap-3">

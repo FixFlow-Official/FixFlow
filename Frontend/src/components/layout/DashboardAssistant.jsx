@@ -148,8 +148,13 @@ export default function DashboardAssistant({
     launcherRef.current?.focus();
   }
 
-  function navigateFromText(text, fromVoice = false) {
-    const navigationTarget = findNavigationTarget(text, navItems);
+  function navigateFromText(textOrItem, fromVoice = false) {
+    let navigationTarget = null;
+    if (typeof textOrItem === "object" && textOrItem !== null && textOrItem.id) {
+      navigationTarget = textOrItem;
+    } else {
+      navigationTarget = findNavigationTarget(textOrItem, navItems);
+    }
     if (!navigationTarget) return null;
     const reply = `Opening ${navigationTarget.label}.`;
     setMessages((current) =>
@@ -433,11 +438,10 @@ export default function DashboardAssistant({
               setMessages={setMessages}
               navItems={navItems}
               onClose={() => {
-                setVoiceMode(false);
-                setVoiceOrbMode(false);
+                closeAssistant();
               }}
-              onNavigateText={(text, fromVoice) =>
-                navigateFromText(text, fromVoice)
+              onNavigateText={(targetOrText, fromVoice) =>
+                navigateFromText(targetOrText, fromVoice)
               }
               onComplaintSubmit={onComplaintSubmit}
               onFillFormFields={onFillFormFields}

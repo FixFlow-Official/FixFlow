@@ -87,6 +87,30 @@ test("findNavigationTarget resolves navigation commands across app views", () =>
     "profile",
   );
   assert.equal(
+    findNavigationTarget("take me to my profile page", sampleNavItems)?.id,
+    "profile",
+  );
+  assert.equal(
+    findNavigationTarget("I said take me to my profile page", sampleNavItems)?.id,
+    "profile",
+  );
+  assert.equal(
+    findNavigationTarget("show me the campus map", sampleNavItems)?.id,
+    "campusMap",
+  );
+  assert.equal(
+    findNavigationTarget("submit a complaint", sampleNavItems)?.id,
+    "newComplaint",
+  );
+  assert.equal(
+    findNavigationTarget("file a complaint", sampleNavItems)?.id,
+    "newComplaint",
+  );
+  assert.equal(
+    findNavigationTarget("track my complaints", sampleNavItems)?.id,
+    "myComplaints",
+  );
+  assert.equal(
     findNavigationTarget("create complaint", sampleNavItems)?.id,
     "newComplaint",
   );
@@ -106,8 +130,20 @@ test("findNavigationTarget handles Hindi and direct alias variations", () => {
     "campusMap",
   );
   assert.equal(
+    findNavigationTarget("campus map khol do", sampleNavItems)?.id,
+    "campusMap",
+  );
+  assert.equal(
     findNavigationTarget("profile dikhao", sampleNavItems)?.id,
     "profile",
+  );
+  assert.equal(
+    findNavigationTarget("profile khol do", sampleNavItems)?.id,
+    "profile",
+  );
+  assert.equal(
+    findNavigationTarget("reports page par le chalo", sampleNavItems)?.id,
+    "reports",
   );
   assert.equal(
     findNavigationTarget("complaints", sampleNavItems)?.id,
@@ -144,6 +180,22 @@ test("extractNavigationFromReply extracts destination from assistant confirmatio
     "complaints",
   );
   assert.equal(
+    extractNavigationFromReply("I will take you to your profile.", sampleNavItems)?.id,
+    "profile",
+  );
+  assert.equal(
+    extractNavigationFromReply("Here is your campus map.", sampleNavItems)?.id,
+    "campusMap",
+  );
+  assert.equal(
+    extractNavigationFromReply("I have opened the campus map for you.", sampleNavItems)?.id,
+    "campusMap",
+  );
+  assert.equal(
+    extractNavigationFromReply("Redirecting you to reports page right away.", sampleNavItems)?.id,
+    "reports",
+  );
+  assert.equal(
     extractNavigationFromReply(
       "FixFlow gives you advisory recommendations.",
       sampleNavItems,
@@ -152,7 +204,7 @@ test("extractNavigationFromReply extracts destination from assistant confirmatio
   );
 });
 
-test("splitIntoSentences segments spoken text for line-by-line display", () => {
+test("splitIntoSentences segments spoken text for line-by-line display and protects abbreviations", () => {
   const parts = splitIntoSentences(
     "Hello! How can I help you today? I can navigate to campus facilities and submit complaints.",
   );
@@ -166,6 +218,12 @@ test("splitIntoSentences segments spoken text for line-by-line display", () => {
   assert.deepEqual(single, [
     "Opening Complaints.",
     "I'm right here in the orb listening.",
+  ]);
+
+  const withAbbreviation = splitIntoSentences("Please inspect Room No. 102. Contact Prof. Sharma at 10.30 AM.");
+  assert.deepEqual(withAbbreviation, [
+    "Please inspect Room No. 102.",
+    "Contact Prof. Sharma at 10.30 AM.",
   ]);
 });
 
@@ -185,6 +243,18 @@ test("stripRepetitiveGreeting removes redundant greetings in conversational turn
   assert.equal(
     stripRepetitiveGreeting("Sure, opening the campus map now.", "Kohinoor"),
     "Sure, opening the campus map now.",
+  );
+  assert.equal(
+    stripRepetitiveGreeting("Good morning Kohinoor Singh, here is your summary.", "Kohinoor Singh"),
+    "here is your summary.",
+  );
+  assert.equal(
+    stripRepetitiveGreeting("Greetings Kohinoor, I can help you with that.", "Kohinoor"),
+    "I can help you with that.",
+  );
+  assert.equal(
+    stripRepetitiveGreeting("Welcome back Kohinoor! Let me know if you need anything.", "Kohinoor"),
+    "Let me know if you need anything.",
   );
 });
 
