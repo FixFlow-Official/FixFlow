@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   AudioLines,
   CheckCircle2,
+  Languages,
   LoaderCircle,
   Mic,
   MicOff,
@@ -26,6 +27,7 @@ import {
   sendAssistantMessageRequest,
   sendVoiceComplaintTurnRequest,
 } from "../../services/api.js";
+import { useAssistantContext } from "../../context/assistantContext.jsx";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const emptyDraft = {
@@ -101,6 +103,36 @@ export default function AssistantVoiceMode({
   const [triageLoading, setTriageLoading] = useState(false);
   const [confirmedCampusIssue, setConfirmedCampusIssue] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const { screenContext, dispatchAction } = useAssistantContext();
+  const [language, setLanguage] = useState(() => {
+    try {
+      return localStorage.getItem("fixflow_voice_lang") || "en";
+    } catch {
+      return "en";
+    }
+  });
+
+  function toggleLanguage() {
+    const next = language === "en" ? "hi" : "en";
+    setLanguage(next);
+    try {
+      localStorage.setItem("fixflow_voice_lang", next);
+    } catch {}
+    if (recognitionRef.current) {
+      recognitionRef.current.lang = next === "hi" ? "hi-IN" : "en-IN";
+    }
+  }
+
+  function interruptSpeaking() {
+    if (phaseRef.current === "speaking") {
+      window.speechSynthesis?.cancel();
+      window.clearTimeout(replyTimerRef.current);
+      activeUtteranceRef.current = null;
+      setCurrentSpokenLine("");
+      updatePhase("listening");
+      window.setTimeout(() => startListeningRef.current?.(), 150);
+    }
+  }
   const recognitionRef = useRef(null);
   const activeRef = useRef(false);
   const phaseRef = useRef("ready");
@@ -210,6 +242,15 @@ export default function AssistantVoiceMode({
     window.clearTimeout(replyTimerRef.current);
     updatePhase("speaking");
 
+    // Keep microphone listening during speech playback so user can interrupt at any moment!
+    if (activeRef.current && recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch {
+        // Recognition already active
+      }
+    }
+
     let sentenceIndex = 0;
 
     function speakCurrentSentence() {
@@ -232,19 +273,28 @@ export default function AssistantVoiceMode({
       setReply(line);
       setCurrentSpokenLine(line);
 
+      const isHindi = /[\u0900-\u097F]/.test(line) || language === "hi";
       const utterance = new window.SpeechSynthesisUtterance(line);
-      utterance.lang = "en-IN";
-      utterance.rate = 0.96;
+      utterance.lang = isHindi ? "hi-IN" : "en-IN";
+      utterance.rate = isHindi ? 0.90 : 0.96;
       utterance.pitch = 1.02;
 
       const voices = window.speechSynthesis.getVoices();
-      const preferredVoice =
-        voices.find(
-          (voice) => voice.lang?.toLowerCase() === utterance.lang.toLowerCase(),
-        ) ||
-        voices.find((voice) =>
-          voice.lang?.toLowerCase().startsWith(utterance.lang.slice(0, 2)),
-        );
+      let preferredVoice = null;
+      if (isHindi) {
+        preferredVoice =
+          voices.find((voice) => voice.lang?.toLowerCase().startsWith("hi")) ||
+          voices.find((voice) => voice.name?.toLowerCase().includes("hindi") || voice.name?.includes("हिन्दी")) ||
+          voices.find((voice) => voice.lang?.toLowerCase() === "en-in");
+      } else {
+        preferredVoice =
+          voices.find(
+            (voice) => voice.lang?.toLowerCase() === utterance.lang.toLowerCase(),
+          ) ||
+          voices.find((voice) =>
+            voice.lang?.toLowerCase().startsWith(utterance.lang.slice(0, 2)),
+          );
+      }
       if (preferredVoice) utterance.voice = preferredVoice;
 
       activeUtteranceRef.current = utterance;
@@ -547,10 +597,40 @@ export default function AssistantVoiceMode({
     setMessages(displayMessages);
     messagesRef.current = displayMessages;
     try {
-      const data = await sendAssistantMessageRequest(nextMessages, accessToken, user?.username);
+      const data = await sendAssistantMessageRequest(
+        nextMessages,
+        accessToken,
+        user?.username,
+        { ...screenContext, language },
+      );
       if (!activeRef.current) return;
       const callerName = getUserDisplayName(user);
       const cleanedReply = stripRepetitiveGreeting(data.reply, callerName);
+
+      // Execute structured component action tags returned by Gemini
+      if (Array.isArray(data.actions) && data.actions.length > 0) {
+        for (const action of data.actions) {
+          if (action.type === "navigate") {
+            onNavigateText?.(action.params.target, true);
+          } else if (action.type === "fillForm") {
+            onFillFormFields?.(action.params);
+            window.dispatchEvent(
+              new CustomEvent("fixflow:fill-complaint-form", { detail: action.params }),
+            );
+          } else if (action.type === "filter") {
+            window.dispatchEvent(
+              new CustomEvent("fixflow:set-filters", { detail: action.params }),
+            );
+          } else if (action.type === "clearFilters") {
+            window.dispatchEvent(new CustomEvent("fixflow:clear-filters"));
+          } else if (action.type === "openComplaint") {
+            window.dispatchEvent(
+              new CustomEvent("fixflow:open-complaint", { detail: action.params }),
+            );
+          }
+          dispatchAction?.(action);
+        }
+      }
 
       // Fallback: If Gemini interpreted and confirmed navigation
       const fallbackTarget =
@@ -610,7 +690,7 @@ export default function AssistantVoiceMode({
       }
 
       const recognition = new SpeechRecognition();
-      recognition.lang = "en-IN";
+      recognition.lang = language === "hi" ? "hi-IN" : "en-IN";
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
@@ -626,6 +706,17 @@ export default function AssistantVoiceMode({
           if (event.results[index].isFinal) finalText += transcript;
           else interim += transcript;
         }
+
+        // Real-Time Voice Barge-In / Interruption:
+        // When speech is detected while the AI is speaking, immediately interrupt the AI!
+        if (phaseRef.current === "speaking" && (interim.trim() || finalText.trim())) {
+          window.speechSynthesis?.cancel();
+          window.clearTimeout(replyTimerRef.current);
+          activeUtteranceRef.current = null;
+          setCurrentSpokenLine("");
+          updatePhase("listening");
+        }
+
         setPartialText(interim.trim());
         if (finalText.trim()) {
           updatePhase("thinking");
@@ -760,12 +851,22 @@ export default function AssistantVoiceMode({
       <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end gap-2.5 pointer-events-auto">
         {/* Live speech feedback pill */}
         {(partialText || (phase === "speaking" && (currentSpokenLine || reply))) && (
-          <div className="max-w-xs animate-in fade-in slide-in-from-bottom-2 duration-200 rounded-2xl border border-line/80 bg-white/95 px-4 py-2.5 text-xs text-ink shadow-xl backdrop-blur-md">
-            <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand">
-              <span
-                className={`size-1.5 rounded-full ${phase === "speaking" ? "bg-brand animate-ping" : "bg-emerald-500 animate-pulse"}`}
-              />
-              {phase === "speaking" ? "FixFlow Assistant" : "Listening…"}
+          <div
+            onClick={phase === "speaking" ? interruptSpeaking : undefined}
+            className={`max-w-xs animate-in fade-in slide-in-from-bottom-2 duration-200 rounded-2xl border border-line/80 bg-white/95 px-4 py-2.5 text-xs text-ink shadow-xl backdrop-blur-md ${phase === "speaking" ? "cursor-pointer hover:bg-stone-50" : ""}`}
+          >
+            <div className="mb-1 flex items-center justify-between gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className={`size-1.5 rounded-full ${phase === "speaking" ? "bg-brand animate-ping" : "bg-emerald-500 animate-pulse"}`}
+                />
+                {phase === "speaking" ? "FixFlow Assistant" : "Listening…"}
+              </span>
+              {phase === "speaking" && (
+                <span className="text-[9px] lowercase text-stone-500 font-normal underline">
+                  tap to interrupt
+                </span>
+              )}
             </div>
             <p className="font-semibold leading-relaxed">
               {phase === "speaking" ? (currentSpokenLine || reply) : partialText}
@@ -823,31 +924,57 @@ export default function AssistantVoiceMode({
   // Full Voice Dialog View
   return (
     <div className="assistant-voice-scroll flex min-h-0 flex-1 flex-col overflow-y-auto bg-white px-5 py-5 sm:px-8">
-      {/* Top action bar: Minimize to Orb, Mute */}
-      <div className="flex items-center justify-between pb-2">
-        <button
-          type="button"
-          onClick={() => setOrbActive(true)}
-          title="Minimize to continuous floating orb"
-          className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-muted transition hover:border-brand/30 hover:text-brand"
-        >
-          <Minimize2 size={13} />
-          <span>Minimize to Orb</span>
-        </button>
-
-        {phase !== "ready" && (
+      {/* Top action bar: Minimize to Orb, Language Toggle, Mute, Interruption */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => {
-              setMuted((current) => !current);
-              window.speechSynthesis?.cancel();
-            }}
-            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-muted transition hover:border-brand/30 hover:text-brand"
+            onClick={() => setOrbActive(true)}
+            title="Minimize to continuous floating orb"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-muted transition hover:border-brand/30 hover:text-brand cursor-pointer"
           >
-            <Volume2 size={13} />
-            <span>{muted ? "Unmute" : "Mute"}</span>
+            <Minimize2 size={13} />
+            <span>Minimize to Orb</span>
           </button>
-        )}
+
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            title="Switch between English and Hindi voice copilot"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-ink transition hover:border-brand/40 hover:text-brand cursor-pointer"
+          >
+            <Languages size={13} className="text-brand" />
+            <span>{language === "hi" ? "हिन्दी (Hindi)" : "English"}</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {phase === "speaking" && (
+            <button
+              type="button"
+              onClick={interruptSpeaking}
+              title="Click or speak to interrupt assistant immediately"
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100 cursor-pointer animate-pulse"
+            >
+              <Pause size={12} className="text-emerald-700" />
+              <span>Interrupt</span>
+            </button>
+          )}
+
+          {phase !== "ready" && (
+            <button
+              type="button"
+              onClick={() => {
+                setMuted((current) => !current);
+                window.speechSynthesis?.cancel();
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-muted transition hover:border-brand/30 hover:text-brand cursor-pointer"
+            >
+              <Volume2 size={13} />
+              <span>{muted ? "Unmute" : "Mute"}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col items-center text-center">

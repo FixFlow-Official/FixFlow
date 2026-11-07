@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/useAuth.js";
 import { sendAssistantMessageRequest } from "../../services/api.js";
+import { useAssistantContext } from "../../context/assistantContext.jsx";
 import AssistantVoiceMode from "./AssistantVoiceMode.jsx";
 import {
   findNavigationTarget,
@@ -78,6 +79,7 @@ export default function DashboardAssistant({
   onFillFormFields,
 }) {
   const { user, accessToken } = useAuth();
+  const { screenContext, dispatchAction } = useAssistantContext();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState([]);
@@ -253,9 +255,40 @@ export default function DashboardAssistant({
     try {
       const history = withUserMessage.slice(-8);
       if (history[0]?.role === "assistant") history.shift();
-      const data = await sendAssistantMessageRequest(history, accessToken, user?.username);
+      const data = await sendAssistantMessageRequest(
+        history,
+        accessToken,
+        user?.username,
+        screenContext,
+      );
       const callerName = getUserDisplayName(user);
       const cleanedReply = stripRepetitiveGreeting(data.reply, callerName);
+
+      // Execute structured component action tags returned by Gemini
+      if (Array.isArray(data.actions) && data.actions.length > 0) {
+        for (const action of data.actions) {
+          if (action.type === "navigate") {
+            onNavigate?.(action.params.target);
+          } else if (action.type === "fillForm") {
+            onFillFormFields?.(action.params);
+            window.dispatchEvent(
+              new CustomEvent("fixflow:fill-complaint-form", { detail: action.params }),
+            );
+          } else if (action.type === "filter") {
+            window.dispatchEvent(
+              new CustomEvent("fixflow:set-filters", { detail: action.params }),
+            );
+          } else if (action.type === "clearFilters") {
+            window.dispatchEvent(new CustomEvent("fixflow:clear-filters"));
+          } else if (action.type === "openComplaint") {
+            window.dispatchEvent(
+              new CustomEvent("fixflow:open-complaint", { detail: action.params }),
+            );
+          }
+          dispatchAction?.(action);
+        }
+      }
+
       const fallbackTarget =
         extractNavigationFromReply(cleanedReply, navItems) ||
         findNavigationTarget(cleanedReply, navItems);

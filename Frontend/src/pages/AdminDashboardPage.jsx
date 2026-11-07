@@ -19,6 +19,7 @@ import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
 import ComplaintPagination from "../components/complaints/ComplaintPagination.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { useAssistantContext } from "../context/assistantContext.jsx";
 import {
   ASSIGNED_PAGE_SIZE,
   assignedFilters,
@@ -79,6 +80,45 @@ export default function AdminDashboardPage() {
   const [reassignStaffList, setReassignStaffList] = useState([]);
   const [loadingReassignStaff, setLoadingReassignStaff] = useState(false);
   const [reassigning, setReassigning] = useState(false);
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: `admin-${activeSection}-${activeQueue}`,
+      activeFilters: { queue: activeQueue, filter: assignedFilter, search: assignedSearch },
+      selectedComplaint: selectedAssignedComplaint ? { id: selectedAssignedComplaint._id } : null,
+      availableActions: ["filter", "navigate", "openComplaint", "clearFilters"],
+    });
+  }, [activeSection, activeQueue, assignedFilter, assignedSearch, selectedAssignedComplaint, setScreenContext]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { status, search, queue } = e.detail || {};
+      if (queue === "unassigned" || queue === "assigned") setActiveQueue(queue);
+      if (status) setAssignedFilter(status);
+      if (search !== undefined) setAssignedSearch(search);
+    }
+
+    function handleClearFilters() {
+      setAssignedSearch("");
+      setAssignedFilter("all");
+    }
+
+    function handleOpenComplaint(e) {
+      const { id } = e.detail || {};
+      if (id) setSelectedAssignedComplaintId(id);
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+    };
+  }, []);
 
   const selectedAssignedComplaint = assignedComplaints.find(
     (complaint) => complaint._id === selectedAssignedComplaintId,

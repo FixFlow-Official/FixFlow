@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout.jsx";
 import ProtectedRoute from "./components/auth/ProtectedRoute.jsx";
 import { AuthProvider } from "./context/AuthProvider.jsx";
+import { AssistantProvider } from "./context/assistantContext.jsx";
 import PublicOnlyRoute from "./components/auth/PublicOnlyRoute.jsx";
 import ErrorBoundary from "./components/common/ErrorBoundary.jsx";
 
@@ -20,9 +21,10 @@ const ComplaintDetailsPage = lazy(() => import("./pages/ComplaintDetailsPage.jsx
 export default function App() {
   return (
     <AuthProvider>
-      <ErrorBoundary>
-        <Suspense fallback={<div className="grid min-h-[40vh] place-items-center text-sm text-muted"><span className="inline-flex items-center gap-2"><LoaderCircle size={18} className="animate-spin text-brand" />Loading…</span></div>}>
-        <Routes>
+      <AssistantProvider>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="grid min-h-[40vh] place-items-center text-sm text-muted"><span className="inline-flex items-center gap-2"><LoaderCircle size={18} className="animate-spin text-brand" />Loading…</span></div>}>
+          <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route
@@ -106,6 +108,7 @@ export default function App() {
       </Routes>
       </Suspense>
       </ErrorBoundary>
+      </AssistantProvider>
     </AuthProvider>
   );
 }

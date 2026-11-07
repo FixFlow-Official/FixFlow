@@ -9,6 +9,9 @@ import {
   upvoteComplaintRequest,
   loginRequest,
   getCurrentUserRequest,
+  sendAssistantMessageRequest,
+  diagnoseComplaintImageRequest,
+  formatStaffVoiceNoteRequest,
 } from "../src/services/api.js";
 
 function jsonResponse(payload, status = 200, headers = {}) {
@@ -258,5 +261,73 @@ test("getCurrentUserRequest returns profile or handles network failure", async (
     getCurrentUserRequest(),
     /Could not reach FixFlow\. Check that the backend is running\./,
   );
+});
+
+test("sendAssistantMessageRequest includes appContext and passes structured chat payload", async (t) => {
+  let captured;
+  mockFetch(t, async (url, options) => {
+    captured = { url, options, body: JSON.parse(options.body) };
+    return jsonResponse({
+      reply: "Filtered electrical complaints for you.",
+      actions: [{ type: "filter", params: { category: "Electrical" } }],
+    });
+  });
+
+  const res = await sendAssistantMessageRequest(
+    [{ role: "user", text: "Show electrical complaints" }],
+    "token-abc",
+    "Aarav",
+    { currentSection: "student-complaints", activeFilters: { category: "all" } },
+  );
+
+  assert.equal(res.reply, "Filtered electrical complaints for you.");
+  assert.equal(res.actions[0].type, "filter");
+  assert.equal(captured.body.userName, "Aarav");
+  assert.equal(captured.body.appContext.currentSection, "student-complaints");
+});
+
+test("diagnoseComplaintImageRequest posts image to /api/assistant/diagnose-image", async (t) => {
+  let capturedUrl;
+  let capturedMethod;
+  mockFetch(t, async (url, options) => {
+    capturedUrl = url;
+    capturedMethod = options.method;
+    return jsonResponse({
+      diagnosis: {
+        title: "Burnt Wall Socket",
+        category: "Electrical",
+        severity: "High",
+        description: "Wall outlet is charred.",
+      },
+    });
+  });
+
+  const fakeFile = new Blob(["image data"], { type: "image/jpeg" });
+  fakeFile.name = "broken_socket.jpg";
+
+  const res = await diagnoseComplaintImageRequest(fakeFile, "token-xyz");
+  assert.equal(res.diagnosis.title, "Burnt Wall Socket");
+  assert.equal(res.diagnosis.severity, "High");
+  assert.equal(capturedUrl, "/api/assistant/diagnose-image");
+  assert.equal(capturedMethod, "POST");
+});
+
+test("formatStaffVoiceNoteRequest formats spoken technician notes", async (t) => {
+  let capturedBody;
+  mockFetch(t, async (url, options) => {
+    capturedBody = JSON.parse(options.body);
+    return jsonResponse({
+      formattedNote: "Replaced main valve. Water pressure tested and normal.",
+    });
+  });
+
+  const res = await formatStaffVoiceNoteRequest(
+    { utterance: "valve change kar diya paani check kiya", status: "In_Progress", complaintTitle: "Water leak" },
+    "staff-token",
+  );
+
+  assert.equal(res.formattedNote, "Replaced main valve. Water pressure tested and normal.");
+  assert.equal(capturedBody.utterance, "valve change kar diya paani check kiya");
+  assert.equal(capturedBody.status, "In_Progress");
 });
 

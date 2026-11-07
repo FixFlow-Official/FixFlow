@@ -2,9 +2,12 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   AssistantServiceError,
+  parseAssistantActions,
   buildSystemInstruction,
   generateAssistantReply,
   generateVoiceComplaintTurn,
+  diagnoseComplaintImage,
+  formatStaffVoiceNote,
 } = require("../src/services/assistant.service");
 const { validateMessages } = require("../src/controllers/assistant.controller");
 
@@ -92,4 +95,109 @@ test("voice complaint turn returns a bounded editable draft and English readback
   assert.equal(result.draft.category, "Electrical");
   assert.match(result.reply, /What room/);
   assert.equal(result.draft.description.length <= 2000, true);
+});
+
+test("parseAssistantActions extracts action tags and cleans text", () => {
+  const text = 'I have filtered the list for you. [[ACTION:filter category="Electrical" status="Assigned"]] [[ACTION:navigate target="complaints"]] Let me know if you need more help.';
+  const { cleanText, actions } = parseAssistantActions(text);
+
+  assert.equal(cleanText, "I have filtered the list for you. Let me know if you need more help.");
+  assert.deepEqual(actions, [
+    { type: "filter", params: { category: "Electrical", status: "Assigned" } },
+    { type: "navigate", params: { target: "complaints" } },
+  ]);
+});
+
+test("diagnoseComplaintImage returns structured diagnosis from Gemini Vision", async () => {
+  const fakeImageBuffer = Buffer.from("fake-image-bytes");
+  let capturedBody;
+
+  const result = await diagnoseComplaintImage({
+    imageBuffer: fakeImageBuffer,
+    mimeType: "image/jpeg",
+    apiKey: "test-secret",
+    model: "gemini-3.5-flash-lite",
+    fetchImpl: async (_url, options) => {
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      title: "Burnt 16A Wall Socket",
+                      category: "Electrical",
+                      severity: "High",
+                      description: "The 16A wall switchboard socket shows severe burn and charring marks. The faceplate is cracked and requires immediate replacement.",
+                      safetyWarning: "Fire and shock hazard. Keep students away.",
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      };
+    },
+  });
+
+  assert.equal(result.title, "Burnt 16A Wall Socket");
+  assert.equal(result.category, "Electrical");
+  assert.equal(result.severity, "High");
+  assert.match(result.description, /socket shows severe burn/);
+  assert.equal(result.safetyWarning, "Fire and shock hazard. Keep students away.");
+  assert.equal(result.source, "gemini");
+
+  // Verify inlineData was sent
+  assert.equal(capturedBody.contents[0].parts[1].inlineData.mimeType, "image/jpeg");
+  assert.equal(capturedBody.contents[0].parts[1].inlineData.data, fakeImageBuffer.toString("base64"));
+});
+
+test("diagnoseComplaintImage falls back gracefully when key is missing or invalid buffer", async () => {
+  const fakeImageBuffer = Buffer.from("fake-image-bytes");
+  const fallbackResult = await diagnoseComplaintImage({
+    imageBuffer: fakeImageBuffer,
+    apiKey: "",
+  });
+  assert.equal(fallbackResult.source, "heuristic");
+  assert.equal(fallbackResult.category, "Other");
+
+  await assert.rejects(
+    diagnoseComplaintImage({ imageBuffer: null }),
+    /An image file is required/,
+  );
+});
+
+test("formatStaffVoiceNote formats informal technician voice input", async () => {
+  const result = await formatStaffVoiceNote({
+    utterance: "Main valve change kar diya hai, water supply testing chal rahi hai",
+    status: "In_Progress",
+    complaintTitle: "Water leak in PG Block washroom",
+    apiKey: "test-secret",
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: "Replaced the main water control valve. Currently testing water supply lines for pressure integrity.",
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    }),
+  });
+
+  assert.equal(
+    result.formattedNote,
+    "Replaced the main water control valve. Currently testing water supply lines for pressure integrity.",
+  );
+  assert.equal(result.source, "gemini");
 });

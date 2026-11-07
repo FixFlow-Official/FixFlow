@@ -3,11 +3,14 @@ const jwt = require("jsonwebtoken");
 const complaintModel = require("../models/complaint.model");
 const {
   AssistantServiceError,
+  parseAssistantActions,
   generateAssistantReply,
   generateComplaintDescriptionDraft,
   generateVoiceComplaintTurn,
   generateStatusNoteDraft,
   generateReportInsights,
+  diagnoseComplaintImage,
+  formatStaffVoiceNote: formatStaffVoiceNoteService,
 } = require("../services/assistant.service");
 const {
   triageComplaint,
@@ -67,19 +70,26 @@ async function chat(req, res, next) {
 
     const userName =
       typeof req.body?.userName === "string" ? req.body.userName.trim() : "";
+    const appContext =
+      req.body?.appContext && typeof req.body.appContext === "object"
+        ? req.body.appContext
+        : null;
 
-    const reply = await generateAssistantReply({
+    const rawReply = await generateAssistantReply({
       apiKey: config.GEMINI_API_KEY,
       model: config.GEMINI_MODEL,
       role,
       userName,
+      appContext,
       messages: req.body.messages.map(({ role: messageRole, text }) => ({
         role: messageRole,
         text: text.trim(),
       })),
     });
 
-    return res.json({ reply });
+    const { cleanText, actions } = parseAssistantActions(rawReply);
+
+    return res.json({ reply: cleanText, rawReply, actions });
   } catch (error) {
     if (error instanceof AssistantServiceError) {
       return res.status(error.status).json({ message: error.message });
@@ -360,6 +370,60 @@ async function reportInsights(req, res, next) {
   }
 }
 
+async function diagnoseImage(req, res, next) {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ message: "Upload an image of the broken equipment to diagnose." });
+    }
+
+    const diagnosis = await diagnoseComplaintImage({
+      imageBuffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      apiKey: config.GEMINI_API_KEY,
+      model: config.GEMINI_MODEL,
+    });
+
+    return res.json({ diagnosis });
+  } catch (error) {
+    if (error instanceof AssistantServiceError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    return next(error);
+  }
+}
+
+async function formatStaffVoiceNote(req, res, next) {
+  try {
+    const role = req.auth?.role;
+    if (role !== "staff" && role !== "admin") {
+      return res.status(403).json({ message: "Only staff and administrators can format staff voice notes." });
+    }
+
+    const utterance = typeof req.body?.utterance === "string" ? req.body.utterance.trim() : "";
+    if (!utterance) {
+      return res.status(400).json({ message: "Send a spoken note to format." });
+    }
+
+    const status = typeof req.body?.status === "string" ? req.body.status.trim() : "In_Progress";
+    const complaintTitle = typeof req.body?.complaintTitle === "string" ? req.body.complaintTitle.trim() : "";
+
+    const result = await formatStaffVoiceNoteService({
+      utterance,
+      status,
+      complaintTitle,
+      apiKey: config.GEMINI_API_KEY,
+      model: config.GEMINI_MODEL,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof AssistantServiceError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    return next(error);
+  }
+}
+
 module.exports = {
   chat,
   draftComplaintDescription,
@@ -367,5 +431,7 @@ module.exports = {
   voiceComplaintTurn,
   draftStatusNote,
   reportInsights,
+  diagnoseImage,
+  formatStaffVoiceNote,
   validateMessages,
 };

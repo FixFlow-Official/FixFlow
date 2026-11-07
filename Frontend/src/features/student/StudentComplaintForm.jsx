@@ -6,6 +6,7 @@ import {
   getSimilarComplaintsRequest,
   suggestComplaintDescriptionRequest,
   upvoteComplaintRequest,
+  diagnoseComplaintImageRequest,
 } from "../../services/api.js";
 
 // Student complaint submission UI with AI duplicate protection and clean submission flow.
@@ -45,6 +46,34 @@ export default function StudentComplaintForm({
   const [upvotingId, setUpvotingId] = useState(null);
   const [upvoteMessage, setUpvoteMessage] = useState("");
   const [clientValidationError, setClientValidationError] = useState("");
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosisInfo, setDiagnosisInfo] = useState(null);
+  const [diagnosisError, setDiagnosisError] = useState("");
+
+  async function handleAiDiagnose() {
+    if (!image) return;
+    setDiagnosing(true);
+    setDiagnosisError("");
+    try {
+      const res = await diagnoseComplaintImageRequest(image, accessToken);
+      if (res.diagnosis) {
+        setDiagnosisInfo(res.diagnosis);
+        if (res.diagnosis.title && (!title || title.length < 5)) {
+          setTitle(res.diagnosis.title);
+        }
+        if (res.diagnosis.category) {
+          setCategory(res.diagnosis.category);
+        }
+        if (res.diagnosis.description && (!description || description.length < 20)) {
+          setDescription(res.diagnosis.description);
+        }
+      }
+    } catch (err) {
+      setDiagnosisError(err.message || "Could not analyze the photo with AI.");
+    } finally {
+      setDiagnosing(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -483,6 +512,63 @@ export default function StudentComplaintForm({
             onChange={handleImageChange}
             className="sr-only"
           />
+
+          {image && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand/20 bg-brand-soft/40 p-3">
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="text-brand shrink-0" />
+                <span className="text-xs font-semibold text-ink">
+                  {diagnosisInfo ? "Photo diagnosed by Gemini Vision" : "Have Gemini Vision diagnose this photo?"}
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={diagnosing}
+                onClick={handleAiDiagnose}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-brand-dark disabled:opacity-50 cursor-pointer"
+              >
+                {diagnosing ? (
+                  <>
+                    <LoaderCircle size={13} className="animate-spin" />
+                    Analyzing photo…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={13} />
+                    {diagnosisInfo ? "Re-diagnose photo" : "✨ AI Diagnose & Auto-fill"}
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {diagnosisError && (
+            <p className="mt-2 text-xs text-rose-600 font-medium">
+              {diagnosisError}
+            </p>
+          )}
+
+          {diagnosisInfo && (
+            <div className="mt-2.5 rounded-xl border border-emerald-300 bg-emerald-50/70 p-3 text-xs text-emerald-950">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 font-bold">
+                <span className="flex items-center gap-1.5 text-emerald-800">
+                  <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                  Gemini Vision: {diagnosisInfo.title}
+                </span>
+                <span className="rounded-md bg-emerald-200/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-900 border border-emerald-300">
+                  {diagnosisInfo.severity} Severity
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-emerald-900/90">
+                Category set to <strong>{diagnosisInfo.category}</strong>. You can adjust details before submitting.
+              </p>
+              {diagnosisInfo.safetyWarning && (
+                <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-amber-900 font-semibold text-xs">
+                  ⚠️ Safety Hazard: {diagnosisInfo.safetyWarning}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Duplicate Issue Alert — Only shown after clicking submit if a duplicate was detected */}

@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { ImagePlus, LoaderCircle, Sparkles } from "lucide-react";
-import { suggestStatusNoteRequest } from "../../services/api.js";
+import { useState, useRef } from "react";
+import { ImagePlus, LoaderCircle, Mic, MicOff, Sparkles, Wand2 } from "lucide-react";
+import { suggestStatusNoteRequest, formatStaffVoiceNoteRequest } from "../../services/api.js";
 import { validateImageFile } from "../../utils/fileValidation.js";
 
 // Status controls for one active staff complaint. The dashboard owns request state and saving.
@@ -26,7 +26,91 @@ export default function StaffComplaintStatusForm({
   const [suggestionError, setSuggestionError] = useState("");
   const [suggesting, setSuggesting] = useState(false);
   const [fileValidationError, setFileValidationError] = useState("");
+  const [listening, setListening] = useState(false);
+  const [polishing, setPolishing] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const recognitionRef = useRef(null);
+
   if (isResolved) return null;
+
+  function toggleVoiceNote() {
+    const SpeechRecognition = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SpeechRecognition) {
+      setVoiceError("Voice dictation is not supported by this browser.");
+      return;
+    }
+
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognitionRef.current = recognition;
+
+      recognition.onstart = () => {
+        setListening(true);
+        setVoiceError("");
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map((res) => res[0].transcript)
+          .join("");
+        if (transcript) {
+          setNotes((current) => ({
+            ...current,
+            [complaintId]: transcript,
+          }));
+        }
+      };
+
+      recognition.onerror = (event) => {
+        if (event.error !== "no-speech") {
+          setVoiceError(`Voice input error: ${event.error}`);
+        }
+        setListening(false);
+      };
+
+      recognition.onend = () => {
+        setListening(false);
+      };
+
+      recognition.start();
+    } catch {
+      setVoiceError("Could not start microphone.");
+      setListening(false);
+    }
+  }
+
+  async function polishVoiceNote() {
+    const currentNote = notes[complaintId] ?? "";
+    if (!currentNote.trim()) return;
+
+    setPolishing(true);
+    setVoiceError("");
+    try {
+      const res = await formatStaffVoiceNoteRequest(
+        { utterance: currentNote, status: selectedStatus, complaintTitle },
+        accessToken,
+      );
+      if (res.formattedNote) {
+        setNotes((current) => ({
+          ...current,
+          [complaintId]: res.formattedNote,
+        }));
+      }
+    } catch (err) {
+      setVoiceError(err.message || "Could not polish note with AI.");
+    } finally {
+      setPolishing(false);
+    }
+  }
 
   async function suggestNote() {
     setSuggesting(true);
@@ -71,16 +155,58 @@ export default function StaffComplaintStatusForm({
                             ))}
                           </select>
 
-                          <div className="mt-4 flex items-center justify-between gap-2">
-                          <label htmlFor={`note-${complaintId}`} className="block text-sm font-semibold">
-                            {selectedStatus === "Resolved"
-                              ? "Resolution note (required)"
-                              : selectedStatus === "On_Hold"
-                                ? "Note (required)"
-                                : "Note (optional)"}
-                          </label>
-                          <button type="button" onClick={suggestNote} disabled={suggesting} className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-brand/20 bg-brand-soft/60 px-2.5 text-[11px] font-bold text-brand-dark hover:bg-brand-soft disabled:opacity-60">{suggesting ? <LoaderCircle size={13} className="animate-spin" /> : <Sparkles size={13} />}{suggesting ? "Drafting…" : "Draft note"}</button>
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                            <label htmlFor={`note-${complaintId}`} className="block text-sm font-semibold">
+                              {selectedStatus === "Resolved"
+                                ? "Resolution note (required)"
+                                : selectedStatus === "On_Hold"
+                                  ? "Note (required)"
+                                  : "Note (optional)"}
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={toggleVoiceNote}
+                                title={listening ? "Stop recording" : "Dictate status note by voice"}
+                                className={`inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-bold transition cursor-pointer ${
+                                  listening
+                                    ? "border-rose-400 bg-rose-100 text-rose-700 animate-pulse"
+                                    : "border-slate-200 bg-white text-slate-700 hover:bg-stone-100"
+                                }`}
+                              >
+                                {listening ? <MicOff size={13} className="text-rose-600" /> : <Mic size={13} className="text-brand" />}
+                                {listening ? "Listening…" : "Voice Note"}
+                              </button>
+
+                              {notes[complaintId]?.trim() && (
+                                <button
+                                  type="button"
+                                  onClick={polishVoiceNote}
+                                  disabled={polishing}
+                                  title="Format informal or spoken note into professional status update"
+                                  className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-brand/20 bg-brand-soft/60 px-2 text-[11px] font-bold text-brand-dark hover:bg-brand-soft disabled:opacity-60 cursor-pointer"
+                                >
+                                  {polishing ? <LoaderCircle size={13} className="animate-spin" /> : <Wand2 size={13} />}
+                                  {polishing ? "Polishing…" : "Polish with AI"}
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={suggestNote}
+                                disabled={suggesting}
+                                className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-brand/20 bg-brand-soft/60 px-2.5 text-[11px] font-bold text-brand-dark hover:bg-brand-soft disabled:opacity-60 cursor-pointer"
+                              >
+                                {suggesting ? <LoaderCircle size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                                {suggesting ? "Drafting…" : "Draft note"}
+                              </button>
+                            </div>
                           </div>
+                          {voiceError && (
+                            <p className="mt-1 text-xs text-rose-600 font-medium">
+                              {voiceError}
+                            </p>
+                          )}
 
                           <textarea
                             id={`note-${complaintId}`}

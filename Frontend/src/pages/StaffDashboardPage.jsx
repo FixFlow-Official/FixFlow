@@ -15,6 +15,7 @@ import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
 import ComplaintPagination from "../components/complaints/ComplaintPagination.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { useAssistantContext } from "../context/assistantContext.jsx";
 import {
   getStaffAssignedComplaintsRequest,
   updateComplaintStatusRequest,
@@ -80,6 +81,45 @@ export default function StaffDashboardPage() {
   const [successMessage, setSuccessMessage] = useState({});
   const [savingId, setSavingId] = useState("");
   const latestRequestId = useRef(0);
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: `staff-${activeSection}-${complaintView}`,
+      activeFilters: { view: complaintView, status: complaintFilter, search: complaintSearch },
+      selectedComplaint: expandedComplaintId ? { id: expandedComplaintId } : null,
+      availableActions: ["filter", "navigate", "openComplaint", "clearFilters"],
+    });
+  }, [activeSection, complaintView, complaintFilter, complaintSearch, expandedComplaintId, setScreenContext]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { status, search, view } = e.detail || {};
+      if (view === "current" || view === "resolved") setComplaintView(view);
+      if (status) setComplaintFilter(status);
+      if (search !== undefined) setComplaintSearch(search);
+    }
+
+    function handleClearFilters() {
+      setComplaintSearch("");
+      setComplaintFilter("all");
+    }
+
+    function handleOpenComplaint(e) {
+      const { id } = e.detail || {};
+      if (id) setExpandedComplaintId(id);
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+    };
+  }, []);
 
   const loadComplaints = useCallback(async () => {
     const requestId = ++latestRequestId.current;

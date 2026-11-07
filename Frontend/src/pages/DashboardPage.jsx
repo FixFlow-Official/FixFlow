@@ -16,6 +16,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/useAuth.js";
+import { useAssistantContext } from "../context/assistantContext.jsx";
 import { downloadComplaintPdf } from "../utils/complaintPdf.js";
 import { validateImageFile } from "../utils/fileValidation.js";
 import {
@@ -60,6 +61,64 @@ export default function DashboardPage() {
   const [floor, setFloor] = useState("Ground Floor");
   const [room, setRoom] = useState("");
   const [image, setImage] = useState(null);
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: `student-${activeSection}-${page}`,
+      activeFilters: { page, complaintFilter, complaintSearch },
+      selectedComplaint: selectedComplaint ? { id: selectedComplaint._id, title: selectedComplaint.title } : null,
+      availableActions: ["filter", "navigate", "fillForm", "openComplaint", "clearFilters"],
+    });
+  }, [activeSection, page, complaintFilter, complaintSearch, selectedComplaint, setScreenContext]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { status, search, view } = e.detail || {};
+      if (view === "create" || view === "mine") setPage(view);
+      if (status) setComplaintFilter(status);
+      if (search !== undefined) setComplaintSearch(search);
+    }
+
+    function handleClearFilters() {
+      setComplaintSearch("");
+      setComplaintFilter("current");
+    }
+
+    function handleOpenComplaint(e) {
+      const { id } = e.detail || {};
+      if (id) {
+        const found = complaints.find((c) => c._id === id);
+        if (found) {
+          setSelectedComplaint(found);
+          setPage("mine");
+        }
+      }
+    }
+
+    function handleFillForm(e) {
+      const fields = e.detail || {};
+      if (fields.title) setTitle(fields.title);
+      if (fields.category) setCategory(fields.category);
+      if (fields.building) setBuilding(fields.building);
+      if (fields.floor) setFloor(fields.floor);
+      if (fields.room) setRoom(fields.room);
+      if (fields.description) setDescription(fields.description);
+      setPage("create");
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+    window.addEventListener("fixflow:fill-complaint-form", handleFillForm);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+      window.removeEventListener("fixflow:fill-complaint-form", handleFillForm);
+    };
+  }, [complaints]);
 
   // Debounce text search so each keystroke does not trigger a database query.
   useEffect(() => {

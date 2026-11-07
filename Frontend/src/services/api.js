@@ -67,13 +67,39 @@ export async function getCurrentUserRequest() {
   return data;
 }
 
-export async function sendAssistantMessageRequest(messages, accessToken, userName) {
+export async function sendAssistantMessageRequest(messages, accessToken, userName, appContext = null) {
   return complaintRequest(
     "/api/assistant/chat",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, userName }),
+      body: JSON.stringify({ messages, userName, appContext }),
+    },
+    accessToken,
+  );
+}
+
+export async function diagnoseComplaintImageRequest(imageFile, accessToken) {
+  const formData = new FormData();
+  formData.append("image", imageFile);
+
+  return complaintRequest(
+    "/api/assistant/diagnose-image",
+    {
+      method: "POST",
+      body: formData,
+    },
+    accessToken,
+  );
+}
+
+export async function formatStaffVoiceNoteRequest({ utterance, status, complaintTitle }, accessToken) {
+  return complaintRequest(
+    "/api/assistant/format-staff-voice-note",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ utterance, status, complaintTitle }),
     },
     accessToken,
   );

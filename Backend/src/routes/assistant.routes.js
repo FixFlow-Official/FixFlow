@@ -1,6 +1,7 @@
 const express = require("express");
 const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const { verifyAccessToken } = require("../middlewares/auth.middleware");
+const { uploadSingleImage } = require("../middlewares/multer.middleware");
 const MongoRateLimitStore = require("../middlewares/mongoRateLimitStore");
 const assistantController = require("../controllers/assistant.controller");
 
@@ -25,5 +26,7 @@ router.post("/complaint-triage", verifyAccessToken, assistantLimiter, assistantC
 router.post("/voice-complaint-turn", verifyAccessToken, assistantLimiter, assistantController.voiceComplaintTurn);
 router.post("/status-note", verifyAccessToken, assistantLimiter, assistantController.draftStatusNote);
 router.post("/report-insights", verifyAccessToken, assistantLimiter, assistantController.reportInsights);
+router.post("/diagnose-image", verifyAccessToken, uploadSingleImage("image"), assistantLimiter, assistantController.diagnoseImage);
+router.post("/format-staff-voice-note", verifyAccessToken, assistantLimiter, assistantController.formatStaffVoiceNote);
 
 module.exports = router;
