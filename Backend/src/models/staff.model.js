@@ -40,6 +40,11 @@ const staffSchema = new mongoose.Schema({
     enum: ["student", "staff", "admin"],
     required: [true, "Role is required"],
   },
+  phoneNumber: {
+    type: String,
+    trim: true,
+    default: null,
+  },
 });
 
 staffSchema.index({ username: 1, _id: 1 });

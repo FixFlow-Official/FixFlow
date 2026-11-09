@@ -1,10 +1,12 @@
 import { lazy, Suspense } from "react";
 import { LoaderCircle } from "lucide-react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout.jsx";
 import ProtectedRoute from "./components/auth/ProtectedRoute.jsx";
 import { AuthProvider } from "./context/AuthProvider.jsx";
+import { AssistantProvider } from "./context/assistantContext.jsx";
 import PublicOnlyRoute from "./components/auth/PublicOnlyRoute.jsx";
+import ErrorBoundary from "./components/common/ErrorBoundary.jsx";
 
 // Load each page only when its route is visited, keeping the initial app chunk small.
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
@@ -16,13 +18,23 @@ const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage.jsx"));
 const ComplaintDetailsPage = lazy(() => import("./pages/ComplaintDetailsPage.jsx"));
 
 
+function ReportRedirectHandler() {
+  const [searchParams] = useSearchParams();
+  const query = searchParams.toString();
+  const target = `/student/dashboard?action=create${query ? `&${query}` : ""}`;
+  return <Navigate to={target} replace />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <Suspense fallback={<div className="grid min-h-[40vh] place-items-center text-sm text-muted"><span className="inline-flex items-center gap-2"><LoaderCircle size={18} className="animate-spin text-brand" />Loading…</span></div>}>
-      <Routes>
+      <AssistantProvider>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="grid min-h-[40vh] place-items-center text-sm text-muted"><span className="inline-flex items-center gap-2"><LoaderCircle size={18} className="animate-spin text-brand" />Loading…</span></div>}>
+          <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/report" element={<ReportRedirectHandler />} />
           <Route
             path="/login"
             element={
@@ -103,6 +115,8 @@ export default function App() {
         </Route>
       </Routes>
       </Suspense>
+      </ErrorBoundary>
+      </AssistantProvider>
     </AuthProvider>
   );
 }

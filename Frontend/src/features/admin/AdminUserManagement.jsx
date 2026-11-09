@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -11,6 +11,7 @@ import {
   addUserToDirectoryByAdminRequest,
   deleteUserByAdminRequest,
 } from "../../services/api.js";
+import { useAssistantContext } from "../../context/assistantContext.jsx";
 
 const emptyCreateForm = {
   id: "",
@@ -29,6 +30,68 @@ export default function AdminUserManagement({ accessToken }) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: "admin-users",
+      pageTitle: "Directory & Campus User Access Management",
+      activeFilters: { action: activeAction, userType },
+      formState: {
+        activeAction,
+        userType,
+        ...(activeAction === "create" ? createForm : { campusId }),
+      },
+      interactiveElements: [
+        "actionTabs: create (Add User), delete (Remove User)",
+        "userTypeRadio: student, staff",
+        "createFormInputs: id, name, email, course",
+        "deleteInput: campusId",
+        "submitButton",
+      ],
+      availableActions: ["switchTab", "fillForm", "clearFilters", "navigate"],
+    });
+  }, [activeAction, userType, createForm, campusId, setScreenContext]);
+
+  useEffect(() => {
+    function handleSwitchTab(e) {
+      const { tab, action, userType: typeParam, role } = e.detail || {};
+      const targetAction = action || (tab === "create" || tab === "delete" ? tab : null);
+      if (targetAction === "create" || targetAction === "delete") setActiveAction(targetAction);
+      const targetType = typeParam || role || (tab === "student" || tab === "staff" ? tab : null);
+      if (targetType === "student" || targetType === "staff") setUserType(targetType);
+    }
+
+    function handleFillForm(e) {
+      const fields = e.detail || {};
+      setCreateForm((current) => ({
+        ...current,
+        ...(fields.id !== undefined ? { id: fields.id } : {}),
+        ...(fields.name !== undefined ? { name: fields.name } : {}),
+        ...(fields.email !== undefined ? { email: fields.email } : {}),
+        ...(fields.course !== undefined ? { course: fields.course } : {}),
+      }));
+      if (fields.role && (fields.role === "student" || fields.role === "staff")) {
+        setUserType(fields.role);
+      }
+      if (fields.campusId) setCampusId(fields.campusId);
+    }
+
+    function handleClearFilters() {
+      setCreateForm(emptyCreateForm);
+      setCampusId("");
+    }
+
+    window.addEventListener("fixflow:switch-tab", handleSwitchTab);
+    window.addEventListener("fixflow:fill-complaint-form", handleFillForm);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+
+    return () => {
+      window.removeEventListener("fixflow:switch-tab", handleSwitchTab);
+      window.removeEventListener("fixflow:fill-complaint-form", handleFillForm);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+    };
+  }, []);
 
   function clearFeedback() {
     setError("");

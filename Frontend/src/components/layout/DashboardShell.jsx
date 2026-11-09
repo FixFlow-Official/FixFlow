@@ -67,6 +67,7 @@ export default function DashboardShell({
   assistantNavItems = [],
   onAssistantNavigate,
   onVoiceComplaintSubmit,
+  onFillFormFields,
   children,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -93,6 +94,14 @@ export default function DashboardShell({
     onSectionChange?.(item.id);
     setMobileMenuOpen(false);
   }
+
+  const allAssistantNavItems = Array.from(
+    new Map(
+      [...navItems, ...assistantNavItems]
+        .filter((item) => item && item.id)
+        .map((item) => [item.id, item])
+    ).values()
+  );
 
   return (
     <div className="flex min-h-[calc(100vh-68px)] w-full bg-canvas">
@@ -157,9 +166,10 @@ export default function DashboardShell({
         {children}
       </main>
       <DashboardAssistant
-        navItems={[...navItems, ...assistantNavItems]}
+        navItems={allAssistantNavItems}
         onNavigate={onAssistantNavigate || handleNavigate}
         onComplaintSubmit={onVoiceComplaintSubmit}
+        onFillFormFields={onFillFormFields}
       />
     </div>
   );

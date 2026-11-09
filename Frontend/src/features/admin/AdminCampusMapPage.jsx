@@ -14,6 +14,7 @@ import {
   MapPin,
   Pencil,
   Plus,
+  QrCode,
   RefreshCw,
   Sparkles,
   Trash2,
@@ -27,6 +28,8 @@ import {
   deleteCampusBlockRequest,
   initKarnalPresetRequest,
 } from "../../services/api.js";
+import { useAssistantContext } from "../../context/assistantContext.jsx";
+import RoomQrModal from "../../components/common/RoomQrModal.jsx";
 
 const CATEGORY_ICONS = {
   Academic: GraduationCap,
@@ -93,6 +96,7 @@ export default function AdminCampusMapPage({ accessToken }) {
   // Centered Inspection Modal State (Card comes in center with blurred background)
   const [inspectingBlock, setInspectingBlock] = useState(null);
   const [selectedFloorName, setSelectedFloorName] = useState("");
+  const [qrModal, setQrModal] = useState(null);
 
   // Editor Modal State
   const [editorOpen, setEditorOpen] = useState(false);
@@ -171,6 +175,108 @@ export default function AdminCampusMapPage({ accessToken }) {
       return matchesCategory && matchesSearch;
     });
   }, [blocks, categoryFilter, searchQuery]);
+
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: "admin-campus-map",
+      pageTitle: "Live Campus GIS Map & Facility Heatmap",
+      activeFilters: { category: categoryFilter, search: searchQuery },
+      selectedBuilding: inspectingBlock
+        ? {
+            name: inspectingBlock.name,
+            code: inspectingBlock.code,
+            category: inspectingBlock.category,
+            floor: selectedFloorName,
+            activeComplaints: inspectingBlock.activeComplaints || 0,
+          }
+        : null,
+      visibleBuildings: (filteredBlocks || []).slice(0, 10).map((b, index) => ({
+        index: index + 1,
+        name: b.name,
+        code: b.code,
+        category: b.category,
+        activeComplaints: b.activeComplaints,
+      })),
+      interactiveElements: [
+        "categoryFilterPills: ALL, Academic, Lab, Administrative, Amenities, Sports",
+        "searchBuildingsInput",
+        "buildingCards: tap to view floor plan and active issues",
+        "inspectionModal: floorSelector, roomList, directComplaintLinks",
+        "addBuildingButton",
+      ],
+      availableActions: [
+        "filter",
+        "clearFilters",
+        "selectBuilding",
+        "selectFloor",
+        "closeModal",
+        "navigate",
+      ],
+    });
+  }, [categoryFilter, searchQuery, inspectingBlock, selectedFloorName, filteredBlocks, setScreenContext]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { category, search } = e.detail || {};
+      if (category) setCategoryFilter(category);
+      if (search !== undefined) setSearchQuery(search);
+    }
+
+    function handleClearFilters() {
+      setCategoryFilter("ALL");
+      setSearchQuery("");
+    }
+
+    function handleSelectBuilding(e) {
+      const { id, name, code, index } = e.detail || {};
+      let found = null;
+      if (index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < filteredBlocks.length) {
+          found = filteredBlocks[idx];
+        }
+      } else if (id || code) {
+        found = blocks.find(
+          (b) => b._id === id || b.code?.toLowerCase() === (id || code)?.toLowerCase(),
+        );
+      } else if (name) {
+        found = blocks.find((b) =>
+          b.name?.toLowerCase().includes(name.toLowerCase()),
+        );
+      }
+      if (found) {
+        setInspectingBlock(found);
+        const floors = found.floorBreakdown || [];
+        setSelectedFloorName(floors[0]?.name || "Ground Floor");
+      }
+    }
+
+    function handleSelectFloor(e) {
+      const { floor } = e.detail || {};
+      if (floor) setSelectedFloorName(floor);
+    }
+
+    function handleCloseModal() {
+      setInspectingBlock(null);
+      setEditorOpen(false);
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:select-building", handleSelectBuilding);
+    window.addEventListener("fixflow:select-floor", handleSelectFloor);
+    window.addEventListener("fixflow:close-modal", handleCloseModal);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:select-building", handleSelectBuilding);
+      window.removeEventListener("fixflow:select-floor", handleSelectFloor);
+      window.removeEventListener("fixflow:close-modal", handleCloseModal);
+    };
+  }, [blocks, filteredBlocks]);
 
   // Open centered inspection card
   function handleOpenInspect(block) {
@@ -728,13 +834,32 @@ export default function AdminCampusMapPage({ accessToken }) {
               {/* Floor Rooms Grid (Full width per room card on mobile) */}
               {currentInspectFloor ? (
                 <div className="space-y-4 pt-1 pb-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
-                      Rooms & Facilities on {currentInspectFloor.name}
-                    </h3>
-                    <span className="text-xs font-semibold text-muted">
-                      {currentInspectFloor.rooms?.length || 0} registered rooms
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
+                        Rooms & Facilities on {currentInspectFloor.name}
+                      </h3>
+                      <span className="text-xs font-semibold text-muted">
+                        {currentInspectFloor.rooms?.length || 0} registered rooms
+                      </span>
+                    </div>
+                    {currentInspectFloor.rooms?.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setQrModal({
+                            buildingName: inspectingBlock.name,
+                            buildingCode: inspectingBlock.code,
+                            floorName: currentInspectFloor.name,
+                            rooms: currentInspectFloor.rooms.map((r) => r.roomNumber),
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-white px-3 py-1.5 text-xs font-bold text-ink shadow-xs transition hover:border-brand/40 hover:bg-canvas active:scale-95"
+                      >
+                        <QrCode size={13} className="text-brand" />
+                        Print Floor Door QRs
+                      </button>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full">
@@ -756,17 +881,36 @@ export default function AdminCampusMapPage({ accessToken }) {
                               {room.roomNumber}
                             </span>
 
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
-                                hasComplaints
-                                  ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              }`}
-                            >
-                              {hasComplaints
-                                ? `${room.complaintsCount} active`
-                                : "✓ All Clear"}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setQrModal({
+                                    buildingName: inspectingBlock.name,
+                                    buildingCode: inspectingBlock.code,
+                                    floorName: currentInspectFloor.name,
+                                    room: room.roomNumber,
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 transition hover:bg-emerald-100"
+                                title="Print Door QR Code"
+                              >
+                                <QrCode size={11} />
+                                Door QR
+                              </button>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
+                                  hasComplaints
+                                    ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                }`}
+                              >
+                                {hasComplaints
+                                  ? `${room.complaintsCount} active`
+                                  : "✓ All Clear"}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Complaints inside this Room */}
@@ -1034,6 +1178,16 @@ export default function AdminCampusMapPage({ accessToken }) {
             </form>
           </div>
         </div>
+      )}
+      {qrModal && (
+        <RoomQrModal
+          buildingName={qrModal.buildingName}
+          buildingCode={qrModal.buildingCode}
+          floorName={qrModal.floorName}
+          room={qrModal.room}
+          rooms={qrModal.rooms || []}
+          onClose={() => setQrModal(null)}
+        />
       )}
     </div>
   );

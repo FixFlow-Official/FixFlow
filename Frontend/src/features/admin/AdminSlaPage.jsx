@@ -6,6 +6,7 @@ import {
   getAdminSlaOverviewRequest,
   updateAdminSlaPoliciesRequest,
 } from "../../services/api.js";
+import { useAssistantContext } from "../../context/assistantContext.jsx";
 
 const policyFields = [
   { key: "responseHours", label: "First response (hours)" },
@@ -51,6 +52,48 @@ export default function AdminSlaPage({ accessToken }) {
       setRefreshing(false);
     }
   }, [accessToken, page, view]);
+
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: "admin-sla",
+      pageTitle: "Campus SLA Tracking & Resolution Target Policies",
+      activeFilters: { view, page },
+      slaMetrics: overview?.metrics || null,
+      interactiveElements: [
+        "slaViewPills: all, critical, response-breach, resolution-breach",
+        "policyInputs: responseHours, resolutionHours, reminderBeforeHours",
+        "savePoliciesButton",
+        "slaHistoryInspectButtons",
+      ],
+      availableActions: ["filter", "clearFilters", "navigate"],
+    });
+  }, [view, page, overview, setScreenContext]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { view: targetView, filter } = e.detail || {};
+      const next = targetView || filter;
+      if (next && ["all", "critical", "response-breach", "resolution-breach"].includes(next)) {
+        setView(next);
+        setPage(1);
+      }
+    }
+
+    function handleClearFilters() {
+      setView("all");
+      setPage(1);
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadOverview(false); }, 0);

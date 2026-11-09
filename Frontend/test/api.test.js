@@ -5,6 +5,16 @@ import {
   addComplaintCommentRequest,
   getComplaintDetailsRequest,
   getComplaintsRequest,
+  getSimilarComplaintsRequest,
+  upvoteComplaintRequest,
+  loginRequest,
+  getCurrentUserRequest,
+  sendAssistantMessageRequest,
+  diagnoseComplaintImageRequest,
+  formatStaffVoiceNoteRequest,
+  verifyComplaintResolutionRequest,
+  reopenComplaintRequest,
+  getTrendingComplaintsRequest,
 } from "../src/services/api.js";
 
 function jsonResponse(payload, status = 200, headers = {}) {
@@ -155,3 +165,245 @@ test("complaint requests report offline connection failures with a readable mess
     /Could not reach FixFlow\. Check that the backend is running\./,
   );
 });
+
+test("getSimilarComplaintsRequest serializes query parameters correctly", async (t) => {
+  let request;
+  mockFetch(t, async (url, options) => {
+    request = { url, options };
+    return jsonResponse({ complaints: [] });
+  });
+
+  const result = await getSimilarComplaintsRequest(
+    {
+      building: "PG Block",
+      floor: "2nd Floor",
+      room: "Room 204",
+      category: "Plumbing",
+    },
+    "token-xyz",
+  );
+
+  assert.deepEqual(result, { complaints: [] });
+  assert.equal(
+    request.url,
+    "/api/student/similar-complaints?building=PG+Block&floor=2nd+Floor&room=Room+204&category=Plumbing",
+  );
+  assert.equal(request.options.method, "GET");
+  assert.equal(request.options.headers.Authorization, "Bearer token-xyz");
+});
+
+test("upvoteComplaintRequest posts to student upvote endpoint", async (t) => {
+  let request;
+  mockFetch(t, async (url, options) => {
+    request = { url, options };
+    return jsonResponse({ message: "Upvoted", upvoted: true, upvoteCount: 5 });
+  });
+
+  const result = await upvoteComplaintRequest("complaint-999", "token-xyz");
+
+  assert.equal(result.upvoted, true);
+  assert.equal(result.upvoteCount, 5);
+  assert.equal(request.url, "/api/student/complaints/complaint-999/upvote");
+  assert.equal(request.options.method, "POST");
+  assert.equal(request.options.headers.Authorization, "Bearer token-xyz");
+});
+
+test("ApiRequestError exposes status, requestId, and duplicate ticket metadata", () => {
+  const err = new ApiRequestError("Duplicate issue found", {
+    status: 409,
+    requestId: "req-12345",
+    errors: ["Matching active ticket exists"],
+    isDuplicate: true,
+    duplicateComplaint: { _id: "comp-dup-1" },
+  });
+
+  assert.equal(err.name, "ApiRequestError");
+  assert.equal(err.message, "Duplicate issue found");
+  assert.equal(err.status, 409);
+  assert.equal(err.requestId, "req-12345");
+  assert.deepEqual(err.errors, ["Matching active ticket exists"]);
+  assert.equal(err.isDuplicate, true);
+  assert.deepEqual(err.duplicateComplaint, { _id: "comp-dup-1" });
+});
+
+test("loginRequest sends credentials and parses response payload", async (t) => {
+  let captured;
+  mockFetch(t, async (url, options) => {
+    captured = { url, options };
+    return jsonResponse({ user: { id: "u1", role: "student" }, accessToken: "tok-1" });
+  });
+
+  const res = await loginRequest({ email: "user@example.com", password: "secretPassword", type: "student" });
+  assert.equal(res.accessToken, "tok-1");
+  assert.equal(captured.url, "/api/auth/login");
+  assert.equal(captured.options.method, "POST");
+  assert.equal(captured.options.credentials, "include");
+});
+
+test("loginRequest rejects with friendly message on server error or network dropout", async (t) => {
+  mockFetch(t, async () => jsonResponse({ message: "Invalid credentials" }, 401));
+  await assert.rejects(
+    loginRequest({ email: "fail@example.com", password: "wrong", type: "student" }),
+    /Invalid credentials/,
+  );
+
+  mockFetch(t, async () => { throw new TypeError("Failed to fetch"); });
+  await assert.rejects(
+    loginRequest({ email: "fail@example.com", password: "wrong", type: "student" }),
+    /Could not reach FixFlow\. Check that the backend is running\./,
+  );
+});
+
+test("getCurrentUserRequest returns profile or handles network failure", async (t) => {
+  mockFetch(t, async () => jsonResponse({ user: { id: "u2", username: "testuser" } }));
+  const res = await getCurrentUserRequest();
+  assert.equal(res.user.username, "testuser");
+
+  mockFetch(t, async () => { throw new TypeError("Failed to fetch"); });
+  await assert.rejects(
+    getCurrentUserRequest(),
+    /Could not reach FixFlow\. Check that the backend is running\./,
+  );
+});
+
+test("sendAssistantMessageRequest includes appContext and passes structured chat payload", async (t) => {
+  let captured;
+  mockFetch(t, async (url, options) => {
+    captured = { url, options, body: JSON.parse(options.body) };
+    return jsonResponse({
+      reply: "Filtered electrical complaints for you.",
+      actions: [{ type: "filter", params: { category: "Electrical" } }],
+    });
+  });
+
+  const res = await sendAssistantMessageRequest(
+    [{ role: "user", text: "Show electrical complaints" }],
+    "token-abc",
+    "Aarav",
+    { currentSection: "student-complaints", activeFilters: { category: "all" } },
+  );
+
+  assert.equal(res.reply, "Filtered electrical complaints for you.");
+  assert.equal(res.actions[0].type, "filter");
+  assert.equal(captured.body.userName, "Aarav");
+  assert.equal(captured.body.appContext.currentSection, "student-complaints");
+});
+
+test("diagnoseComplaintImageRequest posts image to /api/assistant/diagnose-image", async (t) => {
+  let capturedUrl;
+  let capturedMethod;
+  mockFetch(t, async (url, options) => {
+    capturedUrl = url;
+    capturedMethod = options.method;
+    return jsonResponse({
+      diagnosis: {
+        title: "Burnt Wall Socket",
+        category: "Electrical",
+        severity: "High",
+        description: "Wall outlet is charred.",
+      },
+    });
+  });
+
+  const fakeFile = new Blob(["image data"], { type: "image/jpeg" });
+  fakeFile.name = "broken_socket.jpg";
+
+  const res = await diagnoseComplaintImageRequest(fakeFile, "token-xyz");
+  assert.equal(res.diagnosis.title, "Burnt Wall Socket");
+  assert.equal(res.diagnosis.severity, "High");
+  assert.equal(capturedUrl, "/api/assistant/diagnose-image");
+  assert.equal(capturedMethod, "POST");
+});
+
+test("formatStaffVoiceNoteRequest formats spoken technician notes", async (t) => {
+  let capturedBody;
+  mockFetch(t, async (url, options) => {
+    capturedBody = JSON.parse(options.body);
+    return jsonResponse({
+      formattedNote: "Replaced main valve. Water pressure tested and normal.",
+    });
+  });
+
+  const res = await formatStaffVoiceNoteRequest(
+    { utterance: "valve change kar diya paani check kiya", status: "In_Progress", complaintTitle: "Water leak" },
+    "staff-token",
+  );
+
+  assert.equal(res.formattedNote, "Replaced main valve. Water pressure tested and normal.");
+  assert.equal(capturedBody.utterance, "valve change kar diya paani check kiya");
+  assert.equal(capturedBody.status, "In_Progress");
+});
+
+test("verifyComplaintResolutionRequest submits rating and verification feedback", async (t) => {
+  let capturedUrl;
+  let capturedBody;
+  mockFetch(t, async (url, options) => {
+    capturedUrl = url;
+    capturedBody = JSON.parse(options.body);
+    return jsonResponse({
+      message: "Complaint resolution verified successfully.",
+      complaint: { _id: "c123", resolutionVerified: true, csatRating: 5 },
+    });
+  });
+
+  const res = await verifyComplaintResolutionRequest(
+    "c123",
+    { rating: 5, feedback: "Work is done nicely!" },
+    "student-jwt",
+  );
+
+  assert.equal(capturedUrl, "/api/student/complaints/c123/verify-resolution");
+  assert.equal(capturedBody.rating, 5);
+  assert.equal(capturedBody.feedback, "Work is done nicely!");
+  assert.equal(res.complaint.resolutionVerified, true);
+});
+
+test("reopenComplaintRequest submits reopen reason and updates complaint status", async (t) => {
+  let capturedUrl;
+  let capturedMethod;
+  mockFetch(t, async (url, options) => {
+    capturedUrl = url;
+    capturedMethod = options.method;
+    return jsonResponse({
+      message: "Complaint has been reopened for maintenance staff.",
+      complaint: { _id: "c123", status: "In_Progress", reopenedCount: 1 },
+    });
+  });
+
+  const res = await reopenComplaintRequest(
+    "c123",
+    { reason: "Tap is still leaking from the base.", imageFile: null },
+    "student-jwt",
+  );
+
+  assert.equal(capturedUrl, "/api/student/complaints/c123/reopen");
+  assert.equal(capturedMethod, "POST");
+  assert.equal(res.complaint.status, "In_Progress");
+  assert.equal(res.complaint.reopenedCount, 1);
+});
+
+test("getTrendingComplaintsRequest fetches active campus complaints sorted by votes", async (t) => {
+  let capturedUrl;
+  mockFetch(t, async (url) => {
+    capturedUrl = url;
+    return jsonResponse({
+      complaints: [
+        { _id: "c1", complaintTitle: "Wi-Fi down", upvoteCount: 12, hasUpvoted: true },
+      ],
+      total: 1,
+    });
+  });
+
+  const res = await getTrendingComplaintsRequest(
+    { category: "Internet", search: "Wi-Fi" },
+    "student-token",
+  );
+
+  assert.match(capturedUrl, /\/api\/student\/trending-complaints\?category=Internet&search=Wi-Fi/);
+  assert.equal(res.total, 1);
+  assert.equal(res.complaints[0].upvoteCount, 12);
+  assert.equal(res.complaints[0].hasUpvoted, true);
+});
+
+
+

@@ -6,6 +6,7 @@ const bcrypt = require("bcrypt");
 const campusDirectoryModel = require("../models/campusDirectory.model");
 const config = require("../config/config");
 const jwt = require("jsonwebtoken");
+const { REFRESH_ROTATION_GRACE_MS } = require("../services/session.service");
 
 async function registerMiddleware(req, res, next) {
   const { type } = req.body;
@@ -66,17 +67,34 @@ async function verifySessionMiddleware(req, res, next) {
       expiresAt: { $gt: new Date() },
     };
     let matchingSession = null;
+    let isGraceToken = false;
 
     if (decoded.sessionId) {
       matchingSession = await sessionModel.findOne({
         ...activeFilter,
         _id: decoded.sessionId,
       });
-      if (
-        matchingSession &&
-        !(await bcrypt.compare(refreshToken, matchingSession.refreshTokenHash))
-      ) {
-        matchingSession = null;
+      if (matchingSession) {
+        const matchesCurrent = await bcrypt.compare(refreshToken, matchingSession.refreshTokenHash);
+        if (!matchesCurrent) {
+          const now = Date.now();
+          const rotatedAtMs = matchingSession.rotatedAt
+            ? new Date(matchingSession.rotatedAt).getTime()
+            : 0;
+          const isWithinGrace =
+            matchingSession.previousRefreshTokenHash &&
+            rotatedAtMs > 0 &&
+            now - rotatedAtMs <= REFRESH_ROTATION_GRACE_MS;
+
+          if (
+            isWithinGrace &&
+            (await bcrypt.compare(refreshToken, matchingSession.previousRefreshTokenHash))
+          ) {
+            isGraceToken = true;
+          } else {
+            matchingSession = null;
+          }
+        }
       }
     } else {
       // Transitional compatibility for refresh cookies issued before
@@ -97,6 +115,7 @@ async function verifySessionMiddleware(req, res, next) {
     req.session = matchingSession;
     req.refreshToken = refreshToken;
     req.decoded = decoded;
+    req.isGraceToken = isGraceToken;
     return next();
   } catch (error) {
     return next(error);
@@ -116,8 +135,12 @@ async function verifyAccessToken(req, res, next) {
   let decoded;
   try {
     decoded = jwt.verify(accessToken, config.JWT_SECRET);
-  } catch {
-    return res.status(401).json({ message: "Unauthorized" });
+  } catch (error) {
+    const isExpired = error?.name === "TokenExpiredError";
+    return res.status(401).json({
+      message: isExpired ? "Access token has expired." : "Unauthorized",
+      code: isExpired ? "TOKEN_EXPIRED" : "INVALID_TOKEN",
+    });
   }
 
   if (!decoded.id || !decoded.role || !decoded.sessionId) {

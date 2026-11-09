@@ -8,6 +8,7 @@ const adminModel = require("../models/admin.model");
 const sessionModel = require("../models/session.model");
 const campusDirectoryModel = require("../models/campusDirectory.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
+const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
 const {
   escapeRegex,
   getPageMetadata,
@@ -51,8 +52,14 @@ function buildComplaintSearchFilter(search) {
 }
 
 function isTransactionUnsupportedError(error) {
+  if (!error) return false;
+  if (error.code === 20 || error.codeName === "IllegalOperation") return true;
+  const msg = String(error.message || "");
   return (
-    error?.code === 20 && /transaction numbers are only allowed/i.test(error.message || "")
+    /transaction numbers are only allowed/i.test(msg) ||
+    /does not support transactions/i.test(msg) ||
+    /transactions are not supported/i.test(msg) ||
+    /cannot run transaction on standalone/i.test(msg)
   );
 }
 
@@ -518,6 +525,12 @@ async function assignComplaint(req, res) {
       }),
     ]);
 
+    void dispatchTimelineAlerts({
+      complaint,
+      event: "assigned",
+      actorName: staff.username,
+    });
+
     return res.status(200).json({
       message: "Complaint assigned successfully.",
       complaint,
@@ -637,6 +650,12 @@ async function reassignComplaint(req, res) {
           ]
         : []),
     ]);
+
+    void dispatchTimelineAlerts({
+      complaint,
+      event: "assigned",
+      actorName: staff.username,
+    });
 
     return res.status(200).json({
       message: "Complaint reassigned successfully.",

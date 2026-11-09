@@ -3,12 +3,17 @@
  * to existing page-level error banners.
  */
 export class ApiRequestError extends Error {
-  constructor(message, { status = null, requestId = null, errors = [] } = {}) {
+  constructor(
+    message,
+    { status = null, requestId = null, errors = [], isDuplicate = false, duplicateComplaint = null } = {},
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.requestId = requestId;
     this.errors = errors;
+    this.isDuplicate = isDuplicate;
+    this.duplicateComplaint = duplicateComplaint;
   }
 }
 
@@ -62,13 +67,39 @@ export async function getCurrentUserRequest() {
   return data;
 }
 
-export async function sendAssistantMessageRequest(messages, accessToken) {
+export async function sendAssistantMessageRequest(messages, accessToken, userName, appContext = null) {
   return complaintRequest(
     "/api/assistant/chat",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, userName, appContext }),
+    },
+    accessToken,
+  );
+}
+
+export async function diagnoseComplaintImageRequest(imageFile, accessToken) {
+  const formData = new FormData();
+  formData.append("image", imageFile);
+
+  return complaintRequest(
+    "/api/assistant/diagnose-image",
+    {
+      method: "POST",
+      body: formData,
+    },
+    accessToken,
+  );
+}
+
+export async function formatStaffVoiceNoteRequest({ utterance, status, complaintTitle }, accessToken) {
+  return complaintRequest(
+    "/api/assistant/format-staff-voice-note",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ utterance, status, complaintTitle }),
     },
     accessToken,
   );
@@ -127,13 +158,27 @@ export async function getAdminReportInsightsRequest(reportData, accessToken) {
 }
 
 export async function updateMyProfileRequest(
-  { username, profilePicture, removeProfilePicture = false },
+  {
+    username,
+    profilePicture,
+    removeProfilePicture = false,
+    phoneNumber,
+    smsNotificationsEnabled,
+    whatsAppNotificationsEnabled,
+  },
   accessToken,
 ) {
   const formData = new FormData();
   formData.append("username", username);
   if (profilePicture) formData.append("profilePicture", profilePicture);
   if (removeProfilePicture) formData.append("removeProfilePicture", "true");
+  if (phoneNumber !== undefined) formData.append("phoneNumber", phoneNumber || "");
+  if (smsNotificationsEnabled !== undefined) {
+    formData.append("smsNotificationsEnabled", String(smsNotificationsEnabled));
+  }
+  if (whatsAppNotificationsEnabled !== undefined) {
+    formData.append("whatsAppNotificationsEnabled", String(whatsAppNotificationsEnabled));
+  }
   return complaintRequest("/api/auth/profile", { method: "PATCH", body: formData }, accessToken);
 }
 
@@ -477,6 +522,8 @@ async function complaintRequest(url, options, accessToken) {
       status: response.status,
       requestId,
       errors: validationErrors,
+      isDuplicate: Boolean(data.isDuplicate),
+      duplicateComplaint: data.duplicateComplaint || null,
     });
   }
 
@@ -581,7 +628,18 @@ export async function removePushSubscriptionRequest(endpoint, accessToken) {
 }
 
 export async function createComplaintRequest(
-  { title, description, category, building, floor, room, image, triageToken, confirmedCampusIssue },
+  {
+    title,
+    description,
+    category,
+    building,
+    floor,
+    room,
+    image,
+    triageToken,
+    confirmedCampusIssue,
+    confirmDistinctIssue,
+  },
   accessToken,
 ) {
   const formData = new FormData();
@@ -594,6 +652,7 @@ export async function createComplaintRequest(
   formData.append("complaintImage", image);
   if (triageToken) formData.append("triageToken", triageToken);
   if (confirmedCampusIssue) formData.append("confirmedCampusIssue", "true");
+  if (confirmDistinctIssue) formData.append("confirmDistinctIssue", "true");
 
   return complaintRequest(
     "/api/student/create-complaint",
@@ -843,4 +902,78 @@ export async function deleteCampusBlockRequest(id, accessToken) {
 export async function initKarnalPresetRequest(accessToken) {
   return complaintRequest("/api/campus/preset-karnal", { method: "POST" }, accessToken);
 }
+
+// Student Duplicate Detection & "Me Too" Upvoting API
+export async function getSimilarComplaintsRequest(
+  { building, floor, room, category, title, description } = {},
+  accessToken,
+) {
+  const query = new URLSearchParams();
+  if (building) query.set("building", building);
+  if (floor) query.set("floor", floor);
+  if (room) query.set("room", room);
+  if (category) query.set("category", category);
+  if (title) query.set("title", title);
+  if (description) query.set("description", description);
+
+  return complaintRequest(
+    `/api/student/similar-complaints?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function upvoteComplaintRequest(complaintId, accessToken) {
+  return complaintRequest(
+    `/api/student/complaints/${encodeURIComponent(complaintId)}/upvote`,
+    { method: "POST" },
+    accessToken,
+  );
+}
+
+export async function getTrendingComplaintsRequest(params = {}, accessToken) {
+  const query = new URLSearchParams();
+  if (params.building) query.set("building", params.building);
+  if (params.category) query.set("category", params.category);
+  if (params.search) query.set("search", params.search);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return complaintRequest(`/api/student/trending-complaints${suffix}`, { method: "GET" }, accessToken);
+}
+
+export async function verifyComplaintResolutionRequest(
+  complaintId,
+  { rating, feedback },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/student/complaints/${encodeURIComponent(complaintId)}/verify-resolution`,
+    {
+      method: "POST",
+      body: JSON.stringify({ rating, feedback }),
+    },
+    accessToken,
+  );
+}
+
+export async function reopenComplaintRequest(
+  complaintId,
+  { reason, imageFile },
+  accessToken,
+) {
+  const formData = new FormData();
+  formData.append("reason", reason);
+  if (imageFile) {
+    formData.append("image", imageFile);
+  }
+
+  return complaintRequest(
+    `/api/student/complaints/${encodeURIComponent(complaintId)}/reopen`,
+    {
+      method: "POST",
+      body: formData,
+    },
+    accessToken,
+  );
+}
+
 

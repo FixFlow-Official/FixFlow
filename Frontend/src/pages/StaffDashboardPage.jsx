@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import StaffComplaintCard from "../features/staff/StaffComplaintCard.jsx";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
+import { ComplaintCardSkeleton } from "../components/common/SkeletonLoader.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import {
   AlertCircle,
@@ -14,6 +15,7 @@ import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
 import ComplaintPagination from "../components/complaints/ComplaintPagination.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { useAssistantContext } from "../context/assistantContext.jsx";
 import {
   getStaffAssignedComplaintsRequest,
   updateComplaintStatusRequest,
@@ -51,6 +53,10 @@ const staffNavItems = [
 const staffAssistantItems = [
   { id: "activeComplaints", label: "Active complaints" },
   { id: "resolvedComplaints", label: "Resolved complaints" },
+  { id: "assignedStatus", label: "Assigned complaints" },
+  { id: "inProgressStatus", label: "In progress complaints" },
+  { id: "underReviewStatus", label: "Under review complaints" },
+  { id: "onHoldStatus", label: "On hold complaints" },
 ];
 
 export default function StaffDashboardPage() {
@@ -75,6 +81,124 @@ export default function StaffDashboardPage() {
   const [successMessage, setSuccessMessage] = useState({});
   const [savingId, setSavingId] = useState("");
   const latestRequestId = useRef(0);
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: `staff-${activeSection}-${complaintView}`,
+      pageTitle: complaintView === "current" ? "Assigned Work Orders" : "Resolved Work Orders",
+      activeFilters: { view: complaintView, status: complaintFilter, search: complaintSearch },
+      selectedComplaint: expandedComplaintId
+        ? {
+            id: expandedComplaintId,
+            status: selectedStatuses[expandedComplaintId] || "Assigned",
+            note: notes[expandedComplaintId] || "",
+          }
+        : null,
+      visibleComplaints: (complaints || []).slice(0, 10).map((c, index) => ({
+        index: index + 1,
+        id: c._id,
+        title: c.title,
+        status: c.status,
+        category: c.category,
+        department: c.department,
+        building: c.building,
+        room: c.room,
+        priority: c.priority,
+      })),
+      interactiveElements: [
+        "viewTabs: current (Assigned), resolved (Resolved)",
+        "statusFilterSelect: all, Assigned, In_Progress, Under_Review, Resolved",
+        "searchComplaintsInput",
+        "complaintCards: expand/collapse to review history and actions",
+        "statusUpdateForm: statusDropdown (In_Progress, Under_Review, Resolved), technicianVoiceNote, proofUpload, saveButton",
+      ],
+      availableActions: [
+        "filter",
+        "clearFilters",
+        "navigate",
+        "openComplaint",
+        "switchTab",
+        "updateStatus",
+      ],
+    });
+  }, [
+    activeSection,
+    complaintView,
+    complaintFilter,
+    complaintSearch,
+    expandedComplaintId,
+    complaints,
+    selectedStatuses,
+    notes,
+    setScreenContext,
+  ]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { status, search, view } = e.detail || {};
+      if (view === "current" || view === "resolved") setComplaintView(view);
+      if (status) setComplaintFilter(status);
+      if (search !== undefined) setComplaintSearch(search);
+    }
+
+    function handleClearFilters() {
+      setComplaintSearch("");
+      setComplaintFilter("all");
+    }
+
+    function handleOpenComplaint(e) {
+      const { id, index, title: targetTitle } = e.detail || {};
+      let targetId = id;
+      if (!targetId && index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < complaints.length) {
+          targetId = complaints[idx]._id;
+        }
+      } else if (!targetId && targetTitle) {
+        const found = complaints.find((c) =>
+          c.title?.toLowerCase().includes(targetTitle.toLowerCase()),
+        );
+        if (found) targetId = found._id;
+      }
+      if (targetId) setExpandedComplaintId(targetId);
+    }
+
+    function handleSwitchTab(e) {
+      const { tab, view } = e.detail || {};
+      const target = tab || view;
+      if (target === "resolved") setComplaintView("resolved");
+      else if (target === "current" || target === "assigned") setComplaintView("current");
+    }
+
+    function handleUpdateStatus(e) {
+      const { id, status, note } = e.detail || {};
+      const targetId = id || expandedComplaintId;
+      if (targetId) {
+        setExpandedComplaintId(targetId);
+        if (status) {
+          setSelectedStatuses((current) => ({ ...current, [targetId]: status }));
+        }
+        if (note !== undefined) {
+          setNotes((current) => ({ ...current, [targetId]: note }));
+        }
+      }
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+    window.addEventListener("fixflow:switch-tab", handleSwitchTab);
+    window.addEventListener("fixflow:update-status", handleUpdateStatus);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+      window.removeEventListener("fixflow:switch-tab", handleSwitchTab);
+      window.removeEventListener("fixflow:update-status", handleUpdateStatus);
+    };
+  }, [complaints, expandedComplaintId]);
 
   const loadComplaints = useCallback(async () => {
     const requestId = ++latestRequestId.current;
@@ -242,12 +366,39 @@ export default function StaffDashboardPage() {
       onSectionChange={setActiveSection}
       assistantNavItems={staffAssistantItems}
       onAssistantNavigate={(item) => {
-        if (item.id === "resolvedComplaints" || item.id === "activeComplaints") {
+        if (item.id === "resolvedComplaints") {
           setActiveSection("complaints");
-          handleViewChange(item.id === "resolvedComplaints" ? "resolved" : "current");
+          handleViewChange("resolved");
+        } else if (item.id === "activeComplaints") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("all");
+          setPage(1);
+        } else if (item.id === "assignedStatus") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("Assigned");
+          setPage(1);
+        } else if (item.id === "inProgressStatus") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("In_Progress");
+          setPage(1);
+        } else if (item.id === "underReviewStatus") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("Under_Review");
+          setPage(1);
+        } else if (item.id === "onHoldStatus") {
+          setActiveSection("complaints");
+          handleViewChange("current");
+          setComplaintFilter("On_Hold");
+          setPage(1);
+        } else if (item.id === "profile") {
+          setActiveSection("profile");
+        } else {
+          setActiveSection("complaints");
         }
-        else if (item.id === "profile") setActiveSection("profile");
-        else setActiveSection("complaints");
       }}
       navItems={staffNavItems}
     >
@@ -400,9 +551,8 @@ export default function StaffDashboardPage() {
 
           {/* Loading, empty, filtered-empty, and complaint list states */}
           {loading ? (
-            <div className="mt-5 flex min-h-48 items-center justify-center gap-3 rounded-2xl border border-line bg-white text-sm text-muted">
-              <LoaderCircle size={20} className="animate-spin text-brand" />
-              Loading complaints…
+            <div className="mt-5">
+              <ComplaintCardSkeleton count={3} />
             </div>
           ) : complaintsForView.length === 0 ? (
             <ComplaintEmptyState

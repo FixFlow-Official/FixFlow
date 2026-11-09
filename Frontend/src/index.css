@@ -136,7 +136,38 @@
   .voice-orb-core,
   .is-listening .voice-orb-ring,
   .is-thinking .voice-orb-ring,
-  .is-speaking .voice-orb-core {
+  .is-speaking .voice-orb-core,
+  .floating-voice-orb,
+  .soundbar-1,
+  .soundbar-2,
+  .soundbar-3,
+  .soundbar-4 {
     animation: none !important;
   }
 }
+
+@keyframes orb-pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.45), 0 0 50px rgba(16, 185, 129, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 38px rgba(16, 185, 129, 0.75), 0 0 70px rgba(16, 185, 129, 0.35);
+    transform: scale(1.04);
+  }
+}
+
+@keyframes soundbar {
+  0%, 100% { height: 6px; }
+  50% { height: 20px; }
+}
+
+.floating-voice-orb {
+  animation: orb-pulse-glow 2.8s ease-in-out infinite;
+}
+
+.soundbar-1 { animation: soundbar 0.9s ease-in-out infinite 0.1s; }
+.soundbar-2 { animation: soundbar 0.7s ease-in-out infinite 0.25s; }
+.soundbar-3 { animation: soundbar 1.1s ease-in-out infinite 0.15s; }
+.soundbar-4 { animation: soundbar 0.8s ease-in-out infinite 0.35s; }
+

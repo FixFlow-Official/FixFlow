@@ -1,6 +1,7 @@
 const sessionModel = require("../models/session.model");
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_ROTATION_GRACE_MS = 30 * 1000; // 30-second grace window for concurrent requests
 const MAX_ACTIVE_SESSIONS = 5;
 
 // Existing sessions predate expiresAt. Derive their expiry from the last
@@ -47,6 +48,7 @@ async function enforceActiveSessionLimit({ user, userRef, keepSessionId }) {
 
 module.exports = {
   REFRESH_TOKEN_TTL_MS,
+  REFRESH_ROTATION_GRACE_MS,
   MAX_ACTIVE_SESSIONS,
   migrateSessionExpirations,
   enforceActiveSessionLimit,

@@ -1,0 +1,24 @@
+# Dependency and runtime artifacts
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# GSD planning, agent metadata, and temporary AI artifacts
+.planning/
+.agents/
+.geminirules
+.gemini/

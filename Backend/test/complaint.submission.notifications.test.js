@@ -31,6 +31,7 @@ test("new complaint submission creates a student confirmation and admin alerts",
   const originals = {
     studentFindById: studentModel.findById,
     adminFind: adminModel.find,
+    complaintFind: complaintModel.find,
     complaintCreate: complaintModel.create,
     complaintCount: complaintModel.countDocuments,
     getSlaPolicy: slaService.getSlaPolicy,
@@ -47,6 +48,10 @@ test("new complaint submission creates a student confirmation and admin alerts",
   adminModel.find = () => ({
     select() { return this; },
     lean: async () => admins,
+  });
+  complaintModel.find = () => ({
+    select() { return this; },
+    lean: async () => [],
   });
   complaintModel.create = async (document) => {
     savedComplaint = document;
@@ -107,6 +112,7 @@ test("new complaint submission creates a student confirmation and admin alerts",
   } finally {
     studentModel.findById = originals.studentFindById;
     adminModel.find = originals.adminFind;
+    complaintModel.find = originals.complaintFind;
     complaintModel.create = originals.complaintCreate;
     complaintModel.countDocuments = originals.complaintCount;
     slaService.getSlaPolicy = originals.getSlaPolicy;

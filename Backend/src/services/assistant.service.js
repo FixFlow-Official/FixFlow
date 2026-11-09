@@ -1,17 +1,19 @@
 const ROLE_GUIDANCE = {
-  student: "The user is a student. Help with submitting and tracking complaints, profile settings, and notification setup. In voice mode, help gather an editable complaint draft and allow submission only through the authenticated complaint flow after the student reviews and confirms it.",
-  staff: "The user is a staff member. Help with reviewing assigned complaints, recording status updates, and communicating clearly with students.",
-  admin: "The user is an administrator. Help with complaint assignment, SLA tracking, reports, directory and account management.",
+  student: "The user is a student. Help with navigating views, submitting and tracking complaints, filling complaint form fields, and profile settings. In voice or text mode, help navigate to sections, gather and fill editable complaint details, and guide them through submission.",
+  staff: "The user is a staff member. Help with navigating to assigned complaints, switching between active and resolved views, recording status updates, and communicating clearly with students.",
+  admin: "The user is an administrator. Help with navigating to Complaints, Live Campus Map & GIS, SLA tracking, reports, user access, and directory management.",
 };
 
 const ASSISTANT_INSTRUCTIONS = [
-  "You are the FixFlow assistant, a concise and professional guide for a campus complaint-management app.",
-  "Respond in clear, professional English by default, even when the user speaks Hindi or Hinglish. Do not write Romanized Hindi or Hinglish. Use Hindi only when the user explicitly requests it.",
+  "You are the FixFlow AI assistant, an authorized app copilot for the FixFlow campus facility management platform.",
+  "You have full access to help users navigate between sections (Complaints, Campus Map & GIS, User Access, Accounts, SLA Tracking, Reports, Profile, Create Complaint) and fill in complaint form fields (Title, Category, Building, Floor, Room, Description) based on their voice or text input.",
+  "Never say 'I don't have user access' or 'I cannot perform actions' when asked to navigate, view a section, or fill fields. Confirm the action helpfully.",
+  "You cannot access private records such as account passwords, OTPs, or authentication secrets. Never ask for or repeat passwords, OTPs, or auth tokens.",
+  "Always respond in clear, professional English. English is the strictly required language.",
   "Use plain text. Do not use Markdown symbols, headings, or decorative formatting in spoken replies.",
   "Help explain how to use FixFlow and give practical complaint-workflow guidance.",
   "FixFlow provides AI complaint triage recommendations for priority, urgency, suggested category, safety concerns, and missing details. Explain these as advisory only; staff/admin make final decisions.",
-  "You cannot access private records or execute arbitrary actions. The student voice complaint workflow may help gather an editable draft, but it must never say a complaint was submitted until the authenticated submission succeeds after the student confirms.",
-  "Do not ask for or repeat passwords, OTPs, student IDs, email addresses, or other identifying complaint details.",
+  "The complaint workflow helps gather and fill editable details; the user reviews the details, attaches a proof photo, and confirms submission.",
   "Do not decide whether a complaint is genuine or make consequential decisions about a person. Explain that staff/admin review is required.",
   "For an immediate safety emergency, tell the user to contact campus security or local emergency services directly.",
 ].join(" ");
@@ -24,16 +26,79 @@ class AssistantServiceError extends Error {
   }
 }
 
-function buildSystemInstruction(role) {
+function parseAssistantActions(text) {
+  if (!text || typeof text !== "string") return { cleanText: "", actions: [] };
+  const actionRegex = /\[\[ACTION:(\w+)([^\]]*)\]\]/g;
+  const actions = [];
+  let match;
+  while ((match = actionRegex.exec(text)) !== null) {
+    const type = match[1];
+    const rawParams = match[2] || "";
+    const params = {};
+    const paramRegex = /(\w+)=["']([^"']*)["']/g;
+    let paramMatch;
+    while ((paramMatch = paramRegex.exec(rawParams)) !== null) {
+      params[paramMatch[1]] = paramMatch[2];
+    }
+    actions.push({ type, params });
+  }
+  const cleanText = text.replace(actionRegex, "").replace(/\s{2,}/g, " ").trim();
+  return { cleanText, actions };
+}
+
+function buildSystemInstruction(role, userName = "", appContext = null) {
   const roleGuidance = ROLE_GUIDANCE[role];
   if (!roleGuidance) throw new AssistantServiceError("Your account role cannot use the assistant.", 403);
-  return `${ASSISTANT_INSTRUCTIONS} ${roleGuidance}`;
+  const firstName = userName ? userName.trim().split(/\s+/)[0] : "";
+  const nameInstruction = firstName
+    ? ` The user's name is ${firstName}. Greet them by name only if this is the very first turn of the conversation. In ongoing conversation and follow-up turns, DO NOT repeat "Hello ${firstName}" or any greeting; answer questions and confirm actions directly and concisely.`
+    : "";
+
+  let contextInstruction = "";
+  if (appContext && typeof appContext === "object") {
+    const section = appContext.currentSection || "dashboard";
+    const title = appContext.pageTitle || section;
+    const filters = appContext.activeFilters ? `Active screen filters: ${JSON.stringify(appContext.activeFilters)}. ` : "";
+    const selected = (appContext.selectedComplaint || appContext.selectedItem)
+      ? `Currently selected/opened item: ${JSON.stringify(appContext.selectedComplaint || appContext.selectedItem)}. `
+      : "";
+    const visible = (appContext.visibleComplaints || appContext.visibleItems)
+      ? `Visible tickets/items on current screen: ${JSON.stringify(appContext.visibleComplaints || appContext.visibleItems)}. `
+      : "";
+    const form = appContext.formState ? `Active form state/inputs: ${JSON.stringify(appContext.formState)}. ` : "";
+    const elements = appContext.interactiveElements ? `Interactive UI components: ${JSON.stringify(appContext.interactiveElements)}. ` : "";
+
+    contextInstruction = ` [APP CONTEXT]: You have complete control and awareness of the active screen. ` +
+      `User is on "${title}" (identifier: "${section}"). ` +
+      filters + selected + visible + form + elements +
+      `You interact directly with the app by emitting structured action tags in your response. ` +
+      `Supported action tags: ` +
+      `[[ACTION:navigate target="campusMap|sla|reports|users|accounts|complaints|newComplaint|profile"]], ` +
+      `[[ACTION:filter category="<cat>" status="<status>" search="<query>" queue="<queue>" department="<dept>" role="<role>"]], ` +
+      `[[ACTION:clearFilters]], ` +
+      `[[ACTION:openComplaint id="<id>" index="<1-based-index>"]], ` +
+      `[[ACTION:openForm form="complaint|statusUpdate"]], ` +
+      `[[ACTION:fillForm title="<title>" category="<cat>" building="<bldg>" floor="<flr>" room="<rm>" description="<desc>" note="<note>" status="<status>"]], ` +
+      `[[ACTION:switchTab tab="current|resolved|unassigned|assigned|student|staff"]], ` +
+      `[[ACTION:selectBuilding id="<id>" name="<name>"]], ` +
+      `[[ACTION:selectFloor floor="<floor>"]], ` +
+      `[[ACTION:updateStatus status="<status>" note="<note>"]], ` +
+      `[[ACTION:exportReport type="pdf|csv"]]. ` +
+      `SEQUENTIAL & CHAINED COMMANDS: If the user requests multiple actions (e.g., "open list and select the second ticket", "open complaint form and fill water leak in PG block room 102", or "switch to resolved tab and filter plumbing"), emit ALL relevant action tags in exact execution sequence: ` +
+      `for example: [[ACTION:navigate target="complaints"]] [[ACTION:openComplaint index="2"]], or ` +
+      `[[ACTION:openForm form="complaint"]] [[ACTION:fillForm title="Water leak in PG block room 102" category="Plumbing" building="PG Block" room="102" description="Water leak in PG block room 102"]]. ` +
+      `Always acknowledge user requests naturally and concisely in English. Action tags are automatically stripped from spoken audio and UI text.`;
+  }
+
+  return `${ASSISTANT_INSTRUCTIONS} ${roleGuidance}${nameInstruction}${contextInstruction}`;
 }
 
 async function generateAssistantReply({
   apiKey,
   model = "gemini-3.5-flash-lite",
   role,
+  userName = "",
+  appContext = null,
   messages,
   fetchImpl = fetch,
   timeoutMs = 20_000,
@@ -44,7 +109,7 @@ async function generateAssistantReply({
     throw new AssistantServiceError("The FixFlow AI assistant is not configured yet. Add GEMINI_API_KEY to Backend/.env and restart the backend.", 503);
   }
 
-  const systemInstruction = `${buildSystemInstruction(role)} ${systemInstructionSuffix}`.trim();
+  const systemInstruction = `${buildSystemInstruction(role, userName, appContext)} ${systemInstructionSuffix}`.trim();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   let response;
@@ -234,12 +299,171 @@ async function generateReportInsights({ period, reportData, apiKey, model }) {
   }
 }
 
+async function diagnoseComplaintImage({
+  imageBuffer,
+  mimeType = "image/jpeg",
+  apiKey,
+  model = "gemini-3.5-flash-lite",
+  fetchImpl = fetch,
+}) {
+  if (!imageBuffer || !Buffer.isBuffer(imageBuffer) || imageBuffer.length === 0) {
+    throw new AssistantServiceError("An image file is required for AI diagnosis.", 400);
+  }
+
+  const fallback = {
+    title: "Facility Repair Inspection",
+    category: "Other",
+    severity: "Medium",
+    description: "Visual inspection shows physical damage or wear requiring maintenance review.",
+    safetyWarning: "",
+    source: "heuristic",
+  };
+
+  if (!apiKey?.trim()) {
+    return fallback;
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const prompt = [
+    "You are an expert campus facility engineer diagnosing a photograph of broken equipment or a damaged facility.",
+    "Inspect the image to identify what is damaged or requires maintenance.",
+    "Return ONLY valid JSON matching this schema:",
+    "{",
+    '  "title": "Short descriptive title (3 to 8 words, e.g. Burnt 16A Wall Socket, Leaking Washroom Faucet, Broken Fluorescent Tube)",',
+    '  "category": "Exactly one of: Electrical, Plumbing, Cleaning, Internet, Furniture, Other",',
+    '  "severity": "Exactly one of: Low, Medium, High, Critical",',
+    '  "description": "Factual description of the visible damage, affected fixture or equipment, and practical fix needed (2-3 sentences).",',
+    '  "safetyWarning": "Short warning if there is a fire, shock, flood, structural, or sharp glass hazard; otherwise empty string"',
+    "}",
+  ].join("\n");
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType,
+                  data: imageBuffer.toString("base64"),
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 600,
+          responseMimeType: "application/json",
+        },
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
+
+    if (!response.ok) return fallback;
+
+    const payload = await response.json();
+    const text = payload?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim();
+    if (!text) return fallback;
+
+    const parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+    const allowedCategories = ["Electrical", "Plumbing", "Cleaning", "Internet", "Furniture", "Other"];
+    const allowedSeverities = ["Low", "Medium", "High", "Critical"];
+
+    return {
+      title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim().slice(0, 100) : fallback.title,
+      category: allowedCategories.includes(parsed.category) ? parsed.category : fallback.category,
+      severity: allowedSeverities.includes(parsed.severity) ? parsed.severity : fallback.severity,
+      description: typeof parsed.description === "string" && parsed.description.trim() ? parsed.description.trim().slice(0, 2000) : fallback.description,
+      safetyWarning: typeof parsed.safetyWarning === "string" ? parsed.safetyWarning.trim().slice(0, 200) : "",
+      source: "gemini",
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+async function formatStaffVoiceNote({
+  utterance,
+  status = "In_Progress",
+  complaintTitle = "",
+  apiKey,
+  model = "gemini-3.5-flash-lite",
+  fetchImpl = fetch,
+}) {
+  if (!utterance || typeof utterance !== "string" || !utterance.trim()) {
+    throw new AssistantServiceError("Spoken note text is required.", 400);
+  }
+
+  const cleanUtterance = utterance.trim().slice(0, 1000);
+  const fallback = cleanUtterance;
+
+  if (!apiKey?.trim()) {
+    return { formattedNote: fallback, source: "raw" };
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const prompt = [
+    "You are FixFlow's campus maintenance dispatch copilot.",
+    "A campus maintenance technician dictated an informal status update about a repair ticket.",
+    "The technician may have spoken in English, Hindi, or Hinglish.",
+    "Convert this informal update into a professional, concise, student-facing status note (1 to 3 clear English sentences).",
+    "Describe the verified repair action or current diagnostic step clearly. Never fabricate facts.",
+    "Return only the polished note text. No markdown symbols, quotes, or conversational greeting.",
+    "",
+    `Complaint Title: ${complaintTitle || "Campus Facility Issue"}`,
+    `Current Status: ${status}`,
+    `Technician Spoken Input: "${cleanUtterance}"`,
+  ].join("\n");
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 256,
+        },
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!response.ok) return { formattedNote: fallback, source: "raw" };
+    const payload = await response.json();
+    const reply = payload?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim();
+    if (!reply) return { formattedNote: fallback, source: "raw" };
+
+    return {
+      formattedNote: reply.replace(/^["']|["']$/g, "").slice(0, 1000),
+      source: "gemini",
+    };
+  } catch {
+    return { formattedNote: fallback, source: "raw" };
+  }
+}
+
 module.exports = {
   AssistantServiceError,
+  parseAssistantActions,
   buildSystemInstruction,
   generateAssistantReply,
   generateComplaintDescriptionDraft,
   generateVoiceComplaintTurn,
   generateStatusNoteDraft,
   generateReportInsights,
+  diagnoseComplaintImage,
+  formatStaffVoiceNote,
 };

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
+import { ComplaintCardSkeleton } from "../components/common/SkeletonLoader.jsx";
 import UnassignedComplaintCard from "../features/admin/UnassignedComplaintCard.jsx";
 import AdminAssignedComplaintCard from "../features/admin/AdminAssignedComplaintCard.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
@@ -18,6 +19,7 @@ import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintToolbar from "../components/complaints/ComplaintToolbar.jsx";
 import ComplaintPagination from "../components/complaints/ComplaintPagination.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { useAssistantContext } from "../context/assistantContext.jsx";
 import {
   ASSIGNED_PAGE_SIZE,
   assignedFilters,
@@ -78,10 +80,107 @@ export default function AdminDashboardPage() {
   const [reassignStaffList, setReassignStaffList] = useState([]);
   const [loadingReassignStaff, setLoadingReassignStaff] = useState(false);
   const [reassigning, setReassigning] = useState(false);
+  const { setScreenContext } = useAssistantContext();
 
   const selectedAssignedComplaint = assignedComplaints.find(
     (complaint) => complaint._id === selectedAssignedComplaintId,
   );
+
+  const activeComplaintList = activeQueue === "unassigned" ? complaints : assignedComplaints;
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: `admin-${activeSection}-${activeQueue}`,
+      pageTitle: activeQueue === "unassigned" ? "Admin Triage Queue (Unassigned Complaints)" : "Admin Assigned Complaints Management",
+      activeFilters: { queue: activeQueue, filter: assignedFilter, search: assignedSearch },
+      selectedComplaint: selectedAssignedComplaint ? { id: selectedAssignedComplaint._id, title: selectedAssignedComplaint.title } : null,
+      visibleComplaints: (activeComplaintList || []).slice(0, 10).map((c, index) => ({
+        index: index + 1,
+        id: c._id,
+        title: c.title,
+        status: c.status,
+        category: c.category,
+        building: c.building,
+        room: c.room,
+      })),
+      interactiveElements: [
+        "queueTabs: unassigned (Triage), assigned (Active / In-progress)",
+        "assignedStatusFilter: all, Assigned, In_Progress, Under_Review, Resolved",
+        "searchTicketsInput",
+        "departmentDropdown",
+        "assignStaffButton",
+        "reassignStaffModal",
+      ],
+      availableActions: [
+        "filter",
+        "clearFilters",
+        "navigate",
+        "openComplaint",
+        "switchQueue",
+        "switchTab",
+      ],
+    });
+  }, [
+    activeSection,
+    activeQueue,
+    assignedFilter,
+    assignedSearch,
+    selectedAssignedComplaint,
+    activeComplaintList,
+    setScreenContext,
+  ]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { status, search, queue } = e.detail || {};
+      if (queue === "unassigned" || queue === "assigned") setActiveQueue(queue);
+      if (status) setAssignedFilter(status);
+      if (search !== undefined) setAssignedSearch(search);
+    }
+
+    function handleClearFilters() {
+      setAssignedSearch("");
+      setAssignedFilter("all");
+    }
+
+    function handleOpenComplaint(e) {
+      const { id, index, title: targetTitle } = e.detail || {};
+      const targetList = activeQueue === "unassigned" ? complaints : assignedComplaints;
+      let targetId = id;
+      if (!targetId && index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < targetList.length) {
+          targetId = targetList[idx]._id;
+        }
+      } else if (!targetId && targetTitle) {
+        const found = targetList.find((c) =>
+          c.title?.toLowerCase().includes(targetTitle.toLowerCase()),
+        );
+        if (found) targetId = found._id;
+      }
+      if (targetId) setSelectedAssignedComplaintId(targetId);
+    }
+
+    function handleSwitchTab(e) {
+      const { queue, tab } = e.detail || {};
+      const target = queue || tab;
+      if (target === "unassigned" || target === "assigned") {
+        setActiveQueue(target);
+      }
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+    window.addEventListener("fixflow:switch-tab", handleSwitchTab);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+      window.removeEventListener("fixflow:switch-tab", handleSwitchTab);
+    };
+  }, [activeQueue, complaints, assignedComplaints]);
 
   const filteredAssignedComplaints = assignedComplaints;
   const visibleAssignedComplaints = assignedComplaints;
@@ -385,6 +484,18 @@ export default function AdminDashboardPage() {
       workspaceLabel="Administrator"
       activeSection={activeSection}
       onSectionChange={setActiveSection}
+      assistantNavItems={[
+        { id: "campusMap", label: "Campus Map & GIS" },
+        { id: "sla", label: "SLA tracking" },
+        { id: "reports", label: "Reports" },
+        { id: "users", label: "User access" },
+        { id: "accounts", label: "Accounts" },
+        { id: "complaints", label: "Complaints" },
+        { id: "profile", label: "Profile" },
+      ]}
+      onAssistantNavigate={(item) => {
+        setActiveSection(item.id);
+      }}
       navItems={[
         { id: "complaints", label: "Complaints", icon: ClipboardList },
         { id: "campusMap", label: "Campus Map & GIS", icon: MapPin },
@@ -543,9 +654,8 @@ export default function AdminDashboardPage() {
           {/* Unassigned complaint queue */}
           {activeQueue === "unassigned" ? (
             loading ? (
-              <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-muted">
-                <LoaderCircle size={21} className="animate-spin text-brand" />
-                Loading complaints…
+              <div className="py-2">
+                <ComplaintCardSkeleton count={3} />
               </div>
             ) : complaints.length === 0 ? (
               <ComplaintEmptyState
@@ -582,9 +692,8 @@ export default function AdminDashboardPage() {
               </div>
             )
           ) : assignedLoading ? (
-            <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-muted">
-              <LoaderCircle size={21} className="animate-spin text-brand" />
-              Loading assigned complaints…
+            <div className="py-2">
+              <ComplaintCardSkeleton count={3} />
             </div>
           ) : assignedError ? (
             <p

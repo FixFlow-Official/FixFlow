@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const uploadFile = require("../services/storage.service");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
+const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
 const {
   getPageMetadata,
   getPageOptions,
@@ -267,7 +268,7 @@ async function updateComplaintStatus(req, res) {
     await complaint.save();
 
     const statusLabel = status.replaceAll("_", " ");
-    await createNotifications([
+    const notifications = [
       complaintNotification({
         recipient: complaint.user,
         recipientRef: "student",
@@ -276,7 +277,34 @@ async function updateComplaintStatus(req, res) {
         title: "Complaint status updated",
         message: `Your complaint is now ${statusLabel}.${trimmedNote ? ` ${trimmedNote}` : ""}`.slice(0, 300),
       }),
-    ]);
+    ];
+
+    // Also notify all students who upvoted (+1 Me Too) this issue
+    if (complaint.upvotes?.length) {
+      complaint.upvotes.forEach((upvote) => {
+        if (String(upvote.user) !== String(complaint.user)) {
+          notifications.push(
+            complaintNotification({
+              recipient: upvote.user,
+              recipientRef: "student",
+              complaint,
+              type: "status",
+              title: `Upvoted issue is now ${statusLabel}`,
+              message: `The complaint you upvoted ("${complaint.complaintTitle}") is now ${statusLabel}.${trimmedNote ? ` ${trimmedNote}` : ""}`.slice(0, 300),
+            }),
+          );
+        }
+      });
+    }
+
+    await createNotifications(notifications);
+
+    void dispatchTimelineAlerts({
+      complaint,
+      event: status === "Resolved" ? "resolved" : status === "In_Progress" ? "in_progress" : "status_update",
+      actorName: req.user?.username,
+      note: trimmedNote,
+    });
 
     return res.status(200).json({
       message: "Complaint status updated.",

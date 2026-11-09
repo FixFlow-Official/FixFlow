@@ -40,6 +40,19 @@ const studentSchema = new mongoose.Schema({
     enum: ["student", "staff", "admin"],
     required: [true, "Role is required"],
   },
+  phoneNumber: {
+    type: String,
+    trim: true,
+    default: null,
+  },
+  smsNotificationsEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  whatsAppNotificationsEnabled: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 studentSchema.index({ username: 1, _id: 1 });

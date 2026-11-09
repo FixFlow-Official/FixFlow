@@ -5,8 +5,10 @@ import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintConversation from "../components/complaints/ComplaintConversation.jsx";
 import ComplaintImageLink from "../components/complaints/ComplaintImageLink.jsx";
 import ComplaintStatusBadge from "../components/complaints/ComplaintStatusBadge.jsx";
-import ComplaintStatusTimeline from "../components/complaints/ComplaintStatusTimeline.jsx";
+import ComplaintLiveTimeline from "../components/complaints/ComplaintLiveTimeline.jsx";
+import ComplaintResolutionVerification from "../components/complaints/ComplaintResolutionVerification.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { useAssistantContext } from "../context/assistantContext.jsx";
 import { getComplaintDetailsRequest } from "../services/api.js";
 import { downloadComplaintPdf } from "../utils/complaintPdf.js";
 import { formatDate } from "../utils/complaintConfig.js";
@@ -48,6 +50,45 @@ function ComplaintDetailsContent({ complaintId }) {
 
   const dashboardPath = dashboardPaths[user?.role] || "/login";
   const navItems = [{ id: "complaints", label: "Complaints", icon: ClipboardList }];
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: "complaint-details",
+      pageTitle: `Ticket #${complaint?.ticketNumber || complaintId} - ${complaint?.title || "Complaint Details"}`,
+      selectedComplaint: complaint
+        ? {
+            id: complaint._id,
+            ticketNumber: complaint.ticketNumber,
+            title: complaint.title,
+            status: complaint.status,
+            category: complaint.category,
+            building: complaint.building,
+            floor: complaint.floor,
+            room: complaint.room,
+            description: complaint.description,
+          }
+        : null,
+      interactiveElements: [
+        "backButton",
+        "exportPdfButton",
+        "statusTimeline",
+        "commentsAndConversation",
+      ],
+      availableActions: ["exportReport", "navigate"],
+    });
+  }, [complaint, complaintId, setScreenContext]);
+
+  useEffect(() => {
+    function handleExportReport() {
+      if (complaint) {
+        downloadComplaintPdf(complaint);
+      }
+    }
+
+    window.addEventListener("fixflow:export-report", handleExportReport);
+    return () => window.removeEventListener("fixflow:export-report", handleExportReport);
+  }, [complaint]);
 
   return (
     <DashboardShell
@@ -125,9 +166,17 @@ function ComplaintDetailsContent({ complaintId }) {
                     {complaint.resolutionProofUrl && <ComplaintImageLink src={complaint.resolutionProofUrl} alt={`Resolution proof for ${complaint.complaintTitle}`} ariaLabel="Open resolution proof photo" className="mt-3 inline-flex max-w-full overflow-hidden rounded-xl border border-emerald-200" imageClassName="max-h-72 max-w-full object-contain" />}
                   </section>
                 )}
+
+                {user?.role === "student" && (
+                  <ComplaintResolutionVerification
+                    complaint={complaint}
+                    accessToken={accessToken}
+                    onUpdate={(updated) => setComplaint((prev) => ({ ...prev, ...updated }))}
+                  />
+                )}
               </div>
 
-              <ComplaintStatusTimeline history={complaint.statusHistory} title="Status history" includeActorRole emptyMessage="No status updates are available yet." />
+              <ComplaintLiveTimeline complaint={complaint} history={complaint.statusHistory} includeActorRole />
             </div>
 
             <ComplaintConversation complaint={complaint} />

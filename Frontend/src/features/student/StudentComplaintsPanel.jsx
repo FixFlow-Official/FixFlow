@@ -1,7 +1,8 @@
-import { ArrowLeft, Inbox, LoaderCircle, Plus } from "lucide-react";
+import { ArrowLeft, Inbox, Plus } from "lucide-react";
 import ComplaintEmptyState from "../../components/complaints/ComplaintEmptyState.jsx";
 import ComplaintToolbar from "../../components/complaints/ComplaintToolbar.jsx";
 import ComplaintPagination from "../../components/complaints/ComplaintPagination.jsx";
+import { ComplaintCardSkeleton } from "../../components/common/SkeletonLoader.jsx";
 import StudentComplaintCard from "./StudentComplaintCard.jsx";
 
 // Student complaint history screen; data loading and filtering remain in DashboardPage.
@@ -73,9 +74,8 @@ export default function StudentComplaintsPanel({
             />
 
             {loadingComplaints ? (
-              <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted">
-                <LoaderCircle size={22} className="animate-spin text-brand" />
-                Loading your complaints…
+              <div className="py-2">
+                <ComplaintCardSkeleton count={3} />
               </div>
             ) : complaintError ? (
               <p

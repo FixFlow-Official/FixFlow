@@ -64,6 +64,46 @@ const complaintSchema = new mongoose.Schema(
       ref: "staff",
       default: null,
     },
+    // CSAT & Resolution Verification
+    csatRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: null,
+    },
+    csatFeedback: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null,
+    },
+    resolutionVerified: {
+      type: Boolean,
+      default: false,
+    },
+    resolutionVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+    reopenedCount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    reopenedAt: {
+      type: Date,
+      default: null,
+    },
+    reopenReason: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null,
+    },
+    reopenProofUrl: {
+      type: String,
+      default: null,
+    },
     complaintTitle: {
       type: String,
       required: [true, "Complaint Title is required"],
@@ -202,6 +242,64 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    upvotes: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "student",
+          required: true,
+        },
+        upvotedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    upvoteCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    smsUpdates: [
+      {
+        channel: {
+          type: String,
+          enum: ["sms", "whatsapp"],
+          default: "whatsapp",
+        },
+        recipientPhone: {
+          type: String,
+          required: true,
+        },
+        recipientName: {
+          type: String,
+          default: "Student",
+        },
+        event: {
+          type: String,
+          enum: ["assigned", "in_progress", "status_update", "resolved", "reopened"],
+          required: true,
+        },
+        message: {
+          type: String,
+          required: true,
+          maxlength: 500,
+        },
+        sentAt: {
+          type: Date,
+          default: Date.now,
+        },
+        status: {
+          type: String,
+          enum: ["sent", "delivered", "simulated", "failed"],
+          default: "sent",
+        },
+        providerMessageId: {
+          type: String,
+          default: null,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
@@ -230,6 +328,8 @@ complaintSchema.index({ status: 1, slaResolutionDueAt: 1 });
 complaintSchema.index({ "aiTriage.priority": 1, status: 1, createdAt: -1 });
 complaintSchema.index({ "userSnapshot.name": 1 });
 complaintSchema.index({ "userSnapshot.campusId": 1 });
+complaintSchema.index({ "location.building": 1, "location.floor": 1, status: 1 });
+complaintSchema.index({ upvoteCount: -1 });
 
 const complaintModel = mongoose.model("complaint", complaintSchema);
 

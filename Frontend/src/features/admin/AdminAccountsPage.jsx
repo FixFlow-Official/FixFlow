@@ -16,6 +16,7 @@ import {
   getRegisteredAccountsRequest,
   resetAccountPasswordByAdminRequest,
 } from "../../services/api.js";
+import { useAssistantContext } from "../../context/assistantContext.jsx";
 
 const PAGE_SIZE = 50;
 
@@ -76,6 +77,78 @@ export default function AdminAccountsPage({ accessToken }) {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: "admin-accounts",
+      pageTitle: "Registered Campus Accounts & Password Administration",
+      activeFilters: { role: type, search, page },
+      selectedAccount: selectedAccount
+        ? { id: selectedAccount.id, name: selectedAccount.name, campusId: selectedAccount.campusId, role: type }
+        : null,
+      visibleAccounts: (accounts || []).slice(0, 10).map((a, index) => ({
+        index: index + 1,
+        id: a.id,
+        name: a.name,
+        campusId: a.campusId,
+        detail: a.detail,
+        role: type,
+      })),
+      interactiveElements: [
+        "roleTabs: student, staff",
+        "searchAccountsInput",
+        "accountCards: tap to view or reset credentials",
+        "passwordResetModal",
+      ],
+      availableActions: ["filter", "clearFilters", "switchTab", "navigate"],
+    });
+  }, [type, search, page, selectedAccount, accounts, setScreenContext]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { role, search: searchParam, type: typeParam } = e.detail || {};
+      const targetRole = role || typeParam;
+      if (targetRole === "student" || targetRole === "staff") setType(targetRole);
+      if (searchParam !== undefined) setSearch(searchParam);
+    }
+
+    function handleClearFilters() {
+      setSearch("");
+    }
+
+    function handleSwitchTab(e) {
+      const { tab, role, type: typeParam } = e.detail || {};
+      const target = tab || role || typeParam;
+      if (target === "student" || target === "staff") setType(target);
+    }
+
+    function handleSelectAccount(e) {
+      const { id, campusId, name, index } = e.detail || {};
+      let found = null;
+      if (index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < accounts.length) found = accounts[idx];
+      } else if (id || campusId) {
+        found = accounts.find((a) => a.id === id || a.campusId === (id || campusId));
+      } else if (name) {
+        found = accounts.find((a) => a.name?.toLowerCase().includes(name.toLowerCase()));
+      }
+      if (found) selectAccount(found);
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:switch-tab", handleSwitchTab);
+    window.addEventListener("fixflow:select-account", handleSelectAccount);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:switch-tab", handleSwitchTab);
+      window.removeEventListener("fixflow:select-account", handleSelectAccount);
+    };
+  }, [accounts]);
 
   function selectAccount(account) {
     setSelectedAccount(account);

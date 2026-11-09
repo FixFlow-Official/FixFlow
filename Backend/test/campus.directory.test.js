@@ -318,6 +318,46 @@ test("account removal falls back safely when MongoDB is standalone", async () =>
   });
 });
 
+test("account removal falls back safely on IllegalOperation codeName without code 20", async () => {
+  const account = { _id: "staff-account", username: "StaffUser", email: "staff@example.edu" };
+  let accountDeleted = false;
+  let directoryDeleted = false;
+
+  await withStubs([
+    [mongoose, "startSession", async () => ({
+      withTransaction: async (callback) => callback(),
+      endSession: async () => {},
+    })],
+    [campusDirectoryModel, "findOne", async () => ({ _id: "directory-record-staff" })],
+    [campusDirectoryModel, "deleteOne", async () => { directoryDeleted = true; }],
+    [staffModel, "findOne", async () => account],
+    [staffModel, "findById", () => ({
+      session: () => ({
+        select: () => ({
+          lean: async () => {
+            const error = new Error("This MongoDB deployment does not support transactions");
+            error.codeName = "IllegalOperation";
+            throw error;
+          },
+        }),
+      }),
+    })],
+    [staffModel, "deleteOne", async () => { accountDeleted = true; return { deletedCount: 1 }; }],
+    [complaintModel, "updateMany", async () => {}],
+    [sessionModel, "updateMany", async () => {}],
+  ], async () => {
+    const response = makeResponse();
+    await deleteUserByAdmin(
+      { auth: { role: "admin" }, body: { id: "201", type: "staff" } },
+      response,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(accountDeleted, true);
+    assert.equal(directoryDeleted, true);
+  });
+});
+
 test("transaction errors stop the deletion sequence before account or directory removal", async () => {
   const account = { _id: "student-account", username: "Past", email: "past@example.edu" };
   let accountDeleted = false;

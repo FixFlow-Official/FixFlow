@@ -76,5 +76,20 @@ server.on("error", (error) => {
   process.exitCode = 1;
 });
 
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Promise Rejection detected:", {
+    reason: reason instanceof Error ? { message: reason.message, stack: reason.stack } : reason,
+  });
+  shutdown("unhandledRejection");
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception detected:", {
+    message: error.message,
+    stack: error.stack,
+  });
+  shutdown("uncaughtException");
+});
+
 process.once("SIGINT", () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));

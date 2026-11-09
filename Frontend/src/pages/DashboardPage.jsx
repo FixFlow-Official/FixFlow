@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ExpandableComplaintCard from "../components/complaints/ExpandableComplaintCard.jsx";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
@@ -7,22 +8,26 @@ import StudentComplaintsPanel from "../features/student/StudentComplaintsPanel.j
 import StudentComplaintDetails from "../features/student/StudentComplaintDetails.jsx";
 import StudentComplaintForm from "../features/student/StudentComplaintForm.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
+import QrScannerModal from "../components/common/QrScannerModal.jsx";
+import CampusTrendingFeed from "../features/student/CampusTrendingFeed.jsx";
 import {
   ArrowLeft,
   ArrowUpRight,
+  Flame,
   Inbox,
   LoaderCircle,
   MessageSquareText,
+  QrCode,
   UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/useAuth.js";
+import { useAssistantContext } from "../context/assistantContext.jsx";
 import { downloadComplaintPdf } from "../utils/complaintPdf.js";
+import { validateImageFile } from "../utils/fileValidation.js";
 import {
   createComplaintRequest,
   getComplaintsRequest,
 } from "../services/api.js";
-
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 const activeComplaintStatuses = [
   "Submitted",
@@ -43,10 +48,13 @@ export default function DashboardPage() {
   const [complaintError, setComplaintError] = useState("");
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [submissionTriage, setSubmissionTriage] = useState(null);
-  const [triagePreview, setTriagePreview] = useState(null);
-  const [confirmedCampusIssue, setConfirmedCampusIssue] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const [searchParams] = useSearchParams();
+  const initBuilding = searchParams.get("building") || "";
+  const initFloor = searchParams.get("floor") || "Ground Floor";
+  const initRoom = searchParams.get("room") || "";
+  const isQrSource = searchParams.get("source") === "qr_door" || Boolean(initBuilding && initRoom);
 
   const [complaintSearch, setComplaintSearch] = useState("");
   const [page, setPage] = useState("create");
@@ -58,10 +66,160 @@ export default function DashboardPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
-  const [building, setBuilding] = useState("");
-  const [floor, setFloor] = useState("Ground Floor");
-  const [room, setRoom] = useState("");
+  const [building, setBuilding] = useState(initBuilding);
+  const [floor, setFloor] = useState(initFloor);
+  const [room, setRoom] = useState(initRoom);
   const [image, setImage] = useState(null);
+  const [qrPrefilled, setQrPrefilled] = useState(isQrSource);
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+
+  function handleQrScan(locationData) {
+    if (locationData.building) setBuilding(locationData.building);
+    if (locationData.floor) setFloor(locationData.floor);
+    if (locationData.room) setRoom(locationData.room);
+    setPage("create");
+    setQrPrefilled(true);
+  }
+
+  const { setScreenContext } = useAssistantContext();
+
+  useEffect(() => {
+    setScreenContext({
+      currentSection: `student-${activeSection}-${page}`,
+      pageTitle: page === "create" ? "Submit New Complaint" : "My Complaints & Campus Facility Status",
+      activeFilters: { page, complaintFilter, complaintSearch },
+      selectedComplaint: selectedComplaint
+        ? { id: selectedComplaint._id, title: selectedComplaint.title, status: selectedComplaint.status }
+        : null,
+      visibleComplaints: (complaints || []).slice(0, 10).map((c, index) => ({
+        index: index + 1,
+        id: c._id,
+        title: c.title,
+        category: c.category,
+        status: c.status,
+        building: c.building,
+        room: c.room,
+      })),
+      formState: page === "create"
+        ? {
+            isOpen: true,
+            title,
+            category,
+            building,
+            floor,
+            room,
+            description,
+            hasImage: Boolean(image),
+          }
+        : { isOpen: false },
+      interactiveElements: [
+        "complaintSearchInput",
+        "filterPills: all, current, resolved, closed",
+        "newComplaintButton",
+        "complaintCards: view status and details",
+        "complaintFormModal: title, category, building, floor, room, description, uploadProofImage, aiDiagnoseButton",
+      ],
+      availableActions: [
+        "filter",
+        "clearFilters",
+        "navigate",
+        "openComplaint",
+        "openForm",
+        "fillForm",
+        "switchTab",
+      ],
+    });
+  }, [
+    activeSection,
+    page,
+    complaintFilter,
+    complaintSearch,
+    selectedComplaint,
+    complaints,
+    title,
+    category,
+    building,
+    floor,
+    room,
+    description,
+    image,
+    setScreenContext,
+  ]);
+
+  useEffect(() => {
+    function handleSetFilters(e) {
+      const { status, search, view } = e.detail || {};
+      if (view === "create" || view === "mine") setPage(view);
+      if (status) setComplaintFilter(status);
+      if (search !== undefined) setComplaintSearch(search);
+    }
+
+    function handleClearFilters() {
+      setComplaintSearch("");
+      setComplaintFilter("current");
+    }
+
+    function handleOpenComplaint(e) {
+      const { id, index, title: targetTitle } = e.detail || {};
+      let found = null;
+      if (id) {
+        found = complaints.find((c) => c._id === id);
+      } else if (index !== undefined) {
+        const idx = parseInt(index, 10) - 1;
+        if (idx >= 0 && idx < complaints.length) {
+          found = complaints[idx];
+        }
+      } else if (targetTitle) {
+        found = complaints.find((c) =>
+          c.title?.toLowerCase().includes(targetTitle.toLowerCase()),
+        );
+      }
+      if (found) {
+        setSelectedComplaint(found);
+        setPage("mine");
+      }
+    }
+
+    function handleOpenForm(e) {
+      const { form } = e.detail || {};
+      if (!form || form === "complaint") {
+        setPage("create");
+      }
+    }
+
+    function handleSwitchTab(e) {
+      const { tab } = e.detail || {};
+      if (tab === "create") setPage("create");
+      else if (tab === "mine" || tab === "complaints") setPage("mine");
+    }
+
+    function handleFillForm(e) {
+      const fields = e.detail || {};
+      if (fields.title) setTitle(fields.title);
+      if (fields.category) setCategory(fields.category);
+      if (fields.building) setBuilding(fields.building);
+      if (fields.floor) setFloor(fields.floor);
+      if (fields.room) setRoom(fields.room);
+      if (fields.description) setDescription(fields.description);
+      setPage("create");
+    }
+
+    window.addEventListener("fixflow:set-filters", handleSetFilters);
+    window.addEventListener("fixflow:clear-filters", handleClearFilters);
+    window.addEventListener("fixflow:open-complaint", handleOpenComplaint);
+    window.addEventListener("fixflow:open-form", handleOpenForm);
+    window.addEventListener("fixflow:switch-tab", handleSwitchTab);
+    window.addEventListener("fixflow:fill-complaint-form", handleFillForm);
+
+    return () => {
+      window.removeEventListener("fixflow:set-filters", handleSetFilters);
+      window.removeEventListener("fixflow:clear-filters", handleClearFilters);
+      window.removeEventListener("fixflow:open-complaint", handleOpenComplaint);
+      window.removeEventListener("fixflow:open-form", handleOpenForm);
+      window.removeEventListener("fixflow:switch-tab", handleSwitchTab);
+      window.removeEventListener("fixflow:fill-complaint-form", handleFillForm);
+    };
+  }, [complaints]);
 
   // Debounce text search so each keystroke does not trigger a database query.
   useEffect(() => {
@@ -73,12 +231,11 @@ export default function DashboardPage() {
     return () => window.clearTimeout(timeoutId);
   }, [complaintSearch]);
 
-  // Keep the submission confirmation and its one-time triage summary brief.
+  // Keep the submission confirmation message visible for a short time.
   useEffect(() => {
     if (!successMessage) return undefined;
     const timeoutId = window.setTimeout(() => {
       setSuccessMessage("");
-      setSubmissionTriage(null);
     }, 6000);
     return () => window.clearTimeout(timeoutId);
   }, [successMessage]);
@@ -158,23 +315,15 @@ export default function DashboardPage() {
     const selectedImage = event.target.files?.[0] ?? null;
     setFormError("");
     setSuccessMessage("");
-    setSubmissionTriage(null);
 
-    if (
-      selectedImage &&
-      !["image/jpeg", "image/png", "image/webp"].includes(selectedImage.type)
-    ) {
-      setImage(null);
-      event.target.value = "";
-      setFormError("Choose a JPG, PNG, or WebP image.");
-      return;
-    }
-
-    if (selectedImage && selectedImage.size > MAX_IMAGE_SIZE) {
-      setImage(null);
-      event.target.value = "";
-      setFormError("The image must be 5 MB or smaller.");
-      return;
+    if (selectedImage) {
+      const check = validateImageFile(selectedImage);
+      if (!check.valid) {
+        setImage(null);
+        event.target.value = "";
+        setFormError(check.error);
+        return;
+      }
     }
 
     setImage(selectedImage);
@@ -217,14 +366,12 @@ export default function DashboardPage() {
           image: complaintImage,
           triageToken: draft.triageToken,
           confirmedCampusIssue: draft.confirmedCampusIssue,
+          confirmDistinctIssue: draft.confirmDistinctIssue,
         },
         accessToken,
       );
 
       setSuccessMessage(result.message || "Complaint submitted successfully.");
-      setSubmissionTriage(result.complaint?.aiTriage || null);
-      setTriagePreview(null);
-      setConfirmedCampusIssue(false);
       setTitle("");
       setDescription("");
       setCategory("");
@@ -259,17 +406,18 @@ export default function DashboardPage() {
     return true;
   }
 
-  async function handleSubmit(event, confirmedCampusIssue = false) {
+  async function handleSubmit(event, confirmedCampusIssue = true, confirmDistinctIssue = false) {
     event.preventDefault();
     await submitComplaint({
       title,
       description,
       category,
       building,
+      floor,
       room,
       image,
-      triageToken: triagePreview?.token,
       confirmedCampusIssue,
+      confirmDistinctIssue,
     }, event.currentTarget);
   }
 
@@ -277,25 +425,53 @@ export default function DashboardPage() {
 
 
 
+  // Fill complaint form fields via AI Assistant (Voice or Text)
+  const handleFillFormFields = useCallback((fields) => {
+    if (!fields) return;
+    setActiveSection("complaints");
+    openCreateComplaint();
+    if (fields.title) setTitle(fields.title);
+    if (fields.category) setCategory(fields.category);
+    if (fields.building) setBuilding(fields.building);
+    if (fields.floor) setFloor(fields.floor);
+    if (fields.room) setRoom(fields.room);
+    if (fields.description) setDescription(fields.description);
+  }, []);
+
+  useEffect(() => {
+    function onFillEvent(event) {
+      if (event?.detail) handleFillFormFields(event.detail);
+    }
+    window.addEventListener("fixflow:fill-complaint-form", onFillEvent);
+    return () => window.removeEventListener("fixflow:fill-complaint-form", onFillEvent);
+  }, [handleFillFormFields]);
+
   return (
     <DashboardShell
       workspaceLabel="Student"
       activeSection={activeSection}
       onSectionChange={setActiveSection}
       onVoiceComplaintSubmit={submitComplaint}
+      onFillFormFields={handleFillFormFields}
       assistantNavItems={[
         { id: "newComplaint", label: "New complaint" },
         { id: "myComplaints", label: "My complaints" },
+        { id: "trendingFeed", label: "Campus trending" },
       ]}
       onAssistantNavigate={(item) => {
-        if (item.id === "newComplaint" || item.id === "myComplaints") {
+        if (item.id === "newComplaint" || item.id === "myComplaints" || item.id === "trendingFeed") {
           setActiveSection("complaints");
           if (item.id === "newComplaint") openCreateComplaint();
+          else if (item.id === "trendingFeed") setPage("trending");
           else openMyComplaints();
+        } else if (item.id === "trending") {
+          setActiveSection("complaints");
+          setPage("trending");
         } else setActiveSection(item.id);
       }}
       navItems={[
         { id: "complaints", label: "Complaints", icon: MessageSquareText },
+        { id: "trending", label: "Campus Trending", icon: Flame },
         { id: "profile", label: "Profile", icon: UserRound },
       ]}
     >
@@ -321,13 +497,30 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={openMyComplaints}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-line/80 bg-white/85 px-4 text-sm font-semibold text-ink shadow-sm transition hover:border-brand/30 hover:bg-white hover:shadow-md sm:w-auto"
-                >
-                  My complaints <ArrowUpRight size={16} />
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setPage("trending")}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-sm font-semibold text-amber-900 shadow-2xs transition hover:bg-amber-100 sm:w-auto"
+                  >
+                    <Flame size={16} className="text-amber-600" />
+                    Trending Issues
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQrScannerOpen(true)}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-brand/20 bg-brand/5 px-4 text-sm font-semibold text-brand shadow-xs transition hover:bg-brand hover:text-white sm:w-auto"
+                  >
+                    <QrCode size={16} /> Scan Door QR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openMyComplaints}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-line/80 bg-white/85 px-4 text-sm font-semibold text-ink shadow-sm transition hover:border-brand/30 hover:bg-white hover:shadow-md sm:w-auto"
+                  >
+                    My complaints <ArrowUpRight size={16} />
+                  </button>
+                </div>
               </div>
             </section>
 
@@ -348,15 +541,19 @@ export default function DashboardPage() {
               handleImageChange={handleImageChange}
               formError={formError}
               successMessage={successMessage}
-              submissionTriage={submissionTriage}
-              confirmedCampusIssue={confirmedCampusIssue}
-              setConfirmedCampusIssue={setConfirmedCampusIssue}
-              triagePreview={triagePreview}
-              setTriagePreview={setTriagePreview}
               accessToken={accessToken}
               submitting={submitting}
               handleSubmit={handleSubmit}
+              qrPrefilled={qrPrefilled}
+              onOpenQrScanner={() => setQrScannerOpen(true)}
             />
+
+            {qrScannerOpen && (
+              <QrScannerModal
+                onScan={handleQrScan}
+                onClose={() => setQrScannerOpen(false)}
+              />
+            )}
 
             <section className="mt-6 w-full rounded-3xl border border-white/90 bg-white/95 p-4 shadow-[0_18px_55px_-36px_rgba(24,35,45,0.38)] ring-1 ring-line/70 sm:mt-8 sm:rounded-[1.75rem] sm:p-6 lg:p-8">
               <div className="mb-5 flex items-center gap-3">
@@ -403,6 +600,20 @@ export default function DashboardPage() {
               )}
             </section>
           </>
+        ) : page === "trending" ? (
+          <div className="space-y-5">
+            <button
+              type="button"
+              onClick={() => setPage("create")}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand"
+            >
+              <ArrowLeft size={16} /> Back to report issue
+            </button>
+            <CampusTrendingFeed
+              accessToken={accessToken}
+              onSelectComplaint={openComplaintDetails}
+            />
+          </div>
         ) : page === "mine" ? (
           <StudentComplaintsPanel
             openCreateComplaint={openCreateComplaint}
@@ -431,7 +642,16 @@ export default function DashboardPage() {
             onDownloadPdf={downloadComplaintPdf}
             summary="Your complaint record, updates, and resolution details."
           >
-            <StudentComplaintDetails complaint={selectedComplaint} />
+            <StudentComplaintDetails
+              complaint={selectedComplaint}
+              accessToken={accessToken}
+              onUpdate={(updated) => {
+                setSelectedComplaint(updated);
+                setComplaints((prev) =>
+                  prev.map((c) => (c._id === updated._id ? { ...c, ...updated } : c)),
+                );
+              }}
+            />
           </ExpandableComplaintCard>
         ) : (
           <section className="w-full rounded-3xl border border-white/90 bg-white/95 p-6 text-center shadow-sm ring-1 ring-line/70 sm:p-8">
