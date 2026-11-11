@@ -75,4 +75,14 @@ router.post(
   studentController.reopenComplaint,
 );
 
+/**
+ * @route api/student/complaints/:complaintId/verification
+ * @description student views resolution AI verification status
+ */
+router.get(
+  "/complaints/:complaintId/verification",
+  verifyAccessToken,
+  studentController.getComplaintVerification,
+);
+
 module.exports = router;

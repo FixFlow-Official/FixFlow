@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const uploadFile = require("../services/storage.service");
+const { verifyResolution } = require("../services/resolutionVerification.service");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
 const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
 const {
@@ -222,6 +223,7 @@ async function updateComplaintStatus(req, res) {
     }
 
     let resolutionProofUrl = null;
+    let aiVerification = null;
 
     if (status === "Resolved") {
       const uploadResult = await uploadFile(
@@ -236,6 +238,33 @@ async function updateComplaintStatus(req, res) {
       }
 
       resolutionProofUrl = uploadResult.url;
+
+      aiVerification = await verifyResolution({
+        beforeImageUrl: complaint.complaintPictureUrl,
+        afterImageUrl: resolutionProofUrl,
+        title: complaint.complaintTitle,
+        description: complaint.complaintDescription,
+        category: complaint.category,
+      });
+
+      complaint.aiResolutionVerification = aiVerification;
+
+      if (aiVerification?.verdict === "MISMATCH") {
+        complaint.status = "In_Progress";
+        complaint.resolutionVerified = false;
+        complaint.statusHistory.push({
+          status: "In_Progress",
+          note: `Resolution photo rejected by AI verification: ${aiVerification.reasons?.join("; ") || "Asset mismatch"}`.slice(0, 500),
+          changedBy: req.auth.id,
+          changedByRole: "staff",
+        });
+        await complaint.save();
+
+        return res.status(409).json({
+          message: "Resolution photo does not match the reported issue. Upload a clearer photo of the same asset.",
+          verification: aiVerification,
+        });
+      }
     }
 
     complaint.status = status;
@@ -256,6 +285,10 @@ async function updateComplaintStatus(req, res) {
       complaint.resolutionNote = trimmedNote;
       complaint.resolvedAt = new Date();
       complaint.resolvedBy = req.auth.id;
+      complaint.resolutionVerified = aiVerification?.verdict === "VERIFIED";
+      if (aiVerification?.verdict === "VERIFIED") {
+        complaint.resolutionVerifiedAt = new Date();
+      }
     }
 
     complaint.statusHistory.push({

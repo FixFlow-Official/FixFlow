@@ -48,6 +48,12 @@ router.patch(
 );
 
 router.post(
+  "/complaints/:complaintId/verify-override",
+  verifyAccessToken,
+  adminController.verifyOverrideComplaint,
+);
+
+router.post(
   "/directory/users",
   verifyAccessToken,
   directoryIdValidatorRule,

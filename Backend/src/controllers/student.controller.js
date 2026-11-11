@@ -639,6 +639,46 @@ async function getTrendingComplaints(req, res) {
   });
 }
 
+async function getComplaintVerification(req, res) {
+  if (req.auth?.role !== "student") {
+    return res.status(403).json({
+      message: "Only students can view complaint verification.",
+    });
+  }
+
+  const { complaintId } = req.params;
+  if (!mongoose.isValidObjectId(complaintId)) {
+    return res.status(400).json({
+      message: "Invalid complaint ID.",
+    });
+  }
+
+  try {
+    const complaint = await complaintModel.findOne({
+      _id: complaintId,
+      user: req.auth.id,
+      userRef: "student",
+    }).select("aiResolutionVerification resolutionVerified resolutionProofUrl complaintPictureUrl status");
+
+    if (!complaint) {
+      return res.status(404).json({
+        message: "Complaint not found.",
+      });
+    }
+
+    return res.status(200).json({
+      verification: complaint.aiResolutionVerification || null,
+      resolutionVerified: Boolean(complaint.resolutionVerified),
+      status: complaint.status,
+    });
+  } catch (err) {
+    console.error("getComplaintVerification failed", { requestId: req.requestId, error: err });
+    return res.status(500).json({
+      message: "Could not load complaint verification.",
+    });
+  }
+}
+
 module.exports = {
   createComplaint,
   getComplaint,
@@ -647,4 +687,5 @@ module.exports = {
   verifyComplaintResolution,
   reopenComplaint,
   getTrendingComplaints,
+  getComplaintVerification,
 };

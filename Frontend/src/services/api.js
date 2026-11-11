@@ -5,7 +5,7 @@
 export class ApiRequestError extends Error {
   constructor(
     message,
-    { status = null, requestId = null, errors = [], isDuplicate = false, duplicateComplaint = null } = {},
+    { status = null, requestId = null, errors = [], isDuplicate = false, duplicateComplaint = null, verification = null } = {},
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -14,6 +14,7 @@ export class ApiRequestError extends Error {
     this.errors = errors;
     this.isDuplicate = isDuplicate;
     this.duplicateComplaint = duplicateComplaint;
+    this.verification = verification;
   }
 }
 
@@ -163,7 +164,6 @@ export async function updateMyProfileRequest(
     profilePicture,
     removeProfilePicture = false,
     phoneNumber,
-    smsNotificationsEnabled,
     whatsAppNotificationsEnabled,
   },
   accessToken,
@@ -173,9 +173,6 @@ export async function updateMyProfileRequest(
   if (profilePicture) formData.append("profilePicture", profilePicture);
   if (removeProfilePicture) formData.append("removeProfilePicture", "true");
   if (phoneNumber !== undefined) formData.append("phoneNumber", phoneNumber || "");
-  if (smsNotificationsEnabled !== undefined) {
-    formData.append("smsNotificationsEnabled", String(smsNotificationsEnabled));
-  }
   if (whatsAppNotificationsEnabled !== undefined) {
     formData.append("whatsAppNotificationsEnabled", String(whatsAppNotificationsEnabled));
   }
@@ -524,6 +521,7 @@ async function complaintRequest(url, options, accessToken) {
       errors: validationErrors,
       isDuplicate: Boolean(data.isDuplicate),
       duplicateComplaint: data.duplicateComplaint || null,
+      verification: data.verification || null,
     });
   }
 
@@ -940,6 +938,30 @@ export async function getTrendingComplaintsRequest(params = {}, accessToken) {
   return complaintRequest(`/api/student/trending-complaints${suffix}`, { method: "GET" }, accessToken);
 }
 
+export async function requestPhoneOtpRequest({ phoneNumber }, accessToken) {
+  return complaintRequest(
+    "/api/auth/phone-otp/request",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phoneNumber }),
+    },
+    accessToken,
+  );
+}
+
+export async function verifyPhoneOtpRequest({ phoneNumber, otp }, accessToken) {
+  return complaintRequest(
+    "/api/auth/phone-otp/verify",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phoneNumber, otp }),
+    },
+    accessToken,
+  );
+}
+
 export async function verifyComplaintResolutionRequest(
   complaintId,
   { rating, feedback },
@@ -975,5 +997,26 @@ export async function reopenComplaintRequest(
     accessToken,
   );
 }
+
+export async function verifyOverrideRequest(complaintId, reason, accessToken) {
+  return complaintRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/verify-override`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    },
+    accessToken,
+  );
+}
+
+export async function getComplaintVerificationRequest(complaintId, accessToken) {
+  return complaintRequest(
+    `/api/student/complaints/${encodeURIComponent(complaintId)}/verification`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 
 

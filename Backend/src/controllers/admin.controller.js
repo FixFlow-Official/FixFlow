@@ -847,6 +847,85 @@ async function deleteUserByAdmin(req, res) {
   }
 }
 
+async function verifyOverrideComplaint(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({
+      message: "Only administrators can override resolution verification.",
+    });
+  }
+
+  const { complaintId } = req.params;
+  const { reason = "" } = req.body || {};
+  const trimmedReason = typeof reason === "string" ? reason.trim() : "";
+
+  if (!mongoose.isValidObjectId(complaintId)) {
+    return res.status(400).json({
+      message: "Invalid complaint ID.",
+    });
+  }
+
+  try {
+    const complaint = await complaintModel.findById(complaintId);
+    if (!complaint) {
+      return res.status(404).json({
+        message: "Complaint not found.",
+      });
+    }
+
+    if (complaint.status !== "Resolved") {
+      return res.status(400).json({
+        message: "Only resolved complaints can have resolution verification overridden.",
+      });
+    }
+
+    complaint.resolutionVerified = true;
+    complaint.resolutionVerifiedAt = new Date();
+
+    const overrideNote = trimmedReason
+      ? `Resolution verification overridden by admin: ${trimmedReason}`
+      : "Resolution verification overridden by admin.";
+
+    if (complaint.aiResolutionVerification) {
+      complaint.aiResolutionVerification.verdict = "VERIFIED";
+      complaint.aiResolutionVerification.checkedBy = req.user?.username || "Administrator";
+      complaint.aiResolutionVerification.checkedAt = new Date();
+      complaint.aiResolutionVerification.reasons = [
+        ...(complaint.aiResolutionVerification.reasons || []),
+        overrideNote.slice(0, 180),
+      ];
+    } else {
+      complaint.aiResolutionVerification = {
+        verdict: "VERIFIED",
+        confidenceScore: 100,
+        reasons: [overrideNote.slice(0, 180)],
+        observedAsset: complaint.complaintTitle,
+        provider: "rules",
+        checkedAt: new Date(),
+        checkedBy: req.user?.username || "Administrator",
+      };
+    }
+
+    complaint.statusHistory.push({
+      status: "Resolved",
+      note: overrideNote.slice(0, 500),
+      changedBy: req.auth.id,
+      changedByRole: "admin",
+    });
+
+    await complaint.save();
+
+    return res.status(200).json({
+      message: "Complaint resolution marked as verified.",
+      complaint,
+    });
+  } catch (err) {
+    console.error("verifyOverrideComplaint failed", { requestId: req.requestId, error: err });
+    return res.status(500).json({
+      message: "Could not override resolution verification.",
+    });
+  }
+}
+
 module.exports = {
   getUnassignedComplaints,
   getStaffByDepartment,
@@ -858,4 +937,5 @@ module.exports = {
   reassignComplaint,
   addUserToDirectoryByAdmin,
   deleteUserByAdmin,
+  verifyOverrideComplaint,
 };
