@@ -4,7 +4,10 @@ import { formatStatus, statusStyles } from "../../utils/complaintConfig.js";
 export default function ComplaintStatusBadge({ status, className = "" }) {
   const normalizedStatus = status || "Submitted";
   const colorClass =
-    statusStyles[normalizedStatus] || "bg-slate-100 text-slate-700";
+    statusStyles[normalizedStatus] ||
+    (normalizedStatus === "Reopened"
+      ? "bg-purple-100 text-purple-800 border border-purple-200"
+      : "bg-slate-100 text-slate-700");
 
   return (
     <span

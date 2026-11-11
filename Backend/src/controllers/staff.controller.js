@@ -28,6 +28,7 @@ const currentStaffStatuses = [
   "Under_Review",
   "In_Progress",
   "On_Hold",
+  "Reopened",
   "Rejected",
   "Closed",
   "Withdrawn",
@@ -38,6 +39,7 @@ const allowedStatusTransitions = {
   Under_Review: ["In_Progress", "On_Hold", "Resolved"],
   In_Progress: ["On_Hold", "Resolved"],
   On_Hold: ["In_Progress", "Resolved"],
+  Reopened: ["In_Progress", "On_Hold", "Resolved"],
 };
 
 async function getAssignedComplaints(req, res) {
@@ -65,6 +67,7 @@ async function getAssignedComplaints(req, res) {
       "Under_Review",
       "In_Progress",
       "On_Hold",
+      "Reopened",
     ];
     const requestedStatus = req.query.status;
     if (

@@ -962,6 +962,22 @@ export async function verifyPhoneOtpRequest({ phoneNumber, otp }, accessToken) {
   );
 }
 
+export async function rateComplaintRequest(
+  complaintId,
+  { rating, feedback },
+  accessToken,
+) {
+  return complaintRequest(
+    `/api/student/complaints/${encodeURIComponent(complaintId)}/csat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating, feedback }),
+    },
+    accessToken,
+  );
+}
+
 export async function verifyComplaintResolutionRequest(
   complaintId,
   { rating, feedback },
@@ -1014,6 +1030,26 @@ export async function getComplaintVerificationRequest(complaintId, accessToken) 
   return complaintRequest(
     `/api/student/complaints/${encodeURIComponent(complaintId)}/verification`,
     { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function getAdminAuditQueueRequest(accessToken) {
+  return complaintRequest(
+    "/api/admin/audit-queue",
+    { method: "GET" },
+    accessToken,
+  );
+}
+
+export async function resolveAdminAuditRequest(complaintId, note, accessToken) {
+  return complaintRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/audit`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    },
     accessToken,
   );
 }

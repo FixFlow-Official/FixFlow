@@ -18,7 +18,7 @@ export const categoryDepartments = {
 export const closedStatuses = ["Resolved", "Rejected", "Closed", "Withdrawn"];
 
 export const assignedFilterStatuses = {
-  current: ["Assigned", "Under_Review", "In_Progress", "On_Hold"],
+  current: ["Assigned", "Under_Review", "In_Progress", "On_Hold", "Reopened"],
   resolved: ["Resolved"],
   closed: ["Rejected", "Closed", "Withdrawn"],
 };
@@ -38,6 +38,7 @@ export const statusStyles = {
   In_Progress: "bg-blue-50 text-blue-700",
   On_Hold: "bg-orange-50 text-orange-800",
   Resolved: "bg-emerald-50 text-emerald-700",
+  Reopened: "bg-purple-100 text-purple-800 border border-purple-200",
   Rejected: "bg-rose-50 text-rose-700",
   Closed: "bg-slate-100 text-slate-700",
   Withdrawn: "bg-slate-100 text-slate-700",

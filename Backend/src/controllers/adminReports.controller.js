@@ -6,6 +6,7 @@ const reportActiveStatuses = [
   "Assigned",
   "In_Progress",
   "On_Hold",
+  "Reopened",
 ];
 
 // Aggregate complaint workflow metrics for the admin reports page.

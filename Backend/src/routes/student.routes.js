@@ -65,6 +65,16 @@ router.post(
 );
 
 /**
+ * @route api/student/complaints/:complaintId/csat
+ * @description student submits CSAT satisfaction rating (1-5) and feedback
+ */
+router.post(
+  "/complaints/:complaintId/csat",
+  verifyAccessToken,
+  studentController.submitCsat,
+);
+
+/**
  * @route api/student/complaints/:complaintId/reopen
  * @description student reopens inadequate repair with explanation and optional proof photo
  */

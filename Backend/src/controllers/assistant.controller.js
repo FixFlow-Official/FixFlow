@@ -212,6 +212,7 @@ async function previewComplaintTriage(req, res, next) {
             "Assigned",
             "In_Progress",
             "On_Hold",
+            "Reopened",
           ],
         },
         createdAt: { $gte: fromDate },

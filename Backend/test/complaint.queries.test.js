@@ -67,7 +67,7 @@ test("admin assigned endpoint applies server-side filters, ordering, and page bo
 
     const { capturedFilter, capturedQuery } = getCaptured();
     assert.equal(response.statusCode, 200);
-    assert.deepEqual(capturedFilter.status.$in, ["Assigned", "Under_Review", "In_Progress", "On_Hold"]);
+    assert.deepEqual(capturedFilter.status.$in, ["Assigned", "Under_Review", "In_Progress", "On_Hold", "Reopened"]);
     assert.equal(capturedQuery.skip, 6);
     assert.equal(capturedQuery.limit, 6);
     assert.deepEqual(capturedQuery.sort, { "aiTriage.priority": 1, createdAt: 1 });

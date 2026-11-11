@@ -13,7 +13,7 @@ import {
 
 test("complaint filters classify current, resolved, and other closed statuses", () => {
   assert.deepEqual(assignedFilterStatuses.current, [
-    "Assigned", "Under_Review", "In_Progress", "On_Hold",
+    "Assigned", "Under_Review", "In_Progress", "On_Hold", "Reopened",
   ]);
   assert.deepEqual(assignedFilterStatuses.resolved, ["Resolved"]);
   assert.deepEqual(assignedFilterStatuses.closed, ["Rejected", "Closed", "Withdrawn"]);

@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, useCallback } from "react";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
 import { ComplaintCardSkeleton } from "../components/common/SkeletonLoader.jsx";
 import UnassignedComplaintCard from "../features/admin/UnassignedComplaintCard.jsx";
 import AdminAssignedComplaintCard from "../features/admin/AdminAssignedComplaintCard.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
+import ComplaintStatusBadge from "../components/complaints/ComplaintStatusBadge.jsx";
 import {
   AlertCircle,
   ChartNoAxesColumn,
@@ -11,6 +12,9 @@ import {
   ClipboardList,
   LoaderCircle,
   MapPin,
+  RotateCcw,
+  ShieldAlert,
+  Star,
   Timer,
   Users,
   UserRound,
@@ -32,6 +36,8 @@ import {
   getStaffByDepartmentRequest,
   getUnassignedComplaintsRequest,
   reassignComplaintRequest,
+  getAdminAuditQueueRequest,
+  resolveAdminAuditRequest,
 } from "../services/api.js";
 
 const AdminReports = lazy(() => import("../features/admin/AdminReports.jsx"));
@@ -80,6 +86,13 @@ export default function AdminDashboardPage() {
   const [reassignStaffList, setReassignStaffList] = useState([]);
   const [loadingReassignStaff, setLoadingReassignStaff] = useState(false);
   const [reassigning, setReassigning] = useState(false);
+
+  const [auditComplaints, setAuditComplaints] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState("");
+  const [resolvingAuditId, setResolvingAuditId] = useState("");
+  const [auditNotes, setAuditNotes] = useState({});
+
   const { setScreenContext } = useAssistantContext();
 
   const selectedAssignedComplaint = assignedComplaints.find(
@@ -188,7 +201,42 @@ export default function AdminDashboardPage() {
   const queueCount =
     activeQueue === "unassigned"
       ? unassignedPagination?.total ?? 0
-      : assignedPagination?.total ?? 0;
+      : activeQueue === "assigned"
+        ? assignedPagination?.total ?? 0
+        : auditComplaints.length;
+
+  const loadAuditQueue = useCallback(async () => {
+    if (!accessToken) return;
+    setAuditLoading(true);
+    setAuditError("");
+    try {
+      const data = await getAdminAuditQueueRequest(accessToken);
+      setAuditComplaints(data.complaints || []);
+    } catch (err) {
+      setAuditError(err.message || "Failed to load audit queue.");
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    loadAuditQueue();
+  }, [loadAuditQueue, queueRefreshKey, assignedRefreshKey]);
+
+  async function handleResolveAudit(complaintId) {
+    setResolvingAuditId(complaintId);
+    setError("");
+    try {
+      const note = auditNotes[complaintId] || "Admin audit completed and approved.";
+      await resolveAdminAuditRequest(complaintId, note, accessToken);
+      setSuccessMessage("Complaint audit resolved successfully.");
+      setAuditComplaints((prev) => prev.filter((c) => c._id !== complaintId));
+    } catch (err) {
+      setError(err.message || "Could not resolve complaint audit.");
+    } finally {
+      setResolvingAuditId("");
+    }
+  }
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -553,12 +601,16 @@ export default function AdminDashboardPage() {
                 <h2 className="font-display text-xl font-bold">
                   {activeQueue === "unassigned"
                     ? "Unassigned complaints"
-                    : "Assigned complaints"}
+                    : activeQueue === "assigned"
+                      ? "Assigned complaints"
+                      : "Needs audit (low ratings & reopened)"}
                 </h2>
                 <p className="mt-1 text-sm leading-5 text-muted">
                   {activeQueue === "unassigned"
                     ? "Choose a department and staff member for each complaint."
-                    : "Track assigned complaints and see who is handling them."}
+                    : activeQueue === "assigned"
+                      ? "Track assigned complaints and see who is handling them."
+                      : "Review resolved complaints flagged with low ratings (1-2★) or reopened by students."}
                 </p>
               </div>
 
@@ -592,6 +644,27 @@ export default function AdminDashboardPage() {
                 }`}
               >
                 Assigned
+              </button>
+
+              <button
+                type="button"
+                onClick={() => changeQueue("audit")}
+                aria-pressed={activeQueue === "audit"}
+                className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold transition ${
+                  activeQueue === "audit"
+                    ? "bg-brand text-white"
+                    : "border border-line bg-white text-muted hover:bg-brand-soft hover:text-brand-dark"
+                }`}
+              >
+                <ShieldAlert size={15} />
+                <span>Needs audit</span>
+                {auditComplaints.length > 0 && (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    activeQueue === "audit" ? "bg-white text-brand" : "bg-rose-100 text-rose-700"
+                  }`}>
+                    {auditComplaints.length}
+                  </span>
+                )}
               </button>
             </div>
 
@@ -651,8 +724,110 @@ export default function AdminDashboardPage() {
             </p>
           )}
 
-          {/* Unassigned complaint queue */}
-          {activeQueue === "unassigned" ? (
+          {/* Complaint queues: audit, unassigned, or assigned */}
+          {activeQueue === "audit" ? (
+            auditLoading ? (
+              <div className="py-2">
+                <ComplaintCardSkeleton count={2} />
+              </div>
+            ) : auditError ? (
+              <p
+                role="alert"
+                className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-800"
+              >
+                {auditError}
+              </p>
+            ) : auditComplaints.length === 0 ? (
+              <ComplaintEmptyState
+                title="No complaints need audit"
+                description="Complaints flagged with low CSAT ratings (1-2★) or reopened by students will appear here."
+                className="rounded-2xl border border-dashed border-line bg-canvas/60 px-5 py-10 text-center"
+                titleClassName="font-display font-bold"
+                descriptionClassName="mt-1 text-sm text-muted"
+              />
+            ) : (
+              <div className="space-y-4">
+                {auditComplaints.map((item) => (
+                  <div
+                    key={item._id}
+                    className="overflow-hidden rounded-2xl border border-line bg-white p-4 shadow-sm sm:p-5"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ComplaintStatusBadge status={item.status} />
+                          <span className="rounded-md bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-600">
+                            {item.category}
+                          </span>
+                          {item.ticketNumber && (
+                            <span className="text-xs font-mono font-bold text-muted">
+                              #{item.ticketNumber}
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="mt-2 text-base font-bold text-ink">
+                          {item.complaintTitle}
+                        </h3>
+
+                        <p className="mt-1 text-xs text-muted">
+                          {item.location?.building} {item.location?.room ? `· Room ${item.location.room}` : ""} · Student: <span className="font-semibold text-ink">{item.userSnapshot?.name || item.user?.username || "Student"}</span>
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <div className="flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 border border-amber-200">
+                            <Star size={13} className="fill-amber-400 text-amber-400" />
+                            <span>CSAT Rating: {item.csatRating ?? "—"}/5</span>
+                          </div>
+                          {item.status === "Reopened" && (
+                            <div className="flex items-center gap-1 rounded-lg bg-purple-50 px-2.5 py-1 text-xs font-bold text-purple-800 border border-purple-200">
+                              <RotateCcw size={13} />
+                              <span>Reopened (x{item.reopenedCount || 1})</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {item.csatFeedback && (
+                          <p className="mt-2 text-xs italic text-slate-700 bg-stone-50 p-2.5 rounded-xl border border-line">
+                            Student feedback: "{item.csatFeedback}"
+                          </p>
+                        )}
+
+                        {item.reopenReason && (
+                          <p className="mt-2 text-xs text-purple-950 bg-purple-50/70 p-2.5 rounded-xl border border-purple-100">
+                            Reopen reason: <span className="font-semibold">{item.reopenReason}</span>
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-2 shrink-0 w-full sm:w-64">
+                        <input
+                          type="text"
+                          placeholder="Audit resolution note (optional)"
+                          value={auditNotes[item._id] || ""}
+                          onChange={(e) => setAuditNotes((prev) => ({ ...prev, [item._id]: e.target.value }))}
+                          className="min-h-9 rounded-xl border border-line px-3 text-xs text-ink placeholder:text-muted focus:border-brand focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          disabled={resolvingAuditId === item._id}
+                          onClick={() => handleResolveAudit(item._id)}
+                          className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold text-white shadow-xs transition hover:bg-brand-dark active:scale-95 disabled:opacity-50 cursor-pointer"
+                        >
+                          {resolvingAuditId === item._id ? (
+                            <LoaderCircle size={14} className="animate-spin" />
+                          ) : (
+                            <CheckCircle2 size={14} />
+                          )}
+                          <span>Resolve audit</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : activeQueue === "unassigned" ? (
             loading ? (
               <div className="py-2">
                 <ComplaintCardSkeleton count={3} />
@@ -753,12 +928,12 @@ export default function AdminDashboardPage() {
               pagination={assignedPagination}
               onPageChange={setAssignedPage}
             />
-          ) : (
+          ) : activeQueue === "unassigned" ? (
             <ComplaintPagination
               pagination={unassignedPagination}
               onPageChange={setUnassignedPage}
             />
-          )}
+          ) : null}
         </section>
       </main>
       )}

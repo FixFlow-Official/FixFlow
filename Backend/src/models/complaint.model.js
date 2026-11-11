@@ -7,6 +7,7 @@ const complaintStatuses = [
   "In_Progress",
   "On_Hold",
   "Resolved",
+  "Reopened",
   "Rejected",
   "Closed",
   "Withdrawn",
@@ -78,6 +79,10 @@ const complaintSchema = new mongoose.Schema(
       default: null,
     },
     resolutionVerified: {
+      type: Boolean,
+      default: false,
+    },
+    adminAuditRequired: {
       type: Boolean,
       default: false,
     },

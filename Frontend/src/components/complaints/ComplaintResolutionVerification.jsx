@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
   Camera,
   CheckCircle2,
+  Clock3,
   LoaderCircle,
   RotateCcw,
+  ShieldAlert,
   Star,
   ThumbsUp,
 } from "lucide-react";
 import {
+  rateComplaintRequest,
   reopenComplaintRequest,
-  verifyComplaintResolutionRequest,
 } from "../../services/api.js";
 
 const STAR_LABELS = {
@@ -33,95 +35,101 @@ export default function ComplaintResolutionVerification({
   const [reopenMode, setReopenMode] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [reopenImage, setReopenImage] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [busyRating, setBusyRating] = useState(false);
+  const [busyReopen, setBusyReopen] = useState(false);
+  const [ratingError, setRatingError] = useState("");
+  const [reopenError, setReopenError] = useState("");
+  const [submittedMessage, setSubmittedMessage] = useState("");
+  const [now, setNow] = useState(Date.now());
 
-  if (!complaint || (complaint.status !== "Resolved" && !complaint.reopenedCount)) {
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!complaint || (complaint.status !== "Resolved" && complaint.status !== "Reopened" && !complaint.reopenedCount)) {
     return null;
   }
 
-  // Already verified view
-  if (complaint.resolutionVerified) {
+  // Reopened state view
+  if (complaint.status === "Reopened" || (complaint.reopenedCount > 0 && complaint.status !== "Resolved")) {
     return (
-      <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50/70 p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 text-emerald-800">
-            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+      <div className="mt-4 rounded-2xl border border-purple-200 bg-purple-50/80 p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-purple-900">
+            <RotateCcw size={18} className="text-purple-600 shrink-0" />
             <h4 className="font-display text-sm font-bold">
-              Resolution Verified by Student
+              Ticket Reopened {complaint.reopenedCount ? `(Re-open #${complaint.reopenedCount})` : ""}
             </h4>
           </div>
-          <div className="flex items-center gap-1 text-amber-500">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <Star
-                key={star}
-                size={14}
-                className={star <= (complaint.csatRating || 5) ? "fill-amber-400 text-amber-400" : "text-stone-300"}
-              />
-            ))}
-            <span className="ml-1 text-xs font-bold text-ink">
-              {complaint.csatRating || 5}/5
-            </span>
-          </div>
-        </div>
-        {complaint.csatFeedback && (
-          <p className="mt-2 text-xs italic text-emerald-900 leading-relaxed bg-white/70 p-2.5 rounded-xl border border-emerald-100">
-            "{complaint.csatFeedback}"
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  // Reopened status indicator banner
-  if (complaint.reopenedCount > 0 && complaint.status !== "Resolved") {
-    return (
-      <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50/70 p-4">
-        <div className="flex items-center gap-2 text-amber-800">
-          <AlertTriangle size={18} className="text-amber-600 shrink-0" />
-          <h4 className="font-display text-sm font-bold">
-            Reopened Ticket (Re-open #{complaint.reopenedCount})
-          </h4>
+          <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800 border border-purple-200">
+            Reopened
+          </span>
         </div>
         {complaint.reopenReason && (
-          <p className="mt-1.5 text-xs text-amber-900">
-            Reason: <span className="font-semibold">{complaint.reopenReason}</span>
-          </p>
+          <div className="mt-2.5 rounded-xl border border-purple-100 bg-white/80 p-3 text-xs leading-relaxed text-purple-950">
+            <span className="font-bold text-purple-900">Reason: </span>
+            {complaint.reopenReason}
+          </div>
         )}
       </div>
     );
   }
 
-  async function handleVerify(e) {
+  // Calculate 48h reopen window
+  const resolvedAtTime = complaint.resolvedAt
+    ? new Date(complaint.resolvedAt).getTime()
+    : (complaint.updatedAt ? new Date(complaint.updatedAt).getTime() : now);
+  const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
+  const reopenDeadline = resolvedAtTime + FORTY_EIGHT_HOURS_MS;
+  const remainingMs = reopenDeadline - now;
+  const isReopenExpired = remainingMs <= 0;
+
+  const hoursRemaining = Math.max(0, Math.floor(remainingMs / (1000 * 60 * 60)));
+  const minutesRemaining = Math.max(0, Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60)));
+  const countdownText = isReopenExpired
+    ? "Reopen window expired."
+    : `Reopen available for ${hoursRemaining}h ${minutesRemaining}m`;
+
+  const hasRated = complaint.csatRating != null || Boolean(submittedMessage);
+  const currentRatingValue = complaint.csatRating ?? rating;
+  const showAuditNotice = (complaint.csatRating != null && complaint.csatRating <= 2) || (hasRated && rating <= 2) || complaint.adminAuditRequired;
+
+  async function handleRatingSubmit(e) {
     e.preventDefault();
-    setError("");
-    setBusy(true);
+    setRatingError("");
+    setBusyRating(true);
 
     try {
-      const res = await verifyComplaintResolutionRequest(
+      const res = await rateComplaintRequest(
         complaint._id,
         { rating, feedback },
         accessToken,
       );
-      setSuccess("Thank you! Your rating and verification have been recorded.");
-      onUpdate?.(res.complaint || { ...complaint, resolutionVerified: true, csatRating: rating, csatFeedback: feedback });
+      setSubmittedMessage("Thanks — your rating was recorded.");
+      onUpdate?.(res.complaint || {
+        ...complaint,
+        csatRating: rating,
+        csatFeedback: feedback,
+        adminAuditRequired: rating <= 2,
+        resolutionVerified: true,
+      });
     } catch (err) {
-      setError(err.message || "Failed to verify resolution.");
+      setRatingError(err.message || "Could not record your rating.");
     } finally {
-      setBusy(false);
+      setBusyRating(false);
     }
   }
 
-  async function handleReopen(e) {
+  async function handleReopenSubmit(e) {
     e.preventDefault();
     if (!reopenReason.trim()) {
-      setError("Please describe why this issue is not resolved.");
+      setReopenError("Please describe why this issue is not resolved.");
       return;
     }
 
-    setError("");
-    setBusy(true);
+    setReopenError("");
+    setBusyReopen(true);
 
     try {
       const res = await reopenComplaintRequest(
@@ -129,175 +137,242 @@ export default function ComplaintResolutionVerification({
         { reason: reopenReason, imageFile: reopenImage },
         accessToken,
       );
-      setSuccess("Issue reopened! Maintenance staff has been alerted.");
-      onUpdate?.(res.complaint || { ...complaint, status: "In_Progress", reopenedCount: (complaint.reopenedCount || 0) + 1, reopenReason });
+      onUpdate?.(res.complaint || {
+        ...complaint,
+        status: "Reopened",
+        reopenedCount: (complaint.reopenedCount || 0) + 1,
+        reopenReason,
+        csatRating: null,
+        resolutionVerified: false,
+      });
+      setReopenMode(false);
     } catch (err) {
-      setError(err.message || "Failed to reopen ticket.");
+      setReopenError(err.message || "Failed to reopen ticket.");
     } finally {
-      setBusy(false);
+      setBusyReopen(false);
     }
   }
 
   return (
-    <div className="mt-5 overflow-hidden rounded-2xl border-2 border-brand/20 bg-gradient-to-b from-white to-brand-soft/20 p-4 sm:p-5 shadow-sm">
-      {success ? (
-        <div className="flex items-center gap-2 text-sm font-bold text-emerald-800">
-          <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-          <span>{success}</span>
-        </div>
-      ) : reopenMode ? (
-        <form onSubmit={handleReopen} className="space-y-3">
-          <div className="flex items-center justify-between border-b border-line pb-2">
-            <div className="flex items-center gap-2 text-rose-700">
-              <RotateCcw size={16} />
-              <h4 className="font-display text-sm font-bold text-ink">
-                Reopen Unresolved Issue
-              </h4>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setReopenMode(false);
-                setError("");
-              }}
-              className="text-xs font-semibold text-muted hover:text-ink"
-            >
-              Cancel
-            </button>
-          </div>
-
-          <p className="text-xs text-muted leading-relaxed">
-            Explain what is still broken. The ticket will immediately return to <strong>In Progress</strong> and alert staff.
-          </p>
-
+    <div className="mt-5 space-y-3">
+      {/* 1. CSAT Rating Card */}
+      <div className="overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-b from-white to-brand-soft/20 p-4 sm:p-5 shadow-xs">
+        {hasRated ? (
           <div>
-            <textarea
-              required
-              rows={3}
-              value={reopenReason}
-              onChange={(e) => setReopenReason(e.target.value)}
-              placeholder="e.g. The AC fan spins but still blows warm air; cooling is still not working."
-              className="w-full rounded-xl border border-line p-3 text-xs text-ink outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15"
-            />
-          </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-emerald-800">
+                <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                <h4 className="font-display text-sm font-bold">
+                  {submittedMessage || "Thanks — your rating was recorded."}
+                </h4>
+              </div>
+              <div className="flex items-center gap-1 text-amber-500">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    size={16}
+                    className={star <= currentRatingValue ? "fill-amber-400 text-amber-400" : "text-stone-300"}
+                  />
+                ))}
+                <span className="ml-1 text-xs font-bold text-ink">
+                  {currentRatingValue}/5
+                </span>
+              </div>
+            </div>
 
-          {/* Optional Proof Photo */}
-          <div className="flex items-center gap-3">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink shadow-xs hover:bg-canvas">
-              <Camera size={13} className="text-muted" />
-              {reopenImage ? "Photo attached" : "Attach Proof Photo (Optional)"}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setReopenImage(e.target.files?.[0] || null)}
-                className="sr-only"
-              />
-            </label>
-            {reopenImage && (
-              <span className="text-[11px] font-semibold text-emerald-700">
-                ✓ {reopenImage.name}
-              </span>
+            {(complaint.csatFeedback || feedback) && (
+              <p className="mt-2.5 text-xs italic text-slate-700 bg-white/80 p-2.5 rounded-xl border border-line">
+                "{complaint.csatFeedback || feedback}"
+              </p>
+            )}
+
+            {showAuditNotice && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs font-semibold text-amber-900">
+                <ShieldAlert size={16} className="text-amber-600 shrink-0" />
+                <span>Flagged for admin audit.</span>
+              </div>
             )}
           </div>
-
-          {error && (
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-600">
-              <AlertCircle size={14} />
-              <span>{error}</span>
+        ) : (
+          <form onSubmit={handleRatingSubmit} className="space-y-3">
+            <div className="flex items-center gap-2 text-brand">
+              <ThumbsUp size={16} />
+              <h4 className="font-display text-sm font-bold text-ink">
+                Rate Resolution Satisfaction
+              </h4>
             </div>
-          )}
 
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-rose-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 active:scale-95 disabled:opacity-50"
+            <p className="text-xs text-muted leading-relaxed">
+              Campus staff marked this complaint resolved. Rate the fix quality below to close out the request.
+            </p>
+
+            {/* Accessible 5-star rating control */}
+            <div
+              className="flex items-center gap-1.5 py-1"
+              role="radiogroup"
+              aria-label="Resolution satisfaction rating from 1 to 5 stars"
             >
-              {busy ? <LoaderCircle size={14} className="animate-spin" /> : <RotateCcw size={13} />}
-              Confirm & Reopen Issue
-            </button>
-          </div>
-        </form>
-      ) : (
-        <form onSubmit={handleVerify} className="space-y-3">
-          <div className="flex items-center gap-2 text-brand">
-            <ThumbsUp size={16} />
-            <h4 className="font-display text-sm font-bold text-ink">
-              Is it working now? Verify the repair
-            </h4>
-          </div>
-
-          <p className="text-xs text-muted leading-relaxed">
-            Campus staff marked this complaint resolved. Rate the fix quality below to close out the request.
-          </p>
-
-          {/* Interactive Star Rating */}
-          <div className="flex items-center gap-1.5 py-1">
-            {[1, 2, 3, 4, 5].map((star) => {
-              const active = star <= (hoverRating || rating);
-              return (
-                <button
-                  key={star}
-                  type="button"
-                  onMouseEnter={() => setHoverRating(star)}
-                  onMouseLeave={() => setHoverRating(0)}
-                  onClick={() => setRating(star)}
-                  className="rounded-lg p-1 text-stone-300 transition hover:scale-110 active:scale-95"
-                  aria-label={`Rate ${star} star`}
-                >
-                  <Star
-                    size={24}
-                    className={active ? "fill-amber-400 text-amber-400" : "text-stone-300"}
-                  />
-                </button>
-              );
-            })}
-            <span className="ml-2 text-xs font-bold text-ink">
-              {STAR_LABELS[hoverRating || rating]}
-            </span>
-          </div>
-
-          <div>
-            <input
-              type="text"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              placeholder="Leave feedback for maintenance staff (optional)"
-              className="w-full rounded-xl border border-line px-3 py-2 text-xs text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/15"
-            />
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-600">
-              <AlertCircle size={14} />
-              <span>{error}</span>
+              {[1, 2, 3, 4, 5].map((star) => {
+                const active = star <= (hoverRating || rating);
+                return (
+                  <button
+                    key={star}
+                    type="button"
+                    role="radio"
+                    aria-checked={rating === star}
+                    aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    onFocus={() => setHoverRating(star)}
+                    onBlur={() => setHoverRating(0)}
+                    onClick={() => setRating(star)}
+                    className="rounded-lg p-1 text-stone-300 transition hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-brand"
+                  >
+                    <Star
+                      size={24}
+                      className={active ? "fill-amber-400 text-amber-400" : "text-stone-300"}
+                    />
+                  </button>
+                );
+              })}
+              <span className="ml-2 text-xs font-bold text-ink">
+                {STAR_LABELS[hoverRating || rating]}
+              </span>
             </div>
-          )}
 
-          <div className="flex flex-wrap items-center gap-2.5 pt-1">
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold text-white shadow-sm transition hover:bg-brand-dark active:scale-95 disabled:opacity-50"
-            >
-              {busy ? <LoaderCircle size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-              Yes, Fix Verified ({rating}★)
-            </button>
+            <div>
+              <input
+                type="text"
+                maxLength={1000}
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Leave feedback for maintenance staff (optional)"
+                className="w-full rounded-xl border border-line bg-white px-3 py-2 text-xs text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/15"
+              />
+            </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setReopenMode(true);
-                setError("");
-              }}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/50 px-3.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 active:scale-95"
-            >
-              <RotateCcw size={13} />
-              No, Issue Still Exists (Reopen)
-            </button>
+            {ratingError && (
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-600">
+                <AlertCircle size={14} />
+                <span>{ratingError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={busyRating}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold text-white shadow-xs transition hover:bg-brand-dark active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {busyRating ? <LoaderCircle size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                Submit rating
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* 2. 48-Hour Reopen Card */}
+      <div className="rounded-2xl border border-line bg-white p-4 shadow-xs">
+        {reopenMode ? (
+          <form onSubmit={handleReopenSubmit} className="space-y-3">
+            <div className="flex items-center justify-between border-b border-line pb-2">
+              <div className="flex items-center gap-2 text-rose-700">
+                <RotateCcw size={16} />
+                <h4 className="font-display text-sm font-bold text-ink">
+                  Reopen Unresolved Ticket
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReopenMode(false);
+                  setReopenError("");
+                }}
+                className="text-xs font-semibold text-muted hover:text-ink cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <p className="text-xs text-muted leading-relaxed">
+              Explain why this issue is not resolved. The ticket will change to <strong>Reopened</strong> and alert maintenance staff and administrators.
+            </p>
+
+            <div>
+              <textarea
+                required
+                rows={3}
+                maxLength={1000}
+                value={reopenReason}
+                onChange={(e) => setReopenReason(e.target.value)}
+                placeholder="e.g. The AC fan spins but still blows warm air; cooling is still not working."
+                className="w-full rounded-xl border border-line p-3 text-xs text-ink outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15"
+              />
+            </div>
+
+            {/* Optional Proof Photo */}
+            <div className="flex items-center gap-3">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink shadow-2xs hover:bg-canvas">
+                <Camera size={13} className="text-muted" />
+                {reopenImage ? "Photo attached" : "Attach Proof Photo (Optional)"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setReopenImage(e.target.files?.[0] || null)}
+                  className="sr-only"
+                />
+              </label>
+              {reopenImage && (
+                <span className="text-[11px] font-semibold text-emerald-700">
+                  ✓ {reopenImage.name}
+                </span>
+              )}
+            </div>
+
+            {reopenError && (
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-600">
+                <AlertCircle size={14} />
+                <span>{reopenError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={busyReopen}
+                className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-rose-600 px-4 text-xs font-bold text-white shadow-xs transition hover:bg-rose-700 active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {busyReopen ? <LoaderCircle size={14} className="animate-spin" /> : <RotateCcw size={13} />}
+                Confirm reopen
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted">
+              <Clock3 size={15} className={isReopenExpired ? "text-stone-400" : "text-amber-600"} />
+              <span className={isReopenExpired ? "text-stone-500 font-semibold" : "text-amber-800 font-semibold"}>
+                {countdownText}
+              </span>
+            </div>
+
+            {!isReopenExpired && (
+              <button
+                type="button"
+                onClick={() => {
+                  setReopenMode(true);
+                  setReopenError("");
+                }}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/70 px-3.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 active:scale-95 cursor-pointer"
+              >
+                <RotateCcw size={13} />
+                Reopen ticket
+              </button>
+            )}
           </div>
-        </form>
-      )}
+        )}
+      </div>
     </div>
   );
 }

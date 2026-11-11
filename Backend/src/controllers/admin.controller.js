@@ -21,6 +21,7 @@ const currentAssignedStatuses = [
   "Under_Review",
   "In_Progress",
   "On_Hold",
+  "Reopened",
 ];
 const resolvedAssignedStatuses = ["Resolved"];
 const closedAssignedStatuses = ["Rejected", "Closed", "Withdrawn"];
@@ -926,6 +927,73 @@ async function verifyOverrideComplaint(req, res) {
   }
 }
 
+// GET /api/admin/audit-queue
+// complaints where adminAuditRequired=true AND status in Resolved/Reopened, sorted by resolvedAt desc
+async function getAuditQueue(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({ message: "Only administrators can view the audit queue." });
+  }
+
+  try {
+    const complaints = await complaintModel
+      .find({
+        adminAuditRequired: true,
+        status: { $in: ["Resolved", "Reopened"] },
+      })
+      .populate("user", "username rollno email")
+      .populate("assignedStaff", "username staffId department")
+      .populate("resolvedBy", "username staffId department")
+      .sort({ resolvedAt: -1, updatedAt: -1 })
+      .lean();
+
+    return res.status(200).json({ complaints });
+  } catch (err) {
+    console.error("getAuditQueue failed", { requestId: req.requestId, error: err });
+    return res.status(500).json({ message: "Could not load audit queue." });
+  }
+}
+
+// PATCH /api/admin/complaints/:complaintId/audit
+// clears adminAuditRequired with an admin note in statusHistory
+async function resolveComplaintAudit(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({ message: "Only administrators can audit complaints." });
+  }
+
+  const { complaintId } = req.params;
+  const note = (req.body?.note || "").trim() || "Admin audit completed and approved.";
+
+  try {
+    const complaint = await complaintModel.findById(complaintId);
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found." });
+    }
+
+    complaint.adminAuditRequired = false;
+    complaint.statusHistory.push({
+      status: complaint.status,
+      note: `Admin audit resolved: ${note}`.slice(0, 500),
+      changedBy: req.auth.id,
+      changedByRole: "admin",
+      changedBySnapshot: {
+        name: req.auth.name || "Administrator",
+        campusId: req.auth.campusId || "",
+      },
+      changedAt: new Date(),
+    });
+
+    await complaint.save();
+
+    return res.status(200).json({
+      message: "Complaint audit resolved.",
+      complaint,
+    });
+  } catch (err) {
+    console.error("resolveComplaintAudit failed", { requestId: req.requestId, error: err });
+    return res.status(500).json({ message: "Could not resolve complaint audit." });
+  }
+}
+
 module.exports = {
   getUnassignedComplaints,
   getStaffByDepartment,
@@ -938,4 +1006,6 @@ module.exports = {
   addUserToDirectoryByAdmin,
   deleteUserByAdmin,
   verifyOverrideComplaint,
+  getAuditQueue,
+  resolveComplaintAudit,
 };

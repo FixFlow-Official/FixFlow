@@ -8,6 +8,7 @@ const activeComplaintStatuses = [
   "Assigned",
   "In_Progress",
   "On_Hold",
+  "Reopened",
 ];
 
 // Ensure default Pt. CLS Govt College Karnal preset exists if database is empty

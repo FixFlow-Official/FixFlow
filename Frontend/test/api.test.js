@@ -13,7 +13,10 @@ import {
   diagnoseComplaintImageRequest,
   formatStaffVoiceNoteRequest,
   verifyComplaintResolutionRequest,
+  rateComplaintRequest,
   reopenComplaintRequest,
+  getAdminAuditQueueRequest,
+  resolveAdminAuditRequest,
   getTrendingComplaintsRequest,
 } from "../src/services/api.js";
 
@@ -378,8 +381,56 @@ test("reopenComplaintRequest submits reopen reason and updates complaint status"
 
   assert.equal(capturedUrl, "/api/student/complaints/c123/reopen");
   assert.equal(capturedMethod, "POST");
-  assert.equal(res.complaint.status, "In_Progress");
   assert.equal(res.complaint.reopenedCount, 1);
+});
+
+test("rateComplaintRequest posts CSAT rating and feedback to /api/student/complaints/:id/csat", async (t) => {
+  let capturedUrl;
+  let capturedMethod;
+  let capturedBody;
+  mockFetch(t, async (url, options) => {
+    capturedUrl = url;
+    capturedMethod = options.method;
+    capturedBody = JSON.parse(options.body);
+    return jsonResponse({
+      message: "Thank you for your feedback.",
+      complaint: { _id: "c123", csatRating: 5, csatFeedback: "Excellent fix!" },
+    });
+  });
+
+  const res = await rateComplaintRequest(
+    "c123",
+    { rating: 5, feedback: "Excellent fix!" },
+    "student-jwt",
+  );
+
+  assert.equal(capturedUrl, "/api/student/complaints/c123/csat");
+  assert.equal(capturedMethod, "POST");
+  assert.equal(capturedBody.rating, 5);
+  assert.equal(capturedBody.feedback, "Excellent fix!");
+  assert.equal(res.complaint.csatRating, 5);
+});
+
+test("getAdminAuditQueueRequest and resolveAdminAuditRequest call admin audit endpoints", async (t) => {
+  let calls = [];
+  mockFetch(t, async (url, options) => {
+    calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : null });
+    if (options.method === "GET") {
+      return jsonResponse({ complaints: [{ _id: "c123", adminAuditRequired: true }] });
+    }
+    return jsonResponse({ message: "Audit resolved.", complaint: { _id: "c123", adminAuditRequired: false } });
+  });
+
+  const queueRes = await getAdminAuditQueueRequest("admin-jwt");
+  assert.equal(calls[0].url, "/api/admin/audit-queue");
+  assert.equal(calls[0].method, "GET");
+  assert.equal(queueRes.complaints.length, 1);
+
+  const resolveRes = await resolveAdminAuditRequest("c123", "Inspected and verified.", "admin-jwt");
+  assert.equal(calls[1].url, "/api/admin/complaints/c123/audit");
+  assert.equal(calls[1].method, "PATCH");
+  assert.equal(calls[1].body.note, "Inspected and verified.");
+  assert.equal(resolveRes.complaint.adminAuditRequired, false);
 });
 
 test("getTrendingComplaintsRequest fetches active campus complaints sorted by votes", async (t) => {
