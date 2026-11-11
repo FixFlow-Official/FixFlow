@@ -45,6 +45,18 @@ const staffSchema = new mongoose.Schema({
     trim: true,
     default: null,
   },
+  phoneNumberVerified: {
+    type: Boolean,
+    default: false,
+  },
+  smsNotificationsEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  whatsAppNotificationsEnabled: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 staffSchema.index({ username: 1, _id: 1 });

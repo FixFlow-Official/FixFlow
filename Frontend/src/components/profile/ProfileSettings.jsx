@@ -6,8 +6,10 @@ import {
   KeyRound,
   LoaderCircle,
   Phone,
+  RefreshCw,
   Save,
   ShieldCheck,
+  Smartphone,
   Trash2,
   UserRound,
   X,
@@ -15,7 +17,9 @@ import {
 import { useAuth } from "../../context/useAuth.js";
 import {
   changeMyPasswordRequest,
+  requestPhoneOtpRequest,
   updateMyProfileRequest,
+  verifyPhoneOtpRequest,
 } from "../../services/api.js";
 
 const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -46,8 +50,15 @@ export default function ProfileSettings() {
   const previewUrlRef = useRef("");
   const [username, setUsername] = useState(user?.username || "");
   const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "");
-  const [smsNotificationsEnabled, setSmsNotificationsEnabled] = useState(user?.smsNotificationsEnabled ?? true);
   const [whatsAppNotificationsEnabled, setWhatsAppNotificationsEnabled] = useState(user?.whatsAppNotificationsEnabled ?? true);
+  const [phoneOtpMode, setPhoneOtpMode] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSecondsLeft, setOtpSecondsLeft] = useState(0);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [otpSuccess, setOtpSuccess] = useState("");
+  const [editingPhone, setEditingPhone] = useState(!user?.phoneNumber || !user?.phoneNumberVerified);
   const [profilePicture, setProfilePicture] = useState(null);
   const [photoPreview, setPhotoPreview] = useState("");
   const [removeProfilePicture, setRemoveProfilePicture] = useState(false);
@@ -66,6 +77,60 @@ export default function ProfileSettings() {
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
   }, []);
+
+  useEffect(() => {
+    if (otpSecondsLeft <= 0) return undefined;
+    const interval = setInterval(() => {
+      setOtpSecondsLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [otpSecondsLeft]);
+
+  async function handleSendOtp() {
+    setOtpError("");
+    setOtpSuccess("");
+    const digits = (phoneNumber.match(/\d/g) || []).length;
+    if (digits < 10 || digits > 15) {
+      setOtpError("Enter a valid mobile number with 10–15 digits (e.g. +91 98765 43210).");
+      return;
+    }
+    setOtpSending(true);
+    try {
+      const res = await requestPhoneOtpRequest({ phoneNumber }, accessToken);
+      setPhoneOtpMode(true);
+      setPhoneNumber(res.phoneNumber || phoneNumber);
+      setOtpSecondsLeft(res.retryAfterSeconds || 60);
+      setOtpSuccess(res.message || "WhatsApp verification code sent successfully!");
+    } catch (err) {
+      setOtpError(err.message || "Failed to send WhatsApp verification code.");
+    } finally {
+      setOtpSending(false);
+    }
+  }
+
+  async function handleVerifyOtp(e) {
+    e?.preventDefault();
+    setOtpError("");
+    setOtpSuccess("");
+    if (!/^\d{6}$/.test(otpCode.trim())) {
+      setOtpError("Please enter the 6-digit verification code.");
+      return;
+    }
+    setOtpVerifying(true);
+    try {
+      const res = await verifyPhoneOtpRequest({ phoneNumber, otp: otpCode.trim() }, accessToken);
+      setUser(res.user);
+      setPhoneNumber(res.user.phoneNumber || phoneNumber);
+      setPhoneOtpMode(false);
+      setEditingPhone(false);
+      setOtpCode("");
+      setOtpSuccess(res.message || "WhatsApp number linked successfully!");
+    } catch (err) {
+      setOtpError(err.message || "Invalid or expired code.");
+    } finally {
+      setOtpVerifying(false);
+    }
+  }
 
   function selectPhoto(event) {
     const file = event.target.files?.[0];
@@ -100,7 +165,6 @@ export default function ProfileSettings() {
           profilePicture,
           removeProfilePicture,
           phoneNumber,
-          smsNotificationsEnabled,
           whatsAppNotificationsEnabled,
         },
         accessToken,
@@ -108,7 +172,6 @@ export default function ProfileSettings() {
       setUser(result.user);
       setUsername(result.user.username || "");
       setPhoneNumber(result.user.phoneNumber || "");
-      setSmsNotificationsEnabled(result.user.smsNotificationsEnabled ?? true);
       setWhatsAppNotificationsEnabled(result.user.whatsAppNotificationsEnabled ?? true);
       setProfilePicture(null);
       setRemoveProfilePicture(false);
@@ -202,30 +265,148 @@ export default function ProfileSettings() {
           </div>
 
           <div className="mt-5 rounded-2xl border border-line bg-canvas/40 p-4 sm:p-5">
-            <div className="flex items-center gap-2 text-ink">
-              <Phone size={18} className="text-brand" />
-              <h3 className="font-display text-sm font-bold">
-                WhatsApp & SMS Timeline Updates
-              </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-ink">
+                <Phone size={18} className="text-emerald-600" />
+                <h3 className="font-display text-sm font-bold">
+                  WhatsApp Timeline Updates
+                </h3>
+              </div>
+              {user?.phoneNumber && user?.phoneNumberVerified && !editingPhone && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                  <CheckCircle2 size={13} className="text-emerald-600" />
+                  Verified WhatsApp Number
+                </span>
+              )}
             </div>
+
             <p className="mt-1 text-xs text-muted leading-relaxed">
-              Receive instant lightweight status updates directly on WhatsApp and SMS (e.g. technician assignment, parts ordered, fix ready).
+              Link your mobile number with a 6-digit OTP to receive instant repair updates, technician acceptance notes, and 1-click reopen alerts on WhatsApp.
             </p>
 
-            <div className="mt-3">
-              <label htmlFor="profile-phone" className="block text-xs font-semibold text-muted">
-                Mobile Number (with country code)
-              </label>
-              <input
-                id="profile-phone"
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="+91 98765 43210"
-                maxLength={20}
-                className="mt-1 min-h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
-              />
-            </div>
+            {/* Display State: Verified */}
+            {user?.phoneNumber && user?.phoneNumberVerified && !editingPhone ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-white p-3.5 shadow-2xs">
+                <div>
+                  <span className="text-[11px] font-semibold text-muted">Linked WhatsApp Number</span>
+                  <p className="font-mono text-sm font-bold text-ink">{user.phoneNumber}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingPhone(true);
+                    setPhoneOtpMode(false);
+                    setOtpError("");
+                    setOtpSuccess("");
+                  }}
+                  className="rounded-lg border border-line bg-canvas px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-brand hover:text-brand"
+                >
+                  Change Number
+                </button>
+              </div>
+            ) : (
+              /* Edit & OTP Verification Form */
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label htmlFor="profile-phone" className="block text-xs font-semibold text-muted">
+                    Mobile Number (with country code)
+                  </label>
+                  <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      id="profile-phone"
+                      type="tel"
+                      value={phoneNumber}
+                      disabled={phoneOtpMode}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      maxLength={20}
+                      className="min-h-10 flex-1 rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:bg-slate-100"
+                    />
+                    {!phoneOtpMode && (
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={otpSending || !phoneNumber.trim()}
+                        className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700 active:scale-95 disabled:opacity-50"
+                      >
+                        {otpSending ? <LoaderCircle size={14} className="animate-spin" /> : <Smartphone size={14} />}
+                        Send WhatsApp OTP
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* OTP Input Card */}
+                {phoneOtpMode && (
+                  <div className="rounded-xl border border-brand/30 bg-white p-4 shadow-sm animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-brand-dark">
+                        Enter 6-Digit WhatsApp Verification Code
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">
+                      Verification code sent via <strong className="text-ink">WhatsApp</strong> to <strong className="text-ink">{phoneNumber}</strong>.
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="123456"
+                        className="min-h-10 w-full rounded-xl border-2 border-brand/40 px-3 text-center font-mono text-base font-bold tracking-[0.3em] text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 sm:w-36"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyOtp}
+                        disabled={otpVerifying || otpCode.length !== 6}
+                        className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700 active:scale-95 disabled:opacity-50 sm:flex-none"
+                      >
+                        {otpVerifying ? <LoaderCircle size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                        Verify &amp; Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={otpSecondsLeft > 0 || otpSending}
+                        className="inline-flex min-h-10 flex-1 items-center justify-center gap-1 rounded-xl border border-line bg-canvas px-3 text-xs font-semibold text-ink transition hover:bg-slate-100 disabled:opacity-50 sm:flex-none"
+                      >
+                        <RefreshCw size={12} className={otpSending ? "animate-spin" : ""} />
+                        <span>{otpSecondsLeft > 0 ? `Resend (${otpSecondsLeft}s)` : "Resend Code"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhoneOtpMode(false);
+                          setOtpError("");
+                          setOtpSuccess("");
+                        }}
+                        className="min-h-10 px-2 text-xs text-muted hover:text-ink"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {otpError && (
+              <p role="alert" className="mt-3 flex items-start gap-1.5 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs font-semibold text-rose-800">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                {otpError}
+              </p>
+            )}
+
+            {otpSuccess && (
+              <p role="status" className="mt-3 flex items-start gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-xs font-semibold text-emerald-800">
+                <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+                {otpSuccess}
+              </p>
+            )}
 
             <div className="mt-3 flex flex-wrap gap-4 text-xs font-semibold text-ink">
               <label className="inline-flex cursor-pointer items-center gap-2">
@@ -235,17 +416,7 @@ export default function ProfileSettings() {
                   onChange={(e) => setWhatsAppNotificationsEnabled(e.target.checked)}
                   className="size-4 rounded border-line text-emerald-700 accent-emerald-700"
                 />
-                <span>WhatsApp status alerts (98% read rate)</span>
-              </label>
-
-              <label className="inline-flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={smsNotificationsEnabled}
-                  onChange={(e) => setSmsNotificationsEnabled(e.target.checked)}
-                  className="size-4 rounded border-line text-brand accent-brand"
-                />
-                <span>SMS updates</span>
+                <span>WhatsApp status alerts (instant campus ticket updates)</span>
               </label>
             </div>
           </div>

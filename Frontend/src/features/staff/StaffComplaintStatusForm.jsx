@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { AlertTriangle, ImagePlus, LoaderCircle, Mic, MicOff, Sparkles, Wand2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { AlertTriangle, Camera, ImagePlus, LoaderCircle, Mic, MicOff, Sparkles, Wand2, X } from "lucide-react";
 import { suggestStatusNoteRequest, formatStaffVoiceNoteRequest } from "../../services/api.js";
 import { validateImageFile } from "../../utils/fileValidation.js";
 
@@ -29,7 +29,60 @@ export default function StaffComplaintStatusForm({
   const [listening, setListening] = useState(false);
   const [polishing, setPolishing] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState(null);
   const recognitionRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const selectedProofFile = resolutionProofs[complaintId] ?? null;
+
+  useEffect(() => {
+    if (!selectedProofFile || typeof window === "undefined" || !window.URL?.createObjectURL) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    try {
+      const url = window.URL.createObjectURL(selectedProofFile);
+      setPreviewUrl(url);
+      return () => {
+        window.URL.revokeObjectURL(url);
+      };
+    } catch {
+      setPreviewUrl(null);
+    }
+  }, [selectedProofFile]);
+
+  function handleProofFileChange(event) {
+    const file = event.target.files?.[0] ?? null;
+    setFileValidationError("");
+    if (file) {
+      const check = validateImageFile(file);
+      if (!check.valid) {
+        event.target.value = "";
+        setFileValidationError(check.error);
+        setResolutionProofs((current) => ({
+          ...current,
+          [complaintId]: null,
+        }));
+        return;
+      }
+    }
+    setResolutionProofs((current) => ({
+      ...current,
+      [complaintId]: file,
+    }));
+  }
+
+  function handleClearProof() {
+    setResolutionProofs((current) => ({
+      ...current,
+      [complaintId]: null,
+    }));
+    setFileValidationError("");
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   if (isResolved) return null;
 
@@ -235,57 +288,89 @@ export default function StaffComplaintStatusForm({
 
                           {selectedStatus === "Resolved" && (
                             <div className="mt-4">
-                              <label
-                                htmlFor={`resolution-proof-${complaintId}`}
-                                className="block text-sm font-semibold"
-                              >
-                                Resolution photo (required)
-                              </label>
+                              <div className="flex items-center justify-between">
+                                <label className="block text-sm font-semibold text-ink">
+                                  Resolution photo (required)
+                                </label>
+                                <span className="text-[11px] text-muted">
+                                  Max 5 MB · JPG, PNG, WebP
+                                </span>
+                              </div>
 
-                              <label
-                                htmlFor={`resolution-proof-${complaintId}`}
-                                className="mt-2 flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line bg-white p-3 transition hover:border-brand hover:bg-brand-soft/30"
-                              >
-                                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
-                                  <ImagePlus size={19} />
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-semibold">
-                                    {resolutionProofs[complaintId]?.name ??
-                                      "Choose a resolution photo"}
-                                  </span>
-                                  <span className="mt-1 block text-xs text-muted">
-                                    Add a photo showing the completed repair
-                                  </span>
-                                </span>
-                              </label>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <label
+                                  htmlFor={`resolution-camera-${complaintId}`}
+                                  className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand-soft/70 px-3 py-2 text-xs font-bold text-brand-dark transition hover:bg-brand-soft active:scale-98 shadow-2xs"
+                                >
+                                  <Camera size={16} className="text-brand shrink-0" />
+                                  <span>Open Camera</span>
+                                </label>
+
+                                <label
+                                  htmlFor={`resolution-proof-${complaintId}`}
+                                  className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-xs font-bold text-ink transition hover:border-brand/40 hover:bg-stone-50 active:scale-98 shadow-2xs"
+                                >
+                                  <ImagePlus size={16} className="text-slate-600 shrink-0" />
+                                  <span>Upload Photo</span>
+                                </label>
+                              </div>
 
                               <input
+                                ref={cameraInputRef}
+                                id={`resolution-camera-${complaintId}`}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="sr-only"
+                                onChange={handleProofFileChange}
+                              />
+
+                              <input
+                                ref={fileInputRef}
                                 id={`resolution-proof-${complaintId}`}
                                 type="file"
                                 accept="image/jpeg,image/png,image/webp"
                                 className="sr-only"
-                                onChange={(event) => {
-                                  const file = event.target.files?.[0] ?? null;
-                                  setFileValidationError("");
-                                  if (file) {
-                                    const check = validateImageFile(file);
-                                    if (!check.valid) {
-                                      event.target.value = "";
-                                      setFileValidationError(check.error);
-                                      setResolutionProofs((current) => ({
-                                        ...current,
-                                        [complaintId]: null,
-                                      }));
-                                      return;
-                                    }
-                                  }
-                                  setResolutionProofs((current) => ({
-                                    ...current,
-                                    [complaintId]: file,
-                                  }));
-                                }}
+                                onChange={handleProofFileChange}
                               />
+
+                              {selectedProofFile ? (
+                                <div className="mt-2.5 flex items-center gap-3 rounded-xl border border-brand/20 bg-white p-2.5 shadow-2xs">
+                                  {previewUrl ? (
+                                    <img
+                                      src={previewUrl}
+                                      alt="Resolution proof preview"
+                                      className="size-13 rounded-lg object-cover border border-line shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="grid size-13 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
+                                      <ImagePlus size={20} />
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-xs font-bold text-ink">
+                                      {selectedProofFile.name}
+                                    </p>
+                                    <p className="mt-0.5 text-[11px] text-muted">
+                                      {(selectedProofFile.size / (1024 * 1024)).toFixed(2)} MB · Ready for AI verification
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={handleClearProof}
+                                    className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-rose-600 cursor-pointer"
+                                    title="Remove photo"
+                                    aria-label="Remove photo"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <p className="mt-1.5 text-xs text-muted">
+                                  Use <strong>Open Camera</strong> on mobile to snap the repaired asset, or <strong>Upload Photo</strong> from gallery.
+                                </p>
+                              )}
+
                               {fileValidationError && (
                                 <p role="alert" className="mt-2 text-xs text-rose-700">
                                   {fileValidationError}

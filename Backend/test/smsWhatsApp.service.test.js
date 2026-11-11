@@ -97,7 +97,7 @@ test("sendComplaintSmsWhatsAppUpdate persists simulated timeline entry on compla
     assert.equal(entry.recipientPhone, "+91 98123 45678");
     assert.equal(entry.event, "assigned");
     assert.equal(entry.status, "simulated");
-    assert.ok(entry.providerMessageId.startsWith("sim_whatsapp_"));
+    assert.ok(entry.providerMessageId.startsWith("sim_"));
     assert.equal(mockComplaint.smsUpdates.length, 1);
   } finally {
     complaintModel.findById = originalFindById;
@@ -105,7 +105,7 @@ test("sendComplaintSmsWhatsAppUpdate persists simulated timeline entry on compla
   }
 });
 
-test("dispatchTimelineAlerts dispatches both WhatsApp and SMS timeline records", async () => {
+test("dispatchTimelineAlerts dispatches WhatsApp timeline record", async () => {
   const originalFindById = complaintModel.findById;
   const updates = [];
 
@@ -130,9 +130,8 @@ test("dispatchTimelineAlerts dispatches both WhatsApp and SMS timeline records",
       note: "Inspecting wiring junction box.",
     });
 
-    assert.equal(updates.length, 2);
-    const channels = updates.map((u) => u.channel).sort();
-    assert.deepEqual(channels, ["sms", "whatsapp"]);
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].channel, "whatsapp");
   } finally {
     complaintModel.findById = originalFindById;
   }

@@ -86,7 +86,12 @@ export default function DashboardPage() {
   useEffect(() => {
     setScreenContext({
       currentSection: `student-${activeSection}-${page}`,
-      pageTitle: page === "create" ? "Submit New Complaint" : "My Complaints & Campus Facility Status",
+      pageTitle:
+        activeSection === "trending" || page === "trending"
+          ? "Campus Trending Issues"
+          : page === "create"
+            ? "Submit New Complaint"
+            : "My Complaints & Campus Facility Status",
       activeFilters: { page, complaintFilter, complaintSearch },
       selectedComplaint: selectedComplaint
         ? { id: selectedComplaint._id, title: selectedComplaint.title, status: selectedComplaint.status }
@@ -294,6 +299,7 @@ export default function DashboardPage() {
 
   // Student navigation handlers.
   function openMyComplaints() {
+    setActiveSection("complaints");
     setComplaintFilter("current");
     setComplaintPage(1);
     setSelectedComplaint(null);
@@ -301,8 +307,15 @@ export default function DashboardPage() {
   }
 
   function openCreateComplaint() {
+    setActiveSection("complaints");
     setSelectedComplaint(null);
     setPage("create");
+  }
+
+  function openCampusTrending() {
+    setActiveSection("trending");
+    setSelectedComplaint(null);
+    setPage("trending");
   }
 
   function openComplaintDetails(complaint) {
@@ -450,7 +463,16 @@ export default function DashboardPage() {
     <DashboardShell
       workspaceLabel="Student"
       activeSection={activeSection}
-      onSectionChange={setActiveSection}
+      onSectionChange={(section) => {
+        setActiveSection(section);
+        if (section === "trending") {
+          setPage("trending");
+        } else if (section === "complaints") {
+          if (page === "trending") {
+            setPage("create");
+          }
+        }
+      }}
       onVoiceComplaintSubmit={submitComplaint}
       onFillFormFields={handleFillFormFields}
       assistantNavItems={[
@@ -459,15 +481,15 @@ export default function DashboardPage() {
         { id: "trendingFeed", label: "Campus trending" },
       ]}
       onAssistantNavigate={(item) => {
-        if (item.id === "newComplaint" || item.id === "myComplaints" || item.id === "trendingFeed") {
-          setActiveSection("complaints");
-          if (item.id === "newComplaint") openCreateComplaint();
-          else if (item.id === "trendingFeed") setPage("trending");
-          else openMyComplaints();
-        } else if (item.id === "trending") {
-          setActiveSection("complaints");
-          setPage("trending");
-        } else setActiveSection(item.id);
+        if (item.id === "newComplaint") {
+          openCreateComplaint();
+        } else if (item.id === "myComplaints") {
+          openMyComplaints();
+        } else if (item.id === "trendingFeed" || item.id === "trending") {
+          openCampusTrending();
+        } else {
+          setActiveSection(item.id);
+        }
       }}
       navItems={[
         { id: "complaints", label: "Complaints", icon: MessageSquareText },
@@ -475,7 +497,25 @@ export default function DashboardPage() {
         { id: "profile", label: "Profile", icon: UserRound },
       ]}
     >
-      {activeSection === "profile" ? <ProfileSettings /> : (
+      {activeSection === "profile" ? (
+        <ProfileSettings />
+      ) : activeSection === "trending" || page === "trending" ? (
+        <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#e8f3ef_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
+          <div className="space-y-5">
+            <button
+              type="button"
+              onClick={openCreateComplaint}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand"
+            >
+              <ArrowLeft size={16} /> Back to report issue
+            </button>
+            <CampusTrendingFeed
+              accessToken={accessToken}
+              onSelectComplaint={openComplaintDetails}
+            />
+          </div>
+        </div>
+      ) : (
       <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#e8f3ef_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
         {page === "create" ? (
           <>
@@ -500,7 +540,7 @@ export default function DashboardPage() {
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     type="button"
-                    onClick={() => setPage("trending")}
+                    onClick={openCampusTrending}
                     className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-sm font-semibold text-amber-900 shadow-2xs transition hover:bg-amber-100 sm:w-auto"
                   >
                     <Flame size={16} className="text-amber-600" />

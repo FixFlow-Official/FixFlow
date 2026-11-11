@@ -40,6 +40,23 @@ const adminSchema = new mongoose.Schema({
     enum: ["student", "staff", "admin"],
     required: [true, "Role is required"],
   },
+  phoneNumber: {
+    type: String,
+    trim: true,
+    default: null,
+  },
+  phoneNumberVerified: {
+    type: Boolean,
+    default: false,
+  },
+  smsNotificationsEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  whatsAppNotificationsEnabled: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 const adminModel = mongoose.model("admin", adminSchema);

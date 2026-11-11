@@ -72,9 +72,11 @@ export default function RoomQrModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-2xl print:max-h-none print:w-full print:max-w-none print:border-none print:shadow-none">
+      <div className={`flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-2xl print:max-h-none print:w-full print:max-w-none print:border-none print:shadow-none ${
+        targetRooms.length === 1 ? "max-w-md" : "max-w-3xl"
+      }`}>
         {/* Header (hidden in print) */}
-        <div className="flex items-center justify-between border-b border-line px-6 py-4 print:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6 print:hidden">
           <div className="flex items-center gap-2.5 text-brand">
             <span className="grid size-9 place-items-center rounded-xl bg-brand/10 text-brand">
               <QrCode size={19} />
@@ -110,7 +112,7 @@ export default function RoomQrModal({
         </div>
 
         {/* Content Body */}
-        <div className="assistant-voice-scroll overflow-y-auto p-6 print:p-0">
+        <div className="assistant-voice-scroll overflow-y-auto p-4 sm:p-6 print:p-0">
           {loading ? (
             <div className="grid min-h-[300px] place-items-center text-sm font-semibold text-muted">
               <span className="inline-flex items-center gap-2">
@@ -119,13 +121,19 @@ export default function RoomQrModal({
               </span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 print:grid-cols-2 print:gap-8">
+            <div
+              className={
+                targetRooms.length === 1
+                  ? "mx-auto flex w-full max-w-sm justify-center"
+                  : "grid grid-cols-1 gap-6 sm:grid-cols-2 print:grid-cols-2 print:gap-8"
+              }
+            >
               {targetRooms.map((rm) => {
                 const qrUrl = qrMap[rm];
                 return (
                   <div
                     key={rm}
-                    className="flex flex-col items-center justify-between rounded-2xl border-2 border-emerald-900/20 bg-gradient-to-b from-white via-white to-emerald-50/40 p-6 text-center shadow-md print:break-inside-avoid print:border-2 print:border-black print:shadow-none"
+                    className="flex w-full flex-col items-center justify-between rounded-2xl border-2 border-emerald-900/20 bg-gradient-to-b from-white via-white to-emerald-50/40 p-6 text-center shadow-md print:break-inside-avoid print:border-2 print:border-black print:shadow-none"
                   >
                     {/* Header badge */}
                     <div className="flex w-full items-center justify-between border-b border-emerald-900/10 pb-3 text-left">
