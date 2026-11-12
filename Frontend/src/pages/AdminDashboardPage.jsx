@@ -12,6 +12,7 @@ import {
   ClipboardList,
   LoaderCircle,
   MapPin,
+  Radio,
   RotateCcw,
   ShieldAlert,
   Star,
@@ -45,6 +46,7 @@ const AdminUserManagement = lazy(() => import("../features/admin/AdminUserManage
 const AdminAccountsPage = lazy(() => import("../features/admin/AdminAccountsPage.jsx"));
 const AdminSlaPage = lazy(() => import("../features/admin/AdminSlaPage.jsx"));
 const AdminCampusMapPage = lazy(() => import("../features/admin/AdminCampusMapPage.jsx"));
+const AdminBroadcastsPage = lazy(() => import("../features/admin/AdminBroadcastsPage.jsx"));
 
 // Main admin dashboard: complaint queues, assignment actions, and reassignment.
 export default function AdminDashboardPage() {
@@ -547,6 +549,7 @@ export default function AdminDashboardPage() {
       navItems={[
         { id: "complaints", label: "Complaints", icon: ClipboardList },
         { id: "campusMap", label: "Campus Map & GIS", icon: MapPin },
+        { id: "broadcasts", label: "Outage Broadcasts", icon: Radio },
         { id: "users", label: "User access", icon: Users },
         { id: "accounts", label: "Accounts", icon: Users },
         { id: "profile", label: "Profile", icon: UserRound },
@@ -563,6 +566,10 @@ export default function AdminDashboardPage() {
       ) : activeSection === "campusMap" ? (
         <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading campus map…</div>}>
           <AdminCampusMapPage accessToken={accessToken} />
+        </Suspense>
+      ) : activeSection === "broadcasts" ? (
+        <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading outage broadcasts…</div>}>
+          <AdminBroadcastsPage accessToken={accessToken} />
         </Suspense>
       ) : activeSection === "users" ? (
         <Suspense fallback={<div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted"><LoaderCircle size={18} className="animate-spin text-brand" /> Loading user access…</div>}>

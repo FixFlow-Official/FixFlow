@@ -1054,5 +1054,54 @@ export async function resolveAdminAuditRequest(complaintId, note, accessToken) {
   );
 }
 
+// Campus Outage Broadcasts API
+export async function getActiveBroadcastsRequest(accessToken) {
+  return complaintRequest("/api/broadcasts/active", { method: "GET" }, accessToken);
+}
+
+export async function getBroadcastMatchRequest({ category, building }, accessToken) {
+  const params = new URLSearchParams();
+  if (category) params.append("category", category);
+  if (building) params.append("building", building);
+  return complaintRequest(`/api/broadcasts/match?${params.toString()}`, { method: "GET" }, accessToken);
+}
+
+export async function getAdminBroadcastsRequest(accessToken) {
+  return complaintRequest("/api/admin/broadcasts", { method: "GET" }, accessToken);
+}
+
+export async function createBroadcastRequest(broadcastData, accessToken) {
+  return complaintRequest(
+    "/api/admin/broadcasts",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(broadcastData),
+    },
+    accessToken,
+  );
+}
+
+export async function updateBroadcastRequest(id, broadcastData, accessToken) {
+  return complaintRequest(
+    `/api/admin/broadcasts/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(broadcastData),
+    },
+    accessToken,
+  );
+}
+
+export async function deleteBroadcastRequest(id, accessToken) {
+  return complaintRequest(
+    `/api/admin/broadcasts/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    accessToken,
+  );
+}
+
+
 
 

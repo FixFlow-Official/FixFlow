@@ -18,6 +18,12 @@ import {
   getAdminAuditQueueRequest,
   resolveAdminAuditRequest,
   getTrendingComplaintsRequest,
+  getActiveBroadcastsRequest,
+  getBroadcastMatchRequest,
+  getAdminBroadcastsRequest,
+  createBroadcastRequest,
+  updateBroadcastRequest,
+  deleteBroadcastRequest,
 } from "../src/services/api.js";
 
 function jsonResponse(payload, status = 200, headers = {}) {
@@ -455,6 +461,54 @@ test("getTrendingComplaintsRequest fetches active campus complaints sorted by vo
   assert.equal(res.complaints[0].upvoteCount, 12);
   assert.equal(res.complaints[0].hasUpvoted, true);
 });
+
+test("broadcastRequests send correct URLs, methods, and payloads", async (t) => {
+  const calls = [];
+  mockFetch(t, async (url, options) => {
+    calls.push({
+      url,
+      method: options?.method || "GET",
+      body: options?.body ? JSON.parse(options.body) : null,
+      headers: options?.headers,
+    });
+    return jsonResponse({ success: true, broadcasts: [], matched: true, match: { title: "Wi-Fi Outage" } });
+  });
+
+  // 1. getActiveBroadcastsRequest
+  await getActiveBroadcastsRequest("token-1");
+  assert.equal(calls[0].url, "/api/broadcasts/active");
+  assert.equal(calls[0].method, "GET");
+
+  // 2. getBroadcastMatchRequest
+  await getBroadcastMatchRequest({ category: "Internet", building: "Central Library" }, "token-1");
+  assert.match(calls[1].url, /\/api\/broadcasts\/match\?category=Internet&building=Central\+Library/);
+  assert.equal(calls[1].method, "GET");
+
+  // 3. createBroadcastRequest
+  const newBroadcast = {
+    title: "Power cut",
+    message: "Transformer issue",
+    category: "Electrical",
+    startsAt: "2026-11-12T10:00:00Z",
+    endsAt: "2026-11-12T14:00:00Z",
+  };
+  await createBroadcastRequest(newBroadcast, "admin-token");
+  assert.equal(calls[2].url, "/api/admin/broadcasts");
+  assert.equal(calls[2].method, "POST");
+  assert.equal(calls[2].body.title, "Power cut");
+
+  // 4. updateBroadcastRequest
+  await updateBroadcastRequest("b123", { isActive: false }, "admin-token");
+  assert.equal(calls[3].url, "/api/admin/broadcasts/b123");
+  assert.equal(calls[3].method, "PATCH");
+  assert.equal(calls[3].body.isActive, false);
+
+  // 5. deleteBroadcastRequest
+  await deleteBroadcastRequest("b123", "admin-token");
+  assert.equal(calls[4].url, "/api/admin/broadcasts/b123");
+  assert.equal(calls[4].method, "DELETE");
+});
+
 
 
 

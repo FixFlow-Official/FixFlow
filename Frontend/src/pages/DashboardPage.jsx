@@ -431,7 +431,10 @@ export default function DashboardPage() {
         accessToken,
       );
 
-      setSuccessMessage(result.message || "Complaint submitted successfully.");
+      const outageNote = result.broadcastMatch
+        ? ` Note: A scheduled outage ("${result.broadcastMatch.title}") is currently active for this area.`
+        : "";
+      setSuccessMessage((result.message || "Complaint submitted successfully.") + outageNote);
       setTitle("");
       setDescription("");
       setCategory("");

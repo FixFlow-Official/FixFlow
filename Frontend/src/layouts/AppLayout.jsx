@@ -5,6 +5,7 @@ import { logoutRequest, logoutAllRequest } from "../services/api.js"
 import AppHeader from "../components/layout/AppHeader.jsx"
 import SignOutDialog from "../components/layout/SignOutDialog.jsx"
 import OfflineExperience from "../features/offline/OfflineExperience.jsx"
+import BroadcastBanner from "../components/common/BroadcastBanner.jsx"
 
 
 export default function AppLayout() {
@@ -61,6 +62,8 @@ export default function AppLayout() {
         user={user}
         onSignOut={handleOpenSignOutDialog}
       />
+
+      {user && <BroadcastBanner />}
 
       {signOutError && !showSignOutDialog && (
         <p

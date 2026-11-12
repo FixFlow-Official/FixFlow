@@ -4,6 +4,7 @@ const config = require("../config/config");
 const uploadFile = require("../services/storage.service");
 const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
+const { broadcastModel } = require("../models/broadcast.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
 const smsWhatsAppService = require("../services/smsWhatsApp.service");
 const { getSlaPolicy, makeComplaintSlaDates } = require("../services/sla.service");
@@ -225,6 +226,33 @@ async function createComplaint(req, res) {
     console.error("Could not notify users about a submitted complaint:", error.message);
   }
 
+  // Check if an active campus outage broadcast matches this complaint's category + location
+  let broadcastMatch = null;
+  try {
+    const now = new Date();
+    const matchedBroadcast = await broadcastModel.findOne({
+      isActive: true,
+      startsAt: { $lte: now },
+      endsAt: { $gte: now },
+      category,
+      $or: [
+        { buildings: { $size: 0 } },
+        { buildings: { $exists: false } },
+        { buildings: exactBuilding },
+      ],
+    }).sort({ startsAt: 1 }).lean();
+
+    if (matchedBroadcast) {
+      broadcastMatch = {
+        title: matchedBroadcast.title,
+        message: matchedBroadcast.message,
+        endsAt: matchedBroadcast.endsAt,
+      };
+    }
+  } catch (err) {
+    console.error("Could not check active broadcast matches:", err.message);
+  }
+
   return res.status(201).json({
     message: "Complaint created successfully",
     complaint: {
@@ -235,6 +263,7 @@ async function createComplaint(req, res) {
       createdAt: complaint.createdAt,
       aiTriage: { ...(complaint.aiTriage?.toObject?.() || complaint.aiTriage || aiTriage), currentCategory: complaint.category },
     },
+    ...(broadcastMatch ? { broadcastMatch } : {}),
   });
 }
 

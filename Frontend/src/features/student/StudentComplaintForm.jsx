@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Camera, CheckCircle2, FileImage, LoaderCircle, Plus, QrCode, Send, Sparkles, ThumbsUp, Upload, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, Camera, CheckCircle2, FileImage, LoaderCircle, Plus, QrCode, Send, Sparkles, ThumbsUp, Upload, X } from "lucide-react";
 import ComplaintStatusBadge from "../../components/complaints/ComplaintStatusBadge.jsx";
 import {
   getCampusBlocksRequest,
@@ -7,6 +7,7 @@ import {
   suggestComplaintDescriptionRequest,
   upvoteComplaintRequest,
   diagnoseComplaintImageRequest,
+  getBroadcastMatchRequest,
 } from "../../services/api.js";
 
 // Student complaint submission UI with AI duplicate protection and clean submission flow.
@@ -80,6 +81,46 @@ export default function StudentComplaintForm({
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosisInfo, setDiagnosisInfo] = useState(null);
   const [diagnosisError, setDiagnosisError] = useState("");
+
+  // Outage Broadcast Intercept State
+  const [broadcastMatch, setBroadcastMatch] = useState(null);
+  const [checkingBroadcast, setCheckingBroadcast] = useState(false);
+  const [broadcastDismissed, setBroadcastDismissed] = useState(false);
+
+  useEffect(() => {
+    setBroadcastDismissed(false);
+    if (!category || !building?.trim() || !accessToken) {
+      setBroadcastMatch(null);
+      return;
+    }
+
+    let isMounted = true;
+    async function checkOutage() {
+      setCheckingBroadcast(true);
+      try {
+        const res = await getBroadcastMatchRequest(
+          { category, building: building.trim() },
+          accessToken,
+        );
+        if (isMounted) {
+          if (res?.matched && res?.match) {
+            setBroadcastMatch(res.match);
+          } else {
+            setBroadcastMatch(null);
+          }
+        }
+      } catch {
+        if (isMounted) setBroadcastMatch(null);
+      } finally {
+        if (isMounted) setCheckingBroadcast(false);
+      }
+    }
+
+    checkOutage();
+    return () => {
+      isMounted = false;
+    };
+  }, [category, building, accessToken]);
 
   async function handleAiDiagnose() {
     if (!image) return;
@@ -760,6 +801,79 @@ export default function StudentComplaintForm({
             </div>
           )}
         </div>
+
+        {/* Active Campus Outage Broadcast Intercept Box */}
+        {broadcastMatch && !broadcastDismissed && (
+          <div
+            id="broadcast-outage-intercept"
+            className="min-w-0 sm:col-span-2 rounded-2xl border border-amber-400 bg-gradient-to-br from-amber-50 via-orange-50/40 to-amber-100/50 p-4 shadow-sm ring-2 ring-amber-300/80"
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-600 text-white shadow-xs">
+                <AlertTriangle size={20} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-display text-sm font-bold text-amber-950 sm:text-base">
+                    ⚠️ Active Scheduled Outage in {building || "this area"}
+                  </h3>
+                  <span className="rounded-full border border-amber-400 bg-amber-200/80 px-2.5 py-0.5 text-[11px] font-bold text-amber-950">
+                    Known Campus Outage
+                  </span>
+                </div>
+
+                <p className="mt-1 text-xs leading-relaxed text-amber-950">
+                  A scheduled outage is currently underway for this area until{" "}
+                  <strong className="font-semibold text-amber-950">
+                    {new Date(broadcastMatch.endsAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </strong>{" "}
+                  — <span className="font-semibold">{broadcastMatch.title}</span>. You can still submit, or upvote the existing report instead.
+                </p>
+
+                <div className="mt-2.5 rounded-xl border border-amber-200/90 bg-white/95 p-3 text-xs text-muted shadow-xs">
+                  <p className="font-medium text-ink">{broadcastMatch.message}</p>
+                  <p className="mt-1 text-[11px] text-amber-800">
+                    Category: <strong>{broadcastMatch.category}</strong> · Expected resolution:{" "}
+                    <strong>
+                      {new Date(broadcastMatch.endsAt).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </strong>
+                  </p>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const dupElem = document.getElementById("duplicate-section");
+                      if (dupElem) {
+                        dupElem.scrollIntoView({ behavior: "smooth" });
+                      } else {
+                        window.scrollTo({ top: 400, behavior: "smooth" });
+                      }
+                    }}
+                    className="rounded-xl border border-amber-400 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 shadow-xs hover:bg-amber-50 transition-colors"
+                  >
+                    View existing report
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastDismissed(true)}
+                    className="rounded-xl bg-amber-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-amber-800 transition-colors"
+                  >
+                    Submit anyway
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Duplicate Issue Alert — Only shown after clicking submit if a duplicate was detected */}
         {topDuplicate && !overrideDuplicate && (
