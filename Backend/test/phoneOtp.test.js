@@ -44,6 +44,10 @@ test("requestPhoneOtp normalizes number, enforces cooldown, and creates OTP docu
   const originalStudentFind = studentModel.findById;
   const originalOtpFindOne = otpModel.findOne;
   const originalOtpFindOneAndUpdate = otpModel.findOneAndUpdate;
+  const origWaToken = process.env.WHATSAPP_TOKEN;
+  const origWaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  delete process.env.WHATSAPP_TOKEN;
+  delete process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   studentModel.findById = async () => ({ _id: "student_1", email: "student@campus.edu" });
 
@@ -85,6 +89,8 @@ test("requestPhoneOtp normalizes number, enforces cooldown, and creates OTP docu
     studentModel.findById = originalStudentFind;
     otpModel.findOne = originalOtpFindOne;
     otpModel.findOneAndUpdate = originalOtpFindOneAndUpdate;
+    if (origWaToken !== undefined) process.env.WHATSAPP_TOKEN = origWaToken;
+    if (origWaPhoneId !== undefined) process.env.WHATSAPP_PHONE_NUMBER_ID = origWaPhoneId;
   }
 });
 

@@ -18,8 +18,8 @@ function normalizeWhatsAppRecipient(phoneNumber) {
  * Sends a WhatsApp message via Meta WhatsApp Cloud API (Graph API v20.0).
  */
 async function sendMetaWhatsAppMessage({ to, message, templateName, templateComponents }) {
-  const token = (process.env.WHATSAPP_TOKEN || config.WHATSAPP_TOKEN || "").trim();
-  const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || config.WHATSAPP_PHONE_NUMBER_ID || "").trim();
+  const token = (process.env.WHATSAPP_TOKEN || "").trim();
+  const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim();
   const recipient = normalizeWhatsAppRecipient(to);
 
   const endpoint = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
@@ -118,8 +118,8 @@ async function sendWhatsAppMessage({ to, message, templateName, templateComponen
     };
   }
 
-  const waToken = (process.env.WHATSAPP_TOKEN || config.WHATSAPP_TOKEN || "").trim();
-  const waPhoneId = (process.env.WHATSAPP_PHONE_NUMBER_ID || config.WHATSAPP_PHONE_NUMBER_ID || "").trim();
+  const waToken = (process.env.WHATSAPP_TOKEN || "").trim();
+  const waPhoneId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim();
   const hasMeta = Boolean(waToken && waToken !== "undefined" && waPhoneId && waPhoneId !== "undefined");
 
   // 1. Dispatch via Meta WhatsApp Cloud API if configured

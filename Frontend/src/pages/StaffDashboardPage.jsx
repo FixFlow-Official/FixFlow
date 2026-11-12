@@ -83,6 +83,43 @@ export default function StaffDashboardPage() {
   const latestRequestId = useRef(0);
   const { setScreenContext } = useAssistantContext();
 
+  // Restore expanded modal and notes from sessionStorage if mobile OS refreshed tab during camera capture
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("fixflow_staff_active_session");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.expandedComplaintId) {
+          setExpandedComplaintId(parsed.expandedComplaintId);
+        }
+        if (parsed?.notes) {
+          setNotes((prev) => ({ ...parsed.notes, ...prev }));
+        }
+        if (parsed?.selectedStatuses) {
+          setSelectedStatuses((prev) => ({ ...parsed.selectedStatuses, ...prev }));
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  // Sync expanded modal and notes to sessionStorage
+  useEffect(() => {
+    try {
+      if (expandedComplaintId) {
+        sessionStorage.setItem(
+          "fixflow_staff_active_session",
+          JSON.stringify({ expandedComplaintId, notes, selectedStatuses })
+        );
+      } else {
+        sessionStorage.removeItem("fixflow_staff_active_session");
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [expandedComplaintId, notes, selectedStatuses]);
+
   useEffect(() => {
     setScreenContext({
       currentSection: `staff-${activeSection}-${complaintView}`,

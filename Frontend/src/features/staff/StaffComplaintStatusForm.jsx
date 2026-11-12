@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { AlertTriangle, Camera, ImagePlus, LoaderCircle, Mic, MicOff, Sparkles, Wand2, X } from "lucide-react";
 import { suggestStatusNoteRequest, formatStaffVoiceNoteRequest } from "../../services/api.js";
-import { validateImageFile } from "../../utils/fileValidation.js";
+import { compressImageIfNeeded, validateImageFile } from "../../utils/fileValidation.js";
 
 // Status controls for one active staff complaint. The dashboard owns request state and saving.
 export default function StaffComplaintStatusForm({
@@ -53,13 +53,18 @@ export default function StaffComplaintStatusForm({
     }
   }, [selectedProofFile]);
 
-  function handleProofFileChange(event) {
-    const file = event.target.files?.[0] ?? null;
+  async function handleProofFileChange(event) {
+    const rawFile = event.target?.files?.[0] ?? null;
     setFileValidationError("");
-    if (file) {
+    if (!rawFile) {
+      return;
+    }
+
+    try {
+      const file = await compressImageIfNeeded(rawFile);
       const check = validateImageFile(file);
       if (!check.valid) {
-        event.target.value = "";
+        if (event.target) event.target.value = "";
         setFileValidationError(check.error);
         setResolutionProofs((current) => ({
           ...current,
@@ -67,11 +72,26 @@ export default function StaffComplaintStatusForm({
         }));
         return;
       }
+      setResolutionProofs((current) => ({
+        ...current,
+        [complaintId]: file,
+      }));
+    } catch {
+      const check = validateImageFile(rawFile);
+      if (!check.valid) {
+        if (event.target) event.target.value = "";
+        setFileValidationError(check.error);
+        setResolutionProofs((current) => ({
+          ...current,
+          [complaintId]: null,
+        }));
+        return;
+      }
+      setResolutionProofs((current) => ({
+        ...current,
+        [complaintId]: rawFile,
+      }));
     }
-    setResolutionProofs((current) => ({
-      ...current,
-      [complaintId]: file,
-    }));
   }
 
   function handleClearProof() {
@@ -297,23 +317,88 @@ export default function StaffComplaintStatusForm({
                                 </span>
                               </div>
 
-                              <div className="mt-2 grid grid-cols-2 gap-2">
-                                <label
-                                  htmlFor={`resolution-camera-${complaintId}`}
-                                  className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand-soft/70 px-3 py-2 text-xs font-bold text-brand-dark transition hover:bg-brand-soft active:scale-98 shadow-2xs"
-                                >
-                                  <Camera size={16} className="text-brand shrink-0" />
-                                  <span>Open Camera</span>
-                                </label>
+                              {selectedProofFile ? (
+                                <div className="mt-2.5 flex items-center justify-between gap-2.5 rounded-2xl border border-brand/20 bg-white p-2.5 shadow-2xs overflow-hidden">
+                                  <div className="flex flex-1 min-w-0 items-center gap-2.5 overflow-hidden">
+                                    {previewUrl ? (
+                                      <img
+                                        src={previewUrl}
+                                        alt="Resolution proof preview"
+                                        className="size-12 rounded-xl object-cover border border-line shrink-0 shadow-2xs"
+                                      />
+                                    ) : (
+                                      <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+                                        <ImagePlus size={18} />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1 overflow-hidden">
+                                      <p className="truncate text-xs font-bold text-ink">
+                                        {selectedProofFile.name}
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] text-muted">
+                                        {(selectedProofFile.size / (1024 * 1024)).toFixed(2)} MB · Ready for AI verification
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        cameraInputRef.current?.click();
+                                      }}
+                                      className="rounded-lg p-1.5 text-slate-500 hover:bg-stone-100 hover:text-brand cursor-pointer"
+                                      title="Retake photo"
+                                      aria-label="Retake photo"
+                                    >
+                                      <Camera size={16} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleClearProof}
+                                      className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-rose-600 cursor-pointer"
+                                      title="Remove photo"
+                                      aria-label="Remove photo"
+                                    >
+                                      <X size={16} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="mt-2 grid grid-cols-2 gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        cameraInputRef.current?.click();
+                                      }}
+                                      className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand-soft/70 px-3 py-2 text-xs font-bold text-brand-dark transition hover:bg-brand-soft active:scale-98 shadow-2xs"
+                                    >
+                                      <Camera size={16} className="text-brand shrink-0" />
+                                      <span>Open Camera</span>
+                                    </button>
 
-                                <label
-                                  htmlFor={`resolution-proof-${complaintId}`}
-                                  className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-xs font-bold text-ink transition hover:border-brand/40 hover:bg-stone-50 active:scale-98 shadow-2xs"
-                                >
-                                  <ImagePlus size={16} className="text-slate-600 shrink-0" />
-                                  <span>Upload Photo</span>
-                                </label>
-                              </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        fileInputRef.current?.click();
+                                      }}
+                                      className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-xs font-bold text-ink transition hover:border-brand/40 hover:bg-stone-50 active:scale-98 shadow-2xs"
+                                    >
+                                      <ImagePlus size={16} className="text-slate-600 shrink-0" />
+                                      <span>Upload Photo</span>
+                                    </button>
+                                  </div>
+                                  <p className="mt-1.5 text-xs text-muted">
+                                    Use <strong>Open Camera</strong> on mobile to snap the repaired asset, or <strong>Upload Photo</strong> from gallery.
+                                  </p>
+                                </>
+                              )}
 
                               <input
                                 ref={cameraInputRef}
@@ -321,7 +406,9 @@ export default function StaffComplaintStatusForm({
                                 type="file"
                                 accept="image/*"
                                 capture="environment"
-                                className="sr-only"
+                                className="fixed -top-[1000px] -left-[1000px] size-px opacity-0 pointer-events-none"
+                                tabIndex={-1}
+                                aria-hidden="true"
                                 onChange={handleProofFileChange}
                               />
 
@@ -329,47 +416,12 @@ export default function StaffComplaintStatusForm({
                                 ref={fileInputRef}
                                 id={`resolution-proof-${complaintId}`}
                                 type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                className="sr-only"
+                                accept="image/jpeg,image/png,image/webp,image/jpg"
+                                className="fixed -top-[1000px] -left-[1000px] size-px opacity-0 pointer-events-none"
+                                tabIndex={-1}
+                                aria-hidden="true"
                                 onChange={handleProofFileChange}
                               />
-
-                              {selectedProofFile ? (
-                                <div className="mt-2.5 flex items-center gap-3 rounded-xl border border-brand/20 bg-white p-2.5 shadow-2xs">
-                                  {previewUrl ? (
-                                    <img
-                                      src={previewUrl}
-                                      alt="Resolution proof preview"
-                                      className="size-13 rounded-lg object-cover border border-line shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="grid size-13 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
-                                      <ImagePlus size={20} />
-                                    </div>
-                                  )}
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-xs font-bold text-ink">
-                                      {selectedProofFile.name}
-                                    </p>
-                                    <p className="mt-0.5 text-[11px] text-muted">
-                                      {(selectedProofFile.size / (1024 * 1024)).toFixed(2)} MB · Ready for AI verification
-                                    </p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={handleClearProof}
-                                    className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-rose-600 cursor-pointer"
-                                    title="Remove photo"
-                                    aria-label="Remove photo"
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <p className="mt-1.5 text-xs text-muted">
-                                  Use <strong>Open Camera</strong> on mobile to snap the repaired asset, or <strong>Upload Photo</strong> from gallery.
-                                </p>
-                              )}
 
                               {fileValidationError && (
                                 <p role="alert" className="mt-2 text-xs text-rose-700">

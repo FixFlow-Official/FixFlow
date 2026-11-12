@@ -23,7 +23,7 @@ import {
 import { useAuth } from "../context/useAuth.js";
 import { useAssistantContext } from "../context/assistantContext.jsx";
 import { downloadComplaintPdf } from "../utils/complaintPdf.js";
-import { validateImageFile } from "../utils/fileValidation.js";
+import { compressImageIfNeeded, validateImageFile } from "../utils/fileValidation.js";
 import {
   createComplaintRequest,
   getComplaintsRequest,
@@ -72,6 +72,40 @@ export default function DashboardPage() {
   const [image, setImage] = useState(null);
   const [qrPrefilled, setQrPrefilled] = useState(isQrSource);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
+
+  // Restore form draft from sessionStorage if page was reloaded by mobile OS when returning from camera
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("fixflow_student_complaint_draft");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed) {
+          if (parsed.title) setTitle((prev) => prev || parsed.title);
+          if (parsed.description) setDescription((prev) => prev || parsed.description);
+          if (parsed.category) setCategory((prev) => prev || parsed.category);
+          if (parsed.building) setBuilding((prev) => prev || parsed.building);
+          if (parsed.floor) setFloor((prev) => (prev !== "Ground Floor" ? prev : (parsed.floor || "Ground Floor")));
+          if (parsed.room) setRoom((prev) => prev || parsed.room);
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  // Save form draft to sessionStorage so user inputs survive mobile camera app activity switches
+  useEffect(() => {
+    if (title || description || category || building || (floor && floor !== "Ground Floor") || room) {
+      try {
+        sessionStorage.setItem(
+          "fixflow_student_complaint_draft",
+          JSON.stringify({ title, description, category, building, floor, room })
+        );
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [title, description, category, building, floor, room]);
 
   function handleQrScan(locationData) {
     if (locationData.building) setBuilding(locationData.building);
@@ -324,22 +358,35 @@ export default function DashboardPage() {
   }
 
   // Validate the proof image selected in the submission form.
-  function handleImageChange(event) {
-    const selectedImage = event.target.files?.[0] ?? null;
+  async function handleImageChange(event) {
+    const rawFile = event.target?.files?.[0] ?? null;
     setFormError("");
     setSuccessMessage("");
 
-    if (selectedImage) {
+    if (!rawFile) {
+      return;
+    }
+
+    try {
+      const selectedImage = await compressImageIfNeeded(rawFile);
       const check = validateImageFile(selectedImage);
       if (!check.valid) {
         setImage(null);
-        event.target.value = "";
+        if (event.target) event.target.value = "";
         setFormError(check.error);
         return;
       }
+      setImage(selectedImage);
+    } catch {
+      const check = validateImageFile(rawFile);
+      if (!check.valid) {
+        setImage(null);
+        if (event.target) event.target.value = "";
+        setFormError(check.error);
+        return;
+      }
+      setImage(rawFile);
     }
-
-    setImage(selectedImage);
   }
 
   // Submit the student's complaint and refresh the complaint list.
@@ -392,7 +439,12 @@ export default function DashboardPage() {
       setFloor("Ground Floor");
       setRoom("");
       setImage(null);
-      form?.reset();
+      try {
+        sessionStorage.removeItem("fixflow_student_complaint_draft");
+      } catch {
+        // Ignore storage errors
+      }
+      form?.reset?.();
 
       try {
         const updatedData = await getComplaintsRequest(accessToken, {
@@ -578,6 +630,7 @@ export default function DashboardPage() {
               room={room}
               setRoom={setRoom}
               image={image}
+              setImage={setImage}
               handleImageChange={handleImageChange}
               formError={formError}
               successMessage={successMessage}

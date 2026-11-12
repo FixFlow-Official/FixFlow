@@ -62,6 +62,10 @@ test("formatTimelineMessage produces clear, high-readability messages for all li
 test("sendComplaintSmsWhatsAppUpdate persists simulated timeline entry on complaint", async () => {
   const originalFindById = complaintModel.findById;
   const originalStudentFindById = studentModel.findById;
+  const origWaToken = process.env.WHATSAPP_TOKEN;
+  const origWaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  delete process.env.WHATSAPP_TOKEN;
+  delete process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   const mockComplaint = {
     _id: "672f00000000000000000002",
@@ -102,12 +106,18 @@ test("sendComplaintSmsWhatsAppUpdate persists simulated timeline entry on compla
   } finally {
     complaintModel.findById = originalFindById;
     studentModel.findById = originalStudentFindById;
+    if (origWaToken !== undefined) process.env.WHATSAPP_TOKEN = origWaToken;
+    if (origWaPhoneId !== undefined) process.env.WHATSAPP_PHONE_NUMBER_ID = origWaPhoneId;
   }
 });
 
 test("dispatchTimelineAlerts dispatches WhatsApp timeline record", async () => {
   const originalFindById = complaintModel.findById;
   const updates = [];
+  const origWaToken = process.env.WHATSAPP_TOKEN;
+  const origWaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  delete process.env.WHATSAPP_TOKEN;
+  delete process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   const mockComplaint = {
     _id: "672f00000000000000000003",
@@ -134,5 +144,7 @@ test("dispatchTimelineAlerts dispatches WhatsApp timeline record", async () => {
     assert.equal(updates[0].channel, "whatsapp");
   } finally {
     complaintModel.findById = originalFindById;
+    if (origWaToken !== undefined) process.env.WHATSAPP_TOKEN = origWaToken;
+    if (origWaPhoneId !== undefined) process.env.WHATSAPP_PHONE_NUMBER_ID = origWaPhoneId;
   }
 });
