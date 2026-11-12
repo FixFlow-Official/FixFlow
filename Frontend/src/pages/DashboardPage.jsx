@@ -10,6 +10,7 @@ import StudentComplaintForm from "../features/student/StudentComplaintForm.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import QrScannerModal from "../components/common/QrScannerModal.jsx";
 import CampusTrendingFeed from "../features/student/CampusTrendingFeed.jsx";
+import CampusOutageSection from "../components/broadcasts/CampusOutageSection.jsx";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -18,6 +19,7 @@ import {
   LoaderCircle,
   MessageSquareText,
   QrCode,
+  Radio,
   UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/useAuth.js";
@@ -514,6 +516,15 @@ export default function DashboardPage() {
     return () => window.removeEventListener("fixflow:fill-complaint-form", onFillEvent);
   }, [handleFillFormFields]);
 
+  useEffect(() => {
+    function onOpenOutages() {
+      setActiveSection("broadcasts");
+      setPage("broadcasts");
+    }
+    window.addEventListener("fixflow:open-broadcasts", onOpenOutages);
+    return () => window.removeEventListener("fixflow:open-broadcasts", onOpenOutages);
+  }, []);
+
   return (
     <DashboardShell
       workspaceLabel="Student"
@@ -522,8 +533,10 @@ export default function DashboardPage() {
         setActiveSection(section);
         if (section === "trending") {
           setPage("trending");
+        } else if (section === "broadcasts") {
+          setPage("broadcasts");
         } else if (section === "complaints") {
-          if (page === "trending") {
+          if (page === "trending" || page === "broadcasts") {
             setPage("create");
           }
         }
@@ -534,6 +547,7 @@ export default function DashboardPage() {
         { id: "newComplaint", label: "New complaint" },
         { id: "myComplaints", label: "My complaints" },
         { id: "trendingFeed", label: "Campus trending" },
+        { id: "campusOutages", label: "Campus outages" },
       ]}
       onAssistantNavigate={(item) => {
         if (item.id === "newComplaint") {
@@ -542,6 +556,9 @@ export default function DashboardPage() {
           openMyComplaints();
         } else if (item.id === "trendingFeed" || item.id === "trending") {
           openCampusTrending();
+        } else if (item.id === "campusOutages" || item.id === "broadcasts") {
+          setActiveSection("broadcasts");
+          setPage("broadcasts");
         } else {
           setActiveSection(item.id);
         }
@@ -549,11 +566,23 @@ export default function DashboardPage() {
       navItems={[
         { id: "complaints", label: "Complaints", icon: MessageSquareText },
         { id: "trending", label: "Campus Trending", icon: Flame },
+        { id: "broadcasts", label: "Campus Outages", icon: Radio },
         { id: "profile", label: "Profile", icon: UserRound },
       ]}
     >
       {activeSection === "profile" ? (
         <ProfileSettings />
+      ) : activeSection === "broadcasts" || page === "broadcasts" ? (
+        <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#fef3c7_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
+          <CampusOutageSection
+            accessToken={accessToken}
+            onBack={() => {
+              setActiveSection("complaints");
+              setPage("create");
+            }}
+            userRole="student"
+          />
+        </div>
       ) : activeSection === "trending" || page === "trending" ? (
         <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#e8f3ef_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
           <div className="space-y-5">
@@ -593,6 +622,17 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveSection("broadcasts");
+                      setPage("broadcasts");
+                    }}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-sm font-semibold text-amber-900 shadow-2xs transition hover:bg-amber-100 sm:w-auto"
+                  >
+                    <Radio size={16} className="text-amber-600 animate-pulse" />
+                    Campus Outages
+                  </button>
                   <button
                     type="button"
                     onClick={openCampusTrending}
@@ -642,6 +682,10 @@ export default function DashboardPage() {
               handleSubmit={handleSubmit}
               qrPrefilled={qrPrefilled}
               onOpenQrScanner={() => setQrScannerOpen(true)}
+              onOpenBroadcasts={() => {
+                setActiveSection("broadcasts");
+                setPage("broadcasts");
+              }}
             />
 
             {qrScannerOpen && (

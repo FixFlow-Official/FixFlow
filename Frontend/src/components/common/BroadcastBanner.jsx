@@ -179,9 +179,18 @@ export default function BroadcastBanner() {
                   </span>
                 </div>
 
-                <p className="mt-0.5 text-xs text-amber-950/90 leading-relaxed break-words">
-                  {broadcast.message}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-amber-950/90 leading-relaxed break-words">
+                    {broadcast.message}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent("fixflow:open-broadcasts"))}
+                    className="text-xs font-bold text-amber-900 hover:text-amber-950 underline decoration-amber-400 shrink-0"
+                  >
+                    View details →
+                  </button>
+                </div>
               </div>
             </div>
 

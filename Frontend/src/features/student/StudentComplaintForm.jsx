@@ -34,6 +34,7 @@ export default function StudentComplaintForm({
   handleSubmit,
   qrPrefilled = false,
   onOpenQrScanner,
+  onOpenBroadcasts,
 }) {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -847,6 +848,20 @@ export default function StudentComplaintForm({
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof onOpenBroadcasts === "function") {
+                        onOpenBroadcasts();
+                      } else {
+                        window.dispatchEvent(new CustomEvent("fixflow:open-broadcasts"));
+                      }
+                    }}
+                    className="rounded-xl border border-amber-400 bg-amber-100/90 px-3.5 py-1.5 text-xs font-semibold text-amber-950 shadow-xs hover:bg-amber-200 transition-colors"
+                  >
+                    View campus outages →
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
