@@ -4,8 +4,9 @@ const config = require("../config/config");
 const uploadFile = require("../services/storage.service");
 const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
+const { broadcastModel } = require("../models/broadcast.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
-const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
+const smsWhatsAppService = require("../services/smsWhatsApp.service");
 const { getSlaPolicy, makeComplaintSlaDates } = require("../services/sla.service");
 const { triageComplaint, fingerprintComplaint } = require("../services/complaintTriage.service");
 const { findDuplicates } = require("../services/duplicateDetection.service");
@@ -21,6 +22,7 @@ const activeComplaintStatuses = [
   "Assigned",
   "In_Progress",
   "On_Hold",
+  "Reopened",
 ];
 const currentComplaintStatuses = [
   ...activeComplaintStatuses,
@@ -224,6 +226,33 @@ async function createComplaint(req, res) {
     console.error("Could not notify users about a submitted complaint:", error.message);
   }
 
+  // Check if an active campus outage broadcast matches this complaint's category + location
+  let broadcastMatch = null;
+  try {
+    const now = new Date();
+    const matchedBroadcast = await broadcastModel.findOne({
+      isActive: true,
+      startsAt: { $lte: now },
+      endsAt: { $gte: now },
+      category,
+      $or: [
+        { buildings: { $size: 0 } },
+        { buildings: { $exists: false } },
+        { buildings: exactBuilding },
+      ],
+    }).sort({ startsAt: 1 }).lean();
+
+    if (matchedBroadcast) {
+      broadcastMatch = {
+        title: matchedBroadcast.title,
+        message: matchedBroadcast.message,
+        endsAt: matchedBroadcast.endsAt,
+      };
+    }
+  } catch (err) {
+    console.error("Could not check active broadcast matches:", err.message);
+  }
+
   return res.status(201).json({
     message: "Complaint created successfully",
     complaint: {
@@ -234,6 +263,7 @@ async function createComplaint(req, res) {
       createdAt: complaint.createdAt,
       aiTriage: { ...(complaint.aiTriage?.toObject?.() || complaint.aiTriage || aiTriage), currentCategory: complaint.category },
     },
+    ...(broadcastMatch ? { broadcastMatch } : {}),
   });
 }
 
@@ -456,7 +486,7 @@ async function verifyComplaintResolution(req, res) {
   }
 
   const { complaintId } = req.params;
-  const { rating, feedback } = req.body;
+  const { rating, feedback } = req.body || {};
 
   const complaint = await complaintModel.findById(complaintId);
   if (!complaint) {
@@ -471,6 +501,10 @@ async function verifyComplaintResolution(req, res) {
     return res.status(400).json({ message: "Can only verify resolution for complaints currently marked as Resolved." });
   }
 
+  if (complaint.csatRating != null) {
+    return res.status(400).json({ message: "Rating has already been submitted for this resolution." });
+  }
+
   const numRating = Number(rating);
   if (!Number.isInteger(numRating) || numRating < 1 || numRating > 5) {
     return res.status(400).json({ message: "A rating between 1 and 5 stars is required." });
@@ -481,9 +515,28 @@ async function verifyComplaintResolution(req, res) {
   complaint.csatRating = numRating;
   complaint.csatFeedback = feedback ? String(feedback).trim().slice(0, 1000) : "";
 
+  if (numRating <= 2) {
+    complaint.adminAuditRequired = true;
+    try {
+      const admins = await adminModel.find({}).select("_id").lean();
+      if (admins.length > 0) {
+        await createNotifications(admins.map((admin) => complaintNotification({
+          recipient: admin._id,
+          recipientRef: "admin",
+          complaint,
+          type: "status",
+          title: "Low CSAT Rating — Audit Required",
+          message: `Complaint #${complaint.ticketNumber || ""} received a low rating (${numRating}/5). Audit required.`,
+        })));
+      }
+    } catch (notifErr) {
+      console.error("Could not notify admins of low CSAT rating:", notifErr);
+    }
+  }
+
   complaint.statusHistory.push({
     status: "Resolved",
-    note: `Student verified fix: ${numRating}/5 stars.${feedback ? ` Feedback: "${feedback.trim()}"` : ""}`,
+    note: `Student verified fix: ${numRating}/5 stars.${feedback ? ` Feedback: "${feedback.trim()}"` : ""}${numRating <= 2 ? " [Flagged for admin audit]" : ""}`,
     changedBy: req.auth.id,
     changedByRole: "student",
     changedBySnapshot: {
@@ -497,6 +550,85 @@ async function verifyComplaintResolution(req, res) {
 
   return res.status(200).json({
     message: "Resolution verified. Thank you for your feedback!",
+    complaint,
+  });
+}
+
+// POST /api/student/complaints/:complaintId/csat
+// verifyAccessToken + student owns the complaint + status is Resolved or Closed.
+// Body { rating: 1-5 required, feedback?: max 1000 }.
+// One rating per resolution: if csatRating is already set for this resolution, return 400.
+// Save csatRating + csatFeedback. If rating <= 2, set adminAuditRequired: true and create an in-app notification for admins.
+async function submitCsat(req, res) {
+  if (!req.auth || req.auth.role !== "student") {
+    return res.status(403).json({ message: "Only students can submit resolution ratings." });
+  }
+
+  const { complaintId } = req.params;
+  const { rating, feedback } = req.body || {};
+
+  const complaint = await complaintModel.findById(complaintId);
+  if (!complaint) {
+    return res.status(404).json({ message: "Complaint not found." });
+  }
+
+  if (String(complaint.user) !== String(req.auth.id)) {
+    return res.status(403).json({ message: "Only the student who submitted this complaint can rate it." });
+  }
+
+  if (!["Resolved", "Closed"].includes(complaint.status)) {
+    return res.status(400).json({ message: "Can only rate complaints currently marked as Resolved or Closed." });
+  }
+
+  if (complaint.csatRating != null) {
+    return res.status(400).json({ message: "Rating has already been submitted for this resolution." });
+  }
+
+  const numRating = Number(rating);
+  if (!Number.isInteger(numRating) || numRating < 1 || numRating > 5) {
+    return res.status(400).json({ message: "A rating between 1 and 5 stars is required." });
+  }
+
+  complaint.csatRating = numRating;
+  complaint.csatFeedback = feedback ? String(feedback).trim().slice(0, 1000) : "";
+  complaint.resolutionVerified = true;
+  complaint.resolutionVerifiedAt = new Date();
+
+  if (numRating <= 2) {
+    complaint.adminAuditRequired = true;
+    try {
+      const admins = await adminModel.find({}).select("_id").lean();
+      if (admins.length > 0) {
+        await createNotifications(admins.map((admin) => complaintNotification({
+          recipient: admin._id,
+          recipientRef: "admin",
+          complaint,
+          type: "status",
+          title: "Low CSAT Rating — Audit Required",
+          message: `Complaint #${complaint.ticketNumber || ""} received a low rating (${numRating}/5). Audit required.`,
+        })));
+      }
+    } catch (notifErr) {
+      console.error("Could not notify admins of low CSAT rating:", notifErr);
+    }
+  }
+
+  complaint.statusHistory.push({
+    status: complaint.status,
+    note: `Student CSAT rating: ${numRating}/5 stars.${complaint.csatFeedback ? ` Feedback: "${complaint.csatFeedback}"` : ""}${numRating <= 2 ? " [Flagged for admin audit]" : ""}`,
+    changedBy: req.auth.id,
+    changedByRole: "student",
+    changedBySnapshot: {
+      name: req.user?.fullName || req.auth.name || "Student",
+      campusId: req.user?.campusId || req.auth.campusId || "",
+    },
+    changedAt: new Date(),
+  });
+
+  await complaint.save();
+
+  return res.status(200).json({
+    message: "Thank you for your feedback.",
     complaint,
   });
 }
@@ -527,7 +659,18 @@ async function reopenComplaint(req, res) {
     return res.status(400).json({ message: "Can only reopen complaints currently marked as Resolved." });
   }
 
-  let reopenProofUrl = null;
+  // 48-hour reopen window check
+  const resolvedTimestamp = complaint.resolvedAt
+    ? new Date(complaint.resolvedAt).getTime()
+    : (complaint.updatedAt ? new Date(complaint.updatedAt).getTime() : Date.now());
+  const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
+  if (Date.now() - resolvedTimestamp > FORTY_EIGHT_HOURS_MS) {
+    return res.status(400).json({
+      message: "Reopen window has expired (48 hours after resolution). Contact the admin.",
+    });
+  }
+
+  let reopenProofUrl = req.body?.proofUrl || null;
   if (req.file) {
     try {
       const uploadResult = await uploadFile(req.file.buffer, `reopen_${complaintId}`);
@@ -538,7 +681,8 @@ async function reopenComplaint(req, res) {
     }
   }
 
-  complaint.status = "In_Progress";
+  const previousCsatRating = complaint.csatRating;
+  complaint.status = "Reopened";
   complaint.resolutionVerified = false;
   complaint.reopenedCount = (complaint.reopenedCount || 0) + 1;
   complaint.reopenedAt = new Date();
@@ -546,9 +690,10 @@ async function reopenComplaint(req, res) {
   if (reopenProofUrl) {
     complaint.reopenProofUrl = reopenProofUrl;
   }
+  complaint.csatRating = null;
 
   complaint.statusHistory.push({
-    status: "In_Progress",
+    status: "Reopened",
     note: `Reopened by student: ${reason}`,
     changedBy: req.auth.id,
     changedByRole: "student",
@@ -561,7 +706,49 @@ async function reopenComplaint(req, res) {
 
   await complaint.save();
 
-  void dispatchTimelineAlerts({
+  try {
+    const notifications = [];
+    const admins = await adminModel.find({}).select("_id email").lean();
+
+    // If reopened within 48h AND csatRating was <= 2, notify department head directly via the admin notification path
+    const isEscalated = previousCsatRating != null && previousCsatRating <= 2;
+    const adminTitle = isEscalated
+      ? `[DEPT HEAD ACTION] Reopened Low-CSAT Ticket (${complaint.assignedDepartment || complaint.category})`
+      : "Complaint Reopened";
+    const adminMessage = isEscalated
+      ? `Complaint #${complaint.ticketNumber || ""} was rated ${previousCsatRating}/5 stars and was REOPENED by student: "${reason.slice(0, 140)}". Department head intervention required.`
+      : `Complaint #${complaint.ticketNumber || ""} was reopened by student: "${reason.slice(0, 140)}".`;
+
+    for (const admin of admins) {
+      notifications.push(complaintNotification({
+        recipient: admin._id,
+        recipientRef: "admin",
+        complaint,
+        type: "status",
+        title: adminTitle,
+        message: adminMessage,
+      }));
+    }
+
+    if (complaint.assignedStaff) {
+      notifications.push(complaintNotification({
+        recipient: complaint.assignedStaff,
+        recipientRef: "staff",
+        complaint,
+        type: "status",
+        title: "Assigned Complaint Reopened",
+        message: `Ticket #${complaint.ticketNumber || ""} assigned to you was reopened: "${reason.slice(0, 140)}".`,
+      }));
+    }
+
+    if (notifications.length > 0) {
+      await createNotifications(notifications);
+    }
+  } catch (notifErr) {
+    console.error("Could not dispatch reopen notifications:", notifErr);
+  }
+
+  void smsWhatsAppService.dispatchTimelineAlerts({
     complaint,
     event: "reopened",
     actorName: req.user?.fullName || req.auth.name || "Student",
@@ -586,6 +773,7 @@ async function getTrendingComplaints(req, res) {
     "Assigned",
     "In_Progress",
     "On_Hold",
+    "Reopened",
   ];
 
   const filter = {
@@ -639,12 +827,54 @@ async function getTrendingComplaints(req, res) {
   });
 }
 
+async function getComplaintVerification(req, res) {
+  if (req.auth?.role !== "student") {
+    return res.status(403).json({
+      message: "Only students can view complaint verification.",
+    });
+  }
+
+  const { complaintId } = req.params;
+  if (!mongoose.isValidObjectId(complaintId)) {
+    return res.status(400).json({
+      message: "Invalid complaint ID.",
+    });
+  }
+
+  try {
+    const complaint = await complaintModel.findOne({
+      _id: complaintId,
+      user: req.auth.id,
+      userRef: "student",
+    }).select("aiResolutionVerification resolutionVerified resolutionProofUrl complaintPictureUrl status");
+
+    if (!complaint) {
+      return res.status(404).json({
+        message: "Complaint not found.",
+      });
+    }
+
+    return res.status(200).json({
+      verification: complaint.aiResolutionVerification || null,
+      resolutionVerified: Boolean(complaint.resolutionVerified),
+      status: complaint.status,
+    });
+  } catch (err) {
+    console.error("getComplaintVerification failed", { requestId: req.requestId, error: err });
+    return res.status(500).json({
+      message: "Could not load complaint verification.",
+    });
+  }
+}
+
 module.exports = {
   createComplaint,
   getComplaint,
   getSimilarComplaints,
   toggleUpvoteComplaint,
   verifyComplaintResolution,
+  submitCsat,
   reopenComplaint,
   getTrendingComplaints,
+  getComplaintVerification,
 };

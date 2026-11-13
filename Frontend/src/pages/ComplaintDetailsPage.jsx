@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ClipboardList, Download, LoaderCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardList, Download, LoaderCircle } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import DashboardShell from "../components/layout/DashboardShell.jsx";
 import ComplaintConversation from "../components/complaints/ComplaintConversation.jsx";
@@ -152,18 +152,104 @@ function ComplaintDetailsContent({ complaintId }) {
                   {complaint.status === "Resolved" && <div><dt className="text-muted">Resolved</dt><dd className="mt-1 font-semibold">{formatDate(complaint.resolvedAt)}</dd></div>}
                 </dl>
 
-                {complaint.complaintPictureUrl && (
+                {complaint.resolutionProofUrl && complaint.complaintPictureUrl ? (
+                  <section className="rounded-2xl border border-line bg-canvas/70 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
+                      <div>
+                        <h2 className="text-sm font-bold text-ink">
+                          Visual Resolution Audit (Before & After)
+                        </h2>
+                        <p className="text-xs text-muted">
+                          Side-by-side inspection of reported issue and technician fix
+                        </p>
+                      </div>
+                      {(() => {
+                        const v = complaint.aiResolutionVerification;
+                        const verdict = v?.verdict || (complaint.resolutionVerified ? "VERIFIED" : "INCONCLUSIVE");
+                        const score = v?.confidenceScore != null ? v.confidenceScore : (verdict === "VERIFIED" ? 85 : 50);
+
+                        if (verdict === "VERIFIED") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+                              <CheckCircle2 size={13} className="text-emerald-600" />
+                              VERIFIED · AI confidence {score}%
+                            </span>
+                          );
+                        }
+                        if (verdict === "MISMATCH") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-300 bg-rose-100 px-3 py-1 text-xs font-bold text-rose-800">
+                              <AlertTriangle size={13} className="text-rose-600" />
+                              MISMATCH · AI confidence {score}%
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                            <AlertTriangle size={13} className="text-amber-600" />
+                            INCONCLUSIVE (Needs manual check) · AI confidence {score}%
+                          </span>
+                        );
+                      })()}
+                    </div>
+
+                    {complaint.aiResolutionVerification?.reasons?.length > 0 && (
+                      <div className="mt-3 rounded-xl bg-stone-100/80 p-2.5 text-xs text-stone-700">
+                        <p className="font-semibold text-stone-800">AI Audit Assessment:</p>
+                        <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                          {complaint.aiResolutionVerification.reasons.map((r, i) => (
+                            <li key={i}>{r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <span className="block text-xs font-bold uppercase tracking-wider text-muted">
+                          BEFORE · Reported Issue
+                        </span>
+                        <ComplaintImageLink
+                          src={complaint.complaintPictureUrl}
+                          alt={`Reported photo for ${complaint.complaintTitle}`}
+                          ariaLabel="Open submitted proof photo"
+                          className="mt-2 inline-flex max-w-full overflow-hidden rounded-xl border border-line bg-white"
+                          imageClassName="max-h-72 max-w-full object-contain"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold uppercase tracking-wider text-muted">
+                          AFTER · Resolution Proof
+                        </span>
+                        <ComplaintImageLink
+                          src={complaint.resolutionProofUrl}
+                          alt={`Resolution photo for ${complaint.complaintTitle}`}
+                          ariaLabel="Open resolution proof photo"
+                          className="mt-2 inline-flex max-w-full overflow-hidden rounded-xl border border-emerald-300 bg-white"
+                          imageClassName="max-h-72 max-w-full object-contain"
+                        />
+                      </div>
+                    </div>
+                  </section>
+                ) : complaint.complaintPictureUrl ? (
                   <section>
                     <h2 className="text-sm font-bold">Submitted proof</h2>
-                    <ComplaintImageLink src={complaint.complaintPictureUrl} alt={`Proof for ${complaint.complaintTitle}`} ariaLabel="Open submitted proof photo" className="mt-2 inline-flex max-w-full overflow-hidden rounded-xl border border-line" imageClassName="max-h-80 max-w-full object-contain" />
+                    <ComplaintImageLink
+                      src={complaint.complaintPictureUrl}
+                      alt={`Proof for ${complaint.complaintTitle}`}
+                      ariaLabel="Open submitted proof photo"
+                      className="mt-2 inline-flex max-w-full overflow-hidden rounded-xl border border-line"
+                      imageClassName="max-h-80 max-w-full object-contain"
+                    />
                   </section>
-                )}
+                ) : null}
 
-                {complaint.status === "Resolved" && (complaint.resolutionNote || complaint.resolutionProofUrl) && (
+                {complaint.status === "Resolved" && complaint.resolutionNote && (
                   <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
                     <h2 className="font-bold text-emerald-900">Resolution details</h2>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-900">{complaint.resolutionNote || "No resolution note was recorded."}</p>
-                    {complaint.resolutionProofUrl && <ComplaintImageLink src={complaint.resolutionProofUrl} alt={`Resolution proof for ${complaint.complaintTitle}`} ariaLabel="Open resolution proof photo" className="mt-3 inline-flex max-w-full overflow-hidden rounded-xl border border-emerald-200" imageClassName="max-h-72 max-w-full object-contain" />}
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-900">
+                      {complaint.resolutionNote}
+                    </p>
                   </section>
                 )}
 

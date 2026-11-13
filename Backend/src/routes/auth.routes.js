@@ -157,4 +157,28 @@ router.post(
   authController.forgotPasswordChange,
 );
 
+/**
+ * @route POST api/auth/phone-otp/request
+ * @description Request a 6-digit OTP code to link WhatsApp phone number to account
+ * @access protected
+ */
+router.post(
+  "/phone-otp/request",
+  authMiddleWare.verifyAccessToken,
+  otpRequestLimiter,
+  authController.requestPhoneOtp,
+);
+
+/**
+ * @route POST api/auth/phone-otp/verify
+ * @description Verify 6-digit OTP code and link WhatsApp phone number to account
+ * @access protected
+ */
+router.post(
+  "/phone-otp/verify",
+  authMiddleWare.verifyAccessToken,
+  otpVerifyLimiter,
+  authController.verifyPhoneOtp,
+);
+
 module.exports = router;

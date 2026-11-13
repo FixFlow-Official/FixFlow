@@ -53,6 +53,10 @@ const studentSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  phoneNumberVerified: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 studentSchema.index({ username: 1, _id: 1 });

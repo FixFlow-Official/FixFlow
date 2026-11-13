@@ -3,10 +3,12 @@ import StaffComplaintCard from "../features/staff/StaffComplaintCard.jsx";
 import ComplaintEmptyState from "../components/complaints/ComplaintEmptyState.jsx";
 import { ComplaintCardSkeleton } from "../components/common/SkeletonLoader.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
+import CampusOutageSection from "../components/broadcasts/CampusOutageSection.jsx";
 import {
   AlertCircle,
   CheckCircle2,
   LoaderCircle,
+  Radio,
   RefreshCw,
   UserRound,
   Wrench,
@@ -44,6 +46,11 @@ const staffNavItems = [
     icon: Wrench,
   },
   {
+    id: "broadcasts",
+    label: "Campus Outages",
+    icon: Radio,
+  },
+  {
     id: "profile",
     label: "Profile",
     icon: UserRound,
@@ -57,6 +64,7 @@ const staffAssistantItems = [
   { id: "inProgressStatus", label: "In progress complaints" },
   { id: "underReviewStatus", label: "Under review complaints" },
   { id: "onHoldStatus", label: "On hold complaints" },
+  { id: "campusOutages", label: "Campus outages" },
 ];
 
 export default function StaffDashboardPage() {
@@ -82,6 +90,51 @@ export default function StaffDashboardPage() {
   const [savingId, setSavingId] = useState("");
   const latestRequestId = useRef(0);
   const { setScreenContext } = useAssistantContext();
+
+  // Restore expanded modal and notes from sessionStorage if mobile OS refreshed tab during camera capture
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("fixflow_staff_active_session");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.expandedComplaintId) {
+          setExpandedComplaintId(parsed.expandedComplaintId);
+        }
+        if (parsed?.notes) {
+          setNotes((prev) => ({ ...parsed.notes, ...prev }));
+        }
+        if (parsed?.selectedStatuses) {
+          setSelectedStatuses((prev) => ({ ...parsed.selectedStatuses, ...prev }));
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  // Sync expanded modal and notes to sessionStorage
+  useEffect(() => {
+    try {
+      if (expandedComplaintId) {
+        sessionStorage.setItem(
+          "fixflow_staff_active_session",
+          JSON.stringify({ expandedComplaintId, notes, selectedStatuses })
+        );
+      } else {
+        sessionStorage.removeItem("fixflow_staff_active_session");
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [expandedComplaintId, notes, selectedStatuses]);
+
+  useEffect(() => {
+    function onOpenOutages() {
+      setActiveSection("broadcasts");
+    }
+    window.addEventListener("fixflow:open-broadcasts", onOpenOutages);
+    return () => window.removeEventListener("fixflow:open-broadcasts", onOpenOutages);
+  }, []);
 
   useEffect(() => {
     setScreenContext({
@@ -396,13 +449,25 @@ export default function StaffDashboardPage() {
           setPage(1);
         } else if (item.id === "profile") {
           setActiveSection("profile");
+        } else if (item.id === "campusOutages" || item.id === "broadcasts") {
+          setActiveSection("broadcasts");
         } else {
           setActiveSection("complaints");
         }
       }}
       navItems={staffNavItems}
     >
-      {activeSection === "profile" ? <ProfileSettings /> : (
+      {activeSection === "profile" ? (
+        <ProfileSettings />
+      ) : activeSection === "broadcasts" ? (
+        <div className="w-full min-w-0">
+          <CampusOutageSection
+            accessToken={accessToken}
+            onBack={() => setActiveSection("complaints")}
+            userRole="staff"
+          />
+        </div>
+      ) : (
       <main className="w-full min-w-0">
         {/* Staff dashboard welcome panel */}
         <section className="mb-7 rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8">
@@ -421,19 +486,29 @@ export default function StaffDashboardPage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={loadComplaints}
-              disabled={loading}
-              className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-xl border border-line px-4 text-sm font-semibold text-ink hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 sm:self-auto"
-            >
-              {loading ? (
-                <LoaderCircle size={16} className="animate-spin" />
-              ) : (
-                <RefreshCw size={16} />
-              )}
-              Refresh
-            </button>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setActiveSection("broadcasts")}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-sm font-semibold text-amber-900 shadow-2xs transition hover:bg-amber-100"
+              >
+                <Radio size={16} className="text-amber-600 animate-pulse" />
+                Campus Outages
+              </button>
+              <button
+                type="button"
+                onClick={loadComplaints}
+                disabled={loading}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-line px-4 text-sm font-semibold text-ink hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <LoaderCircle size={16} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={16} />
+                )}
+                Refresh
+              </button>
+            </div>
           </div>
         </section>
 

@@ -21,6 +21,10 @@ const config = {
   VAPID_SUBJECT: process.env.VAPID_SUBJECT,
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_MODEL: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
+  WHATSAPP_TOKEN: process.env.WHATSAPP_TOKEN?.trim(),
+  WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID?.trim(),
+  WHATSAPP_BUSINESS_ACCOUNT_ID: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim(),
+  WHATSAPP_LANGUAGE_CODE: process.env.WHATSAPP_LANGUAGE_CODE?.trim() || "en_US",
 };
 
 const requiredVariables = [

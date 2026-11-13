@@ -13,7 +13,7 @@ const DEFAULT_POLICIES = SLA_CATEGORIES.map((category) => ({
   resolutionHours: 120,
   reminderBeforeHours: 4,
 }));
-const ACTIVE_STATUSES = ["Submitted", "Under_Review", "Assigned", "In_Progress", "On_Hold"];
+const ACTIVE_STATUSES = ["Submitted", "Under_Review", "Assigned", "In_Progress", "On_Hold", "Reopened"];
 const SCAN_INTERVAL_MS = 5 * 60 * 1000;
 
 async function ensureSlaPolicies() {

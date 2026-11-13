@@ -183,7 +183,7 @@ export default function CampusTrendingFeed({ accessToken, onSelectComplaint }) {
         </div>
 
         {/* Search Input */}
-        <div className="relative min-w-[220px]">
+        <div className="relative w-full sm:w-auto sm:min-w-[240px]">
           <Search
             size={15}
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
@@ -288,7 +288,7 @@ export default function CampusTrendingFeed({ accessToken, onSelectComplaint }) {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-line/60 pt-3 text-[11px] text-muted">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-3 text-[11px] text-muted">
                   <span>Reported {formatDate(item.createdAt)}</span>
 
                   {/* +1 / I have this issue too button */}

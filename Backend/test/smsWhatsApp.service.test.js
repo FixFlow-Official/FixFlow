@@ -62,6 +62,10 @@ test("formatTimelineMessage produces clear, high-readability messages for all li
 test("sendComplaintSmsWhatsAppUpdate persists simulated timeline entry on complaint", async () => {
   const originalFindById = complaintModel.findById;
   const originalStudentFindById = studentModel.findById;
+  const origWaToken = process.env.WHATSAPP_TOKEN;
+  const origWaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  delete process.env.WHATSAPP_TOKEN;
+  delete process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   const mockComplaint = {
     _id: "672f00000000000000000002",
@@ -97,17 +101,23 @@ test("sendComplaintSmsWhatsAppUpdate persists simulated timeline entry on compla
     assert.equal(entry.recipientPhone, "+91 98123 45678");
     assert.equal(entry.event, "assigned");
     assert.equal(entry.status, "simulated");
-    assert.ok(entry.providerMessageId.startsWith("sim_whatsapp_"));
+    assert.ok(entry.providerMessageId.startsWith("sim_"));
     assert.equal(mockComplaint.smsUpdates.length, 1);
   } finally {
     complaintModel.findById = originalFindById;
     studentModel.findById = originalStudentFindById;
+    if (origWaToken !== undefined) process.env.WHATSAPP_TOKEN = origWaToken;
+    if (origWaPhoneId !== undefined) process.env.WHATSAPP_PHONE_NUMBER_ID = origWaPhoneId;
   }
 });
 
-test("dispatchTimelineAlerts dispatches both WhatsApp and SMS timeline records", async () => {
+test("dispatchTimelineAlerts dispatches WhatsApp timeline record", async () => {
   const originalFindById = complaintModel.findById;
   const updates = [];
+  const origWaToken = process.env.WHATSAPP_TOKEN;
+  const origWaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  delete process.env.WHATSAPP_TOKEN;
+  delete process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   const mockComplaint = {
     _id: "672f00000000000000000003",
@@ -130,10 +140,11 @@ test("dispatchTimelineAlerts dispatches both WhatsApp and SMS timeline records",
       note: "Inspecting wiring junction box.",
     });
 
-    assert.equal(updates.length, 2);
-    const channels = updates.map((u) => u.channel).sort();
-    assert.deepEqual(channels, ["sms", "whatsapp"]);
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].channel, "whatsapp");
   } finally {
     complaintModel.findById = originalFindById;
+    if (origWaToken !== undefined) process.env.WHATSAPP_TOKEN = origWaToken;
+    if (origWaPhoneId !== undefined) process.env.WHATSAPP_PHONE_NUMBER_ID = origWaPhoneId;
   }
 });

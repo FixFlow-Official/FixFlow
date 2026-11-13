@@ -65,6 +65,16 @@ router.post(
 );
 
 /**
+ * @route api/student/complaints/:complaintId/csat
+ * @description student submits CSAT satisfaction rating (1-5) and feedback
+ */
+router.post(
+  "/complaints/:complaintId/csat",
+  verifyAccessToken,
+  studentController.submitCsat,
+);
+
+/**
  * @route api/student/complaints/:complaintId/reopen
  * @description student reopens inadequate repair with explanation and optional proof photo
  */
@@ -73,6 +83,16 @@ router.post(
   verifyAccessToken,
   uploadSingleImage("image"),
   studentController.reopenComplaint,
+);
+
+/**
+ * @route api/student/complaints/:complaintId/verification
+ * @description student views resolution AI verification status
+ */
+router.get(
+  "/complaints/:complaintId/verification",
+  verifyAccessToken,
+  studentController.getComplaintVerification,
 );
 
 module.exports = router;

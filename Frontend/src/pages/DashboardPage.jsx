@@ -10,6 +10,7 @@ import StudentComplaintForm from "../features/student/StudentComplaintForm.jsx";
 import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import QrScannerModal from "../components/common/QrScannerModal.jsx";
 import CampusTrendingFeed from "../features/student/CampusTrendingFeed.jsx";
+import CampusOutageSection from "../components/broadcasts/CampusOutageSection.jsx";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -18,12 +19,13 @@ import {
   LoaderCircle,
   MessageSquareText,
   QrCode,
+  Radio,
   UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/useAuth.js";
 import { useAssistantContext } from "../context/assistantContext.jsx";
 import { downloadComplaintPdf } from "../utils/complaintPdf.js";
-import { validateImageFile } from "../utils/fileValidation.js";
+import { compressImageIfNeeded, validateImageFile } from "../utils/fileValidation.js";
 import {
   createComplaintRequest,
   getComplaintsRequest,
@@ -73,6 +75,40 @@ export default function DashboardPage() {
   const [qrPrefilled, setQrPrefilled] = useState(isQrSource);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
 
+  // Restore form draft from sessionStorage if page was reloaded by mobile OS when returning from camera
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("fixflow_student_complaint_draft");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed) {
+          if (parsed.title) setTitle((prev) => prev || parsed.title);
+          if (parsed.description) setDescription((prev) => prev || parsed.description);
+          if (parsed.category) setCategory((prev) => prev || parsed.category);
+          if (parsed.building) setBuilding((prev) => prev || parsed.building);
+          if (parsed.floor) setFloor((prev) => (prev !== "Ground Floor" ? prev : (parsed.floor || "Ground Floor")));
+          if (parsed.room) setRoom((prev) => prev || parsed.room);
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  // Save form draft to sessionStorage so user inputs survive mobile camera app activity switches
+  useEffect(() => {
+    if (title || description || category || building || (floor && floor !== "Ground Floor") || room) {
+      try {
+        sessionStorage.setItem(
+          "fixflow_student_complaint_draft",
+          JSON.stringify({ title, description, category, building, floor, room })
+        );
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [title, description, category, building, floor, room]);
+
   function handleQrScan(locationData) {
     if (locationData.building) setBuilding(locationData.building);
     if (locationData.floor) setFloor(locationData.floor);
@@ -86,7 +122,12 @@ export default function DashboardPage() {
   useEffect(() => {
     setScreenContext({
       currentSection: `student-${activeSection}-${page}`,
-      pageTitle: page === "create" ? "Submit New Complaint" : "My Complaints & Campus Facility Status",
+      pageTitle:
+        activeSection === "trending" || page === "trending"
+          ? "Campus Trending Issues"
+          : page === "create"
+            ? "Submit New Complaint"
+            : "My Complaints & Campus Facility Status",
       activeFilters: { page, complaintFilter, complaintSearch },
       selectedComplaint: selectedComplaint
         ? { id: selectedComplaint._id, title: selectedComplaint.title, status: selectedComplaint.status }
@@ -294,6 +335,7 @@ export default function DashboardPage() {
 
   // Student navigation handlers.
   function openMyComplaints() {
+    setActiveSection("complaints");
     setComplaintFilter("current");
     setComplaintPage(1);
     setSelectedComplaint(null);
@@ -301,8 +343,15 @@ export default function DashboardPage() {
   }
 
   function openCreateComplaint() {
+    setActiveSection("complaints");
     setSelectedComplaint(null);
     setPage("create");
+  }
+
+  function openCampusTrending() {
+    setActiveSection("trending");
+    setSelectedComplaint(null);
+    setPage("trending");
   }
 
   function openComplaintDetails(complaint) {
@@ -311,22 +360,35 @@ export default function DashboardPage() {
   }
 
   // Validate the proof image selected in the submission form.
-  function handleImageChange(event) {
-    const selectedImage = event.target.files?.[0] ?? null;
+  async function handleImageChange(event) {
+    const rawFile = event.target?.files?.[0] ?? null;
     setFormError("");
     setSuccessMessage("");
 
-    if (selectedImage) {
+    if (!rawFile) {
+      return;
+    }
+
+    try {
+      const selectedImage = await compressImageIfNeeded(rawFile);
       const check = validateImageFile(selectedImage);
       if (!check.valid) {
         setImage(null);
-        event.target.value = "";
+        if (event.target) event.target.value = "";
         setFormError(check.error);
         return;
       }
+      setImage(selectedImage);
+    } catch {
+      const check = validateImageFile(rawFile);
+      if (!check.valid) {
+        setImage(null);
+        if (event.target) event.target.value = "";
+        setFormError(check.error);
+        return;
+      }
+      setImage(rawFile);
     }
-
-    setImage(selectedImage);
   }
 
   // Submit the student's complaint and refresh the complaint list.
@@ -371,7 +433,10 @@ export default function DashboardPage() {
         accessToken,
       );
 
-      setSuccessMessage(result.message || "Complaint submitted successfully.");
+      const outageNote = result.broadcastMatch
+        ? ` Note: A scheduled outage ("${result.broadcastMatch.title}") is currently active for this area.`
+        : "";
+      setSuccessMessage((result.message || "Complaint submitted successfully.") + outageNote);
       setTitle("");
       setDescription("");
       setCategory("");
@@ -379,7 +444,12 @@ export default function DashboardPage() {
       setFloor("Ground Floor");
       setRoom("");
       setImage(null);
-      form?.reset();
+      try {
+        sessionStorage.removeItem("fixflow_student_complaint_draft");
+      } catch {
+        // Ignore storage errors
+      }
+      form?.reset?.();
 
       try {
         const updatedData = await getComplaintsRequest(accessToken, {
@@ -446,36 +516,90 @@ export default function DashboardPage() {
     return () => window.removeEventListener("fixflow:fill-complaint-form", onFillEvent);
   }, [handleFillFormFields]);
 
+  useEffect(() => {
+    function onOpenOutages() {
+      setActiveSection("broadcasts");
+      setPage("broadcasts");
+    }
+    window.addEventListener("fixflow:open-broadcasts", onOpenOutages);
+    return () => window.removeEventListener("fixflow:open-broadcasts", onOpenOutages);
+  }, []);
+
   return (
     <DashboardShell
       workspaceLabel="Student"
       activeSection={activeSection}
-      onSectionChange={setActiveSection}
+      onSectionChange={(section) => {
+        setActiveSection(section);
+        if (section === "trending") {
+          setPage("trending");
+        } else if (section === "broadcasts") {
+          setPage("broadcasts");
+        } else if (section === "complaints") {
+          if (page === "trending" || page === "broadcasts") {
+            setPage("create");
+          }
+        }
+      }}
       onVoiceComplaintSubmit={submitComplaint}
       onFillFormFields={handleFillFormFields}
       assistantNavItems={[
         { id: "newComplaint", label: "New complaint" },
         { id: "myComplaints", label: "My complaints" },
         { id: "trendingFeed", label: "Campus trending" },
+        { id: "campusOutages", label: "Campus outages" },
       ]}
       onAssistantNavigate={(item) => {
-        if (item.id === "newComplaint" || item.id === "myComplaints" || item.id === "trendingFeed") {
-          setActiveSection("complaints");
-          if (item.id === "newComplaint") openCreateComplaint();
-          else if (item.id === "trendingFeed") setPage("trending");
-          else openMyComplaints();
-        } else if (item.id === "trending") {
-          setActiveSection("complaints");
-          setPage("trending");
-        } else setActiveSection(item.id);
+        if (item.id === "newComplaint") {
+          openCreateComplaint();
+        } else if (item.id === "myComplaints") {
+          openMyComplaints();
+        } else if (item.id === "trendingFeed" || item.id === "trending") {
+          openCampusTrending();
+        } else if (item.id === "campusOutages" || item.id === "broadcasts") {
+          setActiveSection("broadcasts");
+          setPage("broadcasts");
+        } else {
+          setActiveSection(item.id);
+        }
       }}
       navItems={[
         { id: "complaints", label: "Complaints", icon: MessageSquareText },
         { id: "trending", label: "Campus Trending", icon: Flame },
+        { id: "broadcasts", label: "Campus Outages", icon: Radio },
         { id: "profile", label: "Profile", icon: UserRound },
       ]}
     >
-      {activeSection === "profile" ? <ProfileSettings /> : (
+      {activeSection === "profile" ? (
+        <ProfileSettings />
+      ) : activeSection === "broadcasts" || page === "broadcasts" ? (
+        <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#fef3c7_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
+          <CampusOutageSection
+            accessToken={accessToken}
+            onBack={() => {
+              setActiveSection("complaints");
+              setPage("create");
+            }}
+            userRole="student"
+          />
+        </div>
+      ) : activeSection === "trending" || page === "trending" ? (
+        <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#e8f3ef_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
+          <div className="space-y-5">
+            <button
+              type="button"
+              onClick={openCreateComplaint}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand"
+            >
+              <ArrowLeft size={16} /> Back to report issue
+            </button>
+            <CampusTrendingFeed
+              accessToken={accessToken}
+              onSelectComplaint={openComplaintDetails}
+            />
+          </div>
+        </div>
+      ) : (
       <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#e8f3ef_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
         {page === "create" ? (
           <>
@@ -500,7 +624,18 @@ export default function DashboardPage() {
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     type="button"
-                    onClick={() => setPage("trending")}
+                    onClick={() => {
+                      setActiveSection("broadcasts");
+                      setPage("broadcasts");
+                    }}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-sm font-semibold text-amber-900 shadow-2xs transition hover:bg-amber-100 sm:w-auto"
+                  >
+                    <Radio size={16} className="text-amber-600 animate-pulse" />
+                    Campus Outages
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openCampusTrending}
                     className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-sm font-semibold text-amber-900 shadow-2xs transition hover:bg-amber-100 sm:w-auto"
                   >
                     <Flame size={16} className="text-amber-600" />
@@ -538,6 +673,7 @@ export default function DashboardPage() {
               room={room}
               setRoom={setRoom}
               image={image}
+              setImage={setImage}
               handleImageChange={handleImageChange}
               formError={formError}
               successMessage={successMessage}
@@ -546,6 +682,10 @@ export default function DashboardPage() {
               handleSubmit={handleSubmit}
               qrPrefilled={qrPrefilled}
               onOpenQrScanner={() => setQrScannerOpen(true)}
+              onOpenBroadcasts={() => {
+                setActiveSection("broadcasts");
+                setPage("broadcasts");
+              }}
             />
 
             {qrScannerOpen && (

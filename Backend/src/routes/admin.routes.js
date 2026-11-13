@@ -48,6 +48,12 @@ router.patch(
 );
 
 router.post(
+  "/complaints/:complaintId/verify-override",
+  verifyAccessToken,
+  adminController.verifyOverrideComplaint,
+);
+
+router.post(
   "/directory/users",
   verifyAccessToken,
   directoryIdValidatorRule,
@@ -61,6 +67,21 @@ router.post(
   directoryIdValidatorRule,
   typeValidatorRule,
   adminController.deleteUserByAdmin,
+);
+
+function requireAdmin(req, res, next) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({ message: "Only administrators can perform this action." });
+  }
+  return next();
+}
+
+router.get("/audit-queue", verifyAccessToken, requireAdmin, adminController.getAuditQueue);
+router.patch(
+  "/complaints/:complaintId/audit",
+  verifyAccessToken,
+  requireAdmin,
+  adminController.resolveComplaintAudit,
 );
 
 module.exports = router;

@@ -14,6 +14,7 @@ const campusDirectoryModel = require("../models/campusDirectory.model");
 const blackListTokenModel = require("../models/blackListToken.model");
 const complaintModel = require("../models/complaint.model");
 const uploadFile = require("../services/storage.service");
+const { sendWhatsAppOtp } = require("../services/whatsappCloud.service");
 const {
   REFRESH_TOKEN_TTL_MS,
   enforceActiveSessionLimit,
@@ -36,7 +37,7 @@ function serializeCurrentUser(user) {
     detail: user.course ?? user.department ?? user.designation ?? null,
     profilePictureUrl: user.profilePictureUrl || null,
     phoneNumber: user.phoneNumber || null,
-    smsNotificationsEnabled: user.smsNotificationsEnabled ?? true,
+    phoneNumberVerified: Boolean(user.phoneNumberVerified),
     whatsAppNotificationsEnabled: user.whatsAppNotificationsEnabled ?? true,
   };
 }
@@ -61,9 +62,6 @@ async function updateProfile(req, res) {
     if (req.body.phoneNumber !== undefined) {
       const rawPhone = String(req.body.phoneNumber || "").trim();
       update.phoneNumber = rawPhone.length > 0 ? rawPhone.slice(0, 20) : null;
-    }
-    if (req.body.smsNotificationsEnabled !== undefined) {
-      update.smsNotificationsEnabled = req.body.smsNotificationsEnabled === true || req.body.smsNotificationsEnabled === "true";
     }
     if (req.body.whatsAppNotificationsEnabled !== undefined) {
       update.whatsAppNotificationsEnabled = req.body.whatsAppNotificationsEnabled === true || req.body.whatsAppNotificationsEnabled === "true";
@@ -900,6 +898,175 @@ async function forgotPasswordChange(req, res, next) {
   }
 }
 
+async function requestPhoneOtp(req, res) {
+  if (!req.auth?.id || !req.auth?.role) {
+    return res.status(401).json({ message: "You must be signed in to link a WhatsApp phone number." });
+  }
+
+  const model = accountModels[req.auth.role];
+  if (!model) {
+    return res.status(403).json({ message: "Account type cannot link a phone number." });
+  }
+
+  const user = await model.findById(req.auth.id);
+  if (!user) {
+    return res.status(404).json({ message: "Account not found." });
+  }
+
+  const rawPhone = String(req.body?.phoneNumber || "").trim();
+  const cleanedPhone = rawPhone.replace(/[^\d+]/g, "");
+  const digitCount = (cleanedPhone.match(/\d/g) || []).length;
+  if (digitCount < 10 || digitCount > 15) {
+    return res.status(400).json({
+      message: "Please enter a valid phone number with 10 to 15 digits (e.g., +91 98765 43210).",
+    });
+  }
+
+  const normalizedPhone = cleanedPhone.startsWith("+") ? cleanedPhone : `+91${cleanedPhone}`;
+
+  // 60-second cooldown check
+  const previousOtp = await otpModel.findOne({
+    userId: String(req.auth.id),
+    userType: req.auth.role,
+    purpose: "phone-link",
+  });
+
+  if (previousOtp?.updatedAt) {
+    const elapsedMs = Date.now() - previousOtp.updatedAt.getTime();
+    const secondsLeft = Math.ceil((60_000 - elapsedMs) / 1000);
+    if (secondsLeft > 0) {
+      return res.status(429).json({
+        message: `Please wait ${secondsLeft} seconds before requesting another code.`,
+        retryAfterSeconds: secondsLeft,
+      });
+    }
+  }
+
+  const otp = getOtp();
+  const otpHash = await bcrypt.hash(String(otp), 10);
+
+  await otpModel.findOneAndUpdate(
+    {
+      userId: String(req.auth.id),
+      userType: req.auth.role,
+      purpose: "phone-link",
+    },
+    {
+      userId: String(req.auth.id),
+      userType: req.auth.role,
+      purpose: "phone-link",
+      email: user.email,
+      phoneNumber: normalizedPhone,
+      otpHash,
+      attempts: 0,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    },
+    {
+      upsert: true,
+      new: true,
+      runValidators: true,
+    },
+  );
+
+  // Dispatch OTP strictly via Meta WhatsApp Cloud API
+  let dispatchResult = { success: true, simulated: true };
+  try {
+    dispatchResult = await sendWhatsAppOtp({ to: normalizedPhone, otp });
+  } catch (err) {
+    console.error("WhatsApp OTP dispatch error:", err);
+    dispatchResult = {
+      success: false,
+      simulated: false,
+      error: err.message || "Failed to dispatch code to WhatsApp.",
+    };
+  }
+
+  if (dispatchResult?.success === false) {
+    return res.status(502).json({
+      message: dispatchResult?.error || "Could not deliver verification code to your WhatsApp number. Please verify your phone number or try again.",
+      phoneNumber: normalizedPhone,
+    });
+  }
+
+  return res.status(200).json({
+    message: "Verification code sent to your WhatsApp number.",
+    phoneNumber: normalizedPhone,
+    retryAfterSeconds: 60,
+  });
+}
+
+async function verifyPhoneOtp(req, res) {
+  if (!req.auth?.id || !req.auth?.role) {
+    return res.status(401).json({ message: "You must be signed in to verify your WhatsApp number." });
+  }
+
+  const rawOtp = String(req.body?.otp || "").trim();
+  if (!/^\d{6}$/.test(rawOtp)) {
+    return res.status(400).json({ message: "Please enter a valid 6-digit verification code." });
+  }
+
+  const otpDoc = await otpModel.findOne({
+    userId: String(req.auth.id),
+    userType: req.auth.role,
+    purpose: "phone-link",
+  });
+
+  if (!otpDoc || otpDoc.expiresAt <= new Date()) {
+    if (otpDoc) await otpModel.findByIdAndDelete(otpDoc._id);
+    return res.status(400).json({
+      message: "Verification code has expired or was not requested. Please request a new code.",
+    });
+  }
+
+  if (otpDoc.attempts >= 5) {
+    await otpModel.findByIdAndDelete(otpDoc._id);
+    return res.status(429).json({
+      message: "Too many failed attempts. Please request a new verification code.",
+    });
+  }
+
+  const isValid = await bcrypt.compare(rawOtp, otpDoc.otpHash);
+  if (!isValid) {
+    otpDoc.attempts += 1;
+    if (otpDoc.attempts >= 5) {
+      await otpModel.findByIdAndDelete(otpDoc._id);
+      return res.status(429).json({
+        message: "Too many failed attempts. Please request a new verification code.",
+      });
+    }
+    await otpDoc.save();
+    const remaining = 5 - otpDoc.attempts;
+    return res.status(400).json({
+      message: `Invalid verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+    });
+  }
+
+  const linkedPhone = otpDoc.phoneNumber;
+  await otpModel.findByIdAndDelete(otpDoc._id);
+
+  const model = accountModels[req.auth.role];
+  const user = await model.findByIdAndUpdate(
+    req.auth.id,
+    {
+      $set: {
+        phoneNumber: linkedPhone,
+        phoneNumberVerified: true,
+        whatsAppNotificationsEnabled: true,
+      },
+    },
+    { new: true, runValidators: true },
+  );
+
+  if (!user) {
+    return res.status(404).json({ message: "Account not found." });
+  }
+
+  return res.status(200).json({
+    message: "WhatsApp phone number linked and verified successfully!",
+    user: serializeCurrentUser(user),
+  });
+}
+
 module.exports = {
   updateProfile,
   changePassword,
@@ -913,4 +1080,6 @@ module.exports = {
   tokenRecreate,
   verifyUser,
   forgotPasswordChange,
+  requestPhoneOtp,
+  verifyPhoneOtp,
 };

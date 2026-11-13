@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, FileImage, LoaderCircle, Plus, QrCode, Send, Sparkles, ThumbsUp, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, AlertTriangle, Camera, CheckCircle2, FileImage, LoaderCircle, Plus, QrCode, Send, Sparkles, ThumbsUp, Upload, X } from "lucide-react";
 import ComplaintStatusBadge from "../../components/complaints/ComplaintStatusBadge.jsx";
 import {
   getCampusBlocksRequest,
@@ -7,6 +7,7 @@ import {
   suggestComplaintDescriptionRequest,
   upvoteComplaintRequest,
   diagnoseComplaintImageRequest,
+  getBroadcastMatchRequest,
 } from "../../services/api.js";
 
 // Student complaint submission UI with AI duplicate protection and clean submission flow.
@@ -24,6 +25,7 @@ export default function StudentComplaintForm({
   room,
   setRoom,
   image,
+  setImage,
   handleImageChange,
   formError,
   successMessage,
@@ -32,7 +34,36 @@ export default function StudentComplaintForm({
   handleSubmit,
   qrPrefilled = false,
   onOpenQrScanner,
+  onOpenBroadcasts,
 }) {
+  const cameraInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  useEffect(() => {
+    if (!image) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(image);
+    setPreviewUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [image]);
+
+  function handleClearImage(e) {
+    if (e?.preventDefault) e.preventDefault();
+    if (e?.stopPropagation) e.stopPropagation();
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (typeof setImage === "function") {
+      setImage(null);
+    }
+    setDiagnosisInfo(null);
+    setDiagnosisError("");
+  }
+
   const [draftSuggestion, setDraftSuggestion] = useState(null);
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftError, setDraftError] = useState("");
@@ -51,6 +82,46 @@ export default function StudentComplaintForm({
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosisInfo, setDiagnosisInfo] = useState(null);
   const [diagnosisError, setDiagnosisError] = useState("");
+
+  // Outage Broadcast Intercept State
+  const [broadcastMatch, setBroadcastMatch] = useState(null);
+  const [checkingBroadcast, setCheckingBroadcast] = useState(false);
+  const [broadcastDismissed, setBroadcastDismissed] = useState(false);
+
+  useEffect(() => {
+    setBroadcastDismissed(false);
+    if (!category || !building?.trim() || !accessToken) {
+      setBroadcastMatch(null);
+      return;
+    }
+
+    let isMounted = true;
+    async function checkOutage() {
+      setCheckingBroadcast(true);
+      try {
+        const res = await getBroadcastMatchRequest(
+          { category, building: building.trim() },
+          accessToken,
+        );
+        if (isMounted) {
+          if (res?.matched && res?.match) {
+            setBroadcastMatch(res.match);
+          } else {
+            setBroadcastMatch(null);
+          }
+        }
+      } catch {
+        if (isMounted) setBroadcastMatch(null);
+      } finally {
+        if (isMounted) setCheckingBroadcast(false);
+      }
+    }
+
+    checkOutage();
+    return () => {
+      isMounted = false;
+    };
+  }, [category, building, accessToken]);
 
   async function handleAiDiagnose() {
     if (!image) return;
@@ -218,7 +289,11 @@ export default function StudentComplaintForm({
       </div>
 
       <form
-        onSubmit={handleFormSubmit}
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleFormSubmit(e);
+        }}
         className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2"
       >
         <div className="min-w-0">
@@ -510,47 +585,171 @@ export default function StudentComplaintForm({
         </div>
 
         <div className="min-w-0 sm:col-span-2">
-          <label
-            htmlFor="complaint-image"
-            className="mb-2 block text-sm font-semibold"
-          >
-            Add a photo{" "}
-            <span className="text-rose-600">(required proof)</span>
-          </label>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="block text-sm font-semibold text-ink">
+              Add a photo{" "}
+              <span className="text-rose-600">(required proof)</span>
+            </span>
+            <span className="text-xs text-muted">
+              JPG, PNG, or WebP · up to 5 MB
+            </span>
+          </div>
 
-          <label
-            htmlFor="complaint-image"
-            className="group flex min-h-24 min-w-0 cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-line bg-gradient-to-br from-canvas to-white px-3 py-4 transition hover:border-brand/50 hover:from-brand-soft/60 sm:gap-4 sm:px-4"
-          >
-            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-brand shadow-sm">
-              {image ? <FileImage size={20} /> : <Upload size={20} />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block break-all text-sm font-semibold">
-                {image?.name || "Choose an image to attach"}
-              </span>
-              <span className="mt-1 block text-xs text-muted">
-                JPG, PNG, or WebP · up to 5 MB
-              </span>
-            </span>
-            <span className="shrink-0 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold shadow-sm">
-              Browse
-            </span>
-          </label>
+          {/* When NO image is attached yet */}
+          {!image && (
+            <>
+              {/* Mobile Camera & Upload options */}
+              <div className="mb-2.5 grid grid-cols-2 gap-2 sm:hidden">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    cameraInputRef.current?.click();
+                  }}
+                  className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand-soft/70 px-3 py-2 text-xs font-bold text-brand-dark transition hover:bg-brand-soft active:scale-98 shadow-2xs"
+                >
+                  <Camera size={16} className="text-brand shrink-0" />
+                  <span>Click Photo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-xs font-bold text-ink transition hover:border-brand/40 hover:bg-stone-50 active:scale-98 shadow-2xs"
+                >
+                  <Upload size={16} className="text-slate-600 shrink-0" />
+                  <span>Upload Photo</span>
+                </button>
+              </div>
+
+              {/* Desktop File Picker Card */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+                className="group hidden sm:flex min-h-24 min-w-0 cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-line bg-gradient-to-br from-canvas to-white px-3 py-4 transition hover:border-brand/50 hover:from-brand-soft/60 sm:gap-4 sm:px-4"
+              >
+                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-brand shadow-sm">
+                  <Upload size={20} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">
+                    Choose an image to attach
+                  </span>
+                  <span className="mt-1 block text-xs text-muted">
+                    Click to browse files from your device
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold shadow-sm">
+                  Browse
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* Selected File Preview with thumbnail & clear/retake buttons */}
+          {image && (
+            <div className="flex items-center justify-between gap-2.5 rounded-2xl border border-brand/25 bg-brand-soft/30 p-2.5 shadow-2xs overflow-hidden">
+              <div className="flex flex-1 min-w-0 items-center gap-2.5 overflow-hidden">
+                {previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt="Proof preview"
+                    className="size-12 rounded-xl object-cover border border-brand/20 shrink-0 shadow-2xs"
+                  />
+                ) : (
+                  <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+                    <FileImage size={18} />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <p className="truncate text-xs font-bold text-ink">
+                    {image.name}
+                  </p>
+                  <p className="text-[11px] text-muted">
+                    {(image.size / (1024 * 1024)).toFixed(2)} MB · Photo ready
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    cameraInputRef.current?.click();
+                  }}
+                  className="flex sm:hidden size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-brand transition cursor-pointer"
+                  title="Retake photo"
+                  aria-label="Retake photo"
+                >
+                  <Camera size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="hidden sm:flex size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-brand transition cursor-pointer"
+                  title="Change photo"
+                  aria-label="Change photo"
+                >
+                  <Upload size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearImage}
+                  className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-rose-600 transition cursor-pointer"
+                  title="Remove photo"
+                  aria-label="Remove photo"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
 
           <input
+            ref={cameraInputRef}
+            id="complaint-camera"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleImageChange}
+            className="fixed -top-[1000px] -left-[1000px] size-px opacity-0 pointer-events-none"
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+
+          <input
+            ref={fileInputRef}
             id="complaint-image"
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,image/jpg"
             onChange={handleImageChange}
-            className="sr-only"
+            className="fixed -top-[1000px] -left-[1000px] size-px opacity-0 pointer-events-none"
+            tabIndex={-1}
+            aria-hidden="true"
           />
 
           {image && (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand/20 bg-brand-soft/40 p-3">
-              <div className="flex items-center gap-2">
+            <div className="mt-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-2xl border border-brand/20 bg-brand-soft/40 p-3">
+              <div className="flex items-center gap-2 min-w-0">
                 <Sparkles size={16} className="text-brand shrink-0" />
-                <span className="text-xs font-semibold text-ink">
+                <span className="text-xs font-semibold text-ink truncate sm:whitespace-normal">
                   {diagnosisInfo ? "Photo diagnosed by Gemini Vision" : "Have Gemini Vision diagnose this photo?"}
                 </span>
               </div>
@@ -558,7 +757,7 @@ export default function StudentComplaintForm({
                 type="button"
                 disabled={diagnosing}
                 onClick={handleAiDiagnose}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-brand-dark disabled:opacity-50 cursor-pointer"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 sm:py-1.5 text-xs font-bold text-white shadow-xs transition hover:bg-brand-dark disabled:opacity-50 cursor-pointer shrink-0"
               >
                 {diagnosing ? (
                   <>
@@ -576,33 +775,120 @@ export default function StudentComplaintForm({
           )}
 
           {diagnosisError && (
-            <p className="mt-2 text-xs text-rose-600 font-medium">
+            <p className="mt-2 text-xs text-rose-600 font-medium break-words">
               {diagnosisError}
             </p>
           )}
 
           {diagnosisInfo && (
-            <div className="mt-2.5 rounded-xl border border-emerald-300 bg-emerald-50/70 p-3 text-xs text-emerald-950">
-              <div className="flex flex-wrap items-center justify-between gap-1.5 font-bold">
-                <span className="flex items-center gap-1.5 text-emerald-800">
-                  <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                  Gemini Vision: {diagnosisInfo.title}
+            <div className="mt-2.5 rounded-2xl border border-emerald-300 bg-emerald-50/80 p-3 text-xs text-emerald-950">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 font-bold">
+                <span className="flex items-start gap-1.5 text-emerald-800 min-w-0">
+                  <CheckCircle2 size={15} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <span className="break-words">Gemini Vision: {diagnosisInfo.title}</span>
                 </span>
-                <span className="rounded-md bg-emerald-200/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-900 border border-emerald-300">
+                <span className="self-start shrink-0 rounded-md bg-emerald-200/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-900 border border-emerald-300">
                   {diagnosisInfo.severity} Severity
                 </span>
               </div>
-              <p className="mt-1 text-[11px] text-emerald-900/90">
+              <p className="mt-1.5 text-[11px] text-emerald-900/90 leading-relaxed">
                 Category set to <strong>{diagnosisInfo.category}</strong>. You can adjust details before submitting.
               </p>
               {diagnosisInfo.safetyWarning && (
-                <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-amber-900 font-semibold text-xs">
+                <p className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-2 text-amber-900 font-semibold text-xs break-words">
                   ⚠️ Safety Hazard: {diagnosisInfo.safetyWarning}
                 </p>
               )}
             </div>
           )}
         </div>
+
+        {/* Active Campus Outage Broadcast Intercept Box */}
+        {broadcastMatch && !broadcastDismissed && (
+          <div
+            id="broadcast-outage-intercept"
+            className="min-w-0 sm:col-span-2 rounded-2xl border border-amber-400 bg-gradient-to-br from-amber-50 via-orange-50/40 to-amber-100/50 p-4 shadow-sm ring-2 ring-amber-300/80"
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-600 text-white shadow-xs">
+                <AlertTriangle size={20} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-display text-sm font-bold text-amber-950 sm:text-base">
+                    ⚠️ Active Scheduled Outage in {building || "this area"}
+                  </h3>
+                  <span className="rounded-full border border-amber-400 bg-amber-200/80 px-2.5 py-0.5 text-[11px] font-bold text-amber-950">
+                    Known Campus Outage
+                  </span>
+                </div>
+
+                <p className="mt-1 text-xs leading-relaxed text-amber-950">
+                  A scheduled outage is currently underway for this area until{" "}
+                  <strong className="font-semibold text-amber-950">
+                    {new Date(broadcastMatch.endsAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </strong>{" "}
+                  — <span className="font-semibold">{broadcastMatch.title}</span>. You can still submit, or upvote the existing report instead.
+                </p>
+
+                <div className="mt-2.5 rounded-xl border border-amber-200/90 bg-white/95 p-3 text-xs text-muted shadow-xs">
+                  <p className="font-medium text-ink">{broadcastMatch.message}</p>
+                  <p className="mt-1 text-[11px] text-amber-800">
+                    Category: <strong>{broadcastMatch.category}</strong> · Expected resolution:{" "}
+                    <strong>
+                      {new Date(broadcastMatch.endsAt).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </strong>
+                  </p>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof onOpenBroadcasts === "function") {
+                        onOpenBroadcasts();
+                      } else {
+                        window.dispatchEvent(new CustomEvent("fixflow:open-broadcasts"));
+                      }
+                    }}
+                    className="rounded-xl border border-amber-400 bg-amber-100/90 px-3.5 py-1.5 text-xs font-semibold text-amber-950 shadow-xs hover:bg-amber-200 transition-colors"
+                  >
+                    View campus outages →
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const dupElem = document.getElementById("duplicate-section");
+                      if (dupElem) {
+                        dupElem.scrollIntoView({ behavior: "smooth" });
+                      } else {
+                        window.scrollTo({ top: 400, behavior: "smooth" });
+                      }
+                    }}
+                    className="rounded-xl border border-amber-400 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 shadow-xs hover:bg-amber-50 transition-colors"
+                  >
+                    View existing report
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastDismissed(true)}
+                    className="rounded-xl bg-amber-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-amber-800 transition-colors"
+                  >
+                    Submit anyway
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Duplicate Issue Alert — Only shown after clicking submit if a duplicate was detected */}
         {topDuplicate && !overrideDuplicate && (

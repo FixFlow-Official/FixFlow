@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
-import { ImagePlus, LoaderCircle, Mic, MicOff, Sparkles, Wand2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { AlertTriangle, Camera, ImagePlus, LoaderCircle, Mic, MicOff, Sparkles, Wand2, X } from "lucide-react";
 import { suggestStatusNoteRequest, formatStaffVoiceNoteRequest } from "../../services/api.js";
-import { validateImageFile } from "../../utils/fileValidation.js";
+import { compressImageIfNeeded, validateImageFile } from "../../utils/fileValidation.js";
 
 // Status controls for one active staff complaint. The dashboard owns request state and saving.
 export default function StaffComplaintStatusForm({
@@ -29,7 +29,80 @@ export default function StaffComplaintStatusForm({
   const [listening, setListening] = useState(false);
   const [polishing, setPolishing] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState(null);
   const recognitionRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const selectedProofFile = resolutionProofs[complaintId] ?? null;
+
+  useEffect(() => {
+    if (!selectedProofFile || typeof window === "undefined" || !window.URL?.createObjectURL) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    try {
+      const url = window.URL.createObjectURL(selectedProofFile);
+      setPreviewUrl(url);
+      return () => {
+        window.URL.revokeObjectURL(url);
+      };
+    } catch {
+      setPreviewUrl(null);
+    }
+  }, [selectedProofFile]);
+
+  async function handleProofFileChange(event) {
+    const rawFile = event.target?.files?.[0] ?? null;
+    setFileValidationError("");
+    if (!rawFile) {
+      return;
+    }
+
+    try {
+      const file = await compressImageIfNeeded(rawFile);
+      const check = validateImageFile(file);
+      if (!check.valid) {
+        if (event.target) event.target.value = "";
+        setFileValidationError(check.error);
+        setResolutionProofs((current) => ({
+          ...current,
+          [complaintId]: null,
+        }));
+        return;
+      }
+      setResolutionProofs((current) => ({
+        ...current,
+        [complaintId]: file,
+      }));
+    } catch {
+      const check = validateImageFile(rawFile);
+      if (!check.valid) {
+        if (event.target) event.target.value = "";
+        setFileValidationError(check.error);
+        setResolutionProofs((current) => ({
+          ...current,
+          [complaintId]: null,
+        }));
+        return;
+      }
+      setResolutionProofs((current) => ({
+        ...current,
+        [complaintId]: rawFile,
+      }));
+    }
+  }
+
+  function handleClearProof() {
+    setResolutionProofs((current) => ({
+      ...current,
+      [complaintId]: null,
+    }));
+    setFileValidationError("");
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   if (isResolved) return null;
 
@@ -155,27 +228,27 @@ export default function StaffComplaintStatusForm({
                             ))}
                           </select>
 
-                          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-                            <label htmlFor={`note-${complaintId}`} className="block text-sm font-semibold">
+                          <div className="mt-4 space-y-2">
+                            <label htmlFor={`note-${complaintId}`} className="block text-sm font-semibold text-ink">
                               {selectedStatus === "Resolved"
                                 ? "Resolution note (required)"
                                 : selectedStatus === "On_Hold"
                                   ? "Note (required)"
                                   : "Note (optional)"}
                             </label>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={toggleVoiceNote}
                                 title={listening ? "Stop recording" : "Dictate status note by voice"}
-                                className={`inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-bold transition cursor-pointer ${
+                                className={`inline-flex min-h-7.5 items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
                                   listening
                                     ? "border-rose-400 bg-rose-100 text-rose-700 animate-pulse"
                                     : "border-slate-200 bg-white text-slate-700 hover:bg-stone-100"
                                 }`}
                               >
                                 {listening ? <MicOff size={13} className="text-rose-600" /> : <Mic size={13} className="text-brand" />}
-                                {listening ? "Listening…" : "Voice Note"}
+                                {listening ? "Listening…" : "Voice"}
                               </button>
 
                               {notes[complaintId]?.trim() && (
@@ -184,10 +257,10 @@ export default function StaffComplaintStatusForm({
                                   onClick={polishVoiceNote}
                                   disabled={polishing}
                                   title="Format informal or spoken note into professional status update"
-                                  className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-brand/20 bg-brand-soft/60 px-2 text-[11px] font-bold text-brand-dark hover:bg-brand-soft disabled:opacity-60 cursor-pointer"
+                                  className="inline-flex min-h-7.5 items-center gap-1 rounded-lg border border-brand/20 bg-brand-soft/60 px-2 py-1 text-xs font-bold text-brand-dark hover:bg-brand-soft disabled:opacity-60 cursor-pointer"
                                 >
                                   {polishing ? <LoaderCircle size={13} className="animate-spin" /> : <Wand2 size={13} />}
-                                  {polishing ? "Polishing…" : "Polish with AI"}
+                                  {polishing ? "Polishing…" : "Polish AI"}
                                 </button>
                               )}
 
@@ -195,7 +268,8 @@ export default function StaffComplaintStatusForm({
                                 type="button"
                                 onClick={suggestNote}
                                 disabled={suggesting}
-                                className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-brand/20 bg-brand-soft/60 px-2.5 text-[11px] font-bold text-brand-dark hover:bg-brand-soft disabled:opacity-60 cursor-pointer"
+                                title="Draft note with AI"
+                                className="inline-flex min-h-7.5 items-center gap-1 rounded-lg border border-brand/20 bg-brand-soft/60 px-2.5 py-1 text-xs font-bold text-brand-dark hover:bg-brand-soft disabled:opacity-60 cursor-pointer"
                               >
                                 {suggesting ? <LoaderCircle size={13} className="animate-spin" /> : <Sparkles size={13} />}
                                 {suggesting ? "Drafting…" : "Draft note"}
@@ -234,57 +308,121 @@ export default function StaffComplaintStatusForm({
 
                           {selectedStatus === "Resolved" && (
                             <div className="mt-4">
-                              <label
-                                htmlFor={`resolution-proof-${complaintId}`}
-                                className="block text-sm font-semibold"
-                              >
-                                Resolution photo (required)
-                              </label>
+                              <div className="flex items-center justify-between">
+                                <label className="block text-sm font-semibold text-ink">
+                                  Resolution photo (required)
+                                </label>
+                                <span className="text-[11px] text-muted">
+                                  Max 5 MB · JPG, PNG, WebP
+                                </span>
+                              </div>
 
-                              <label
-                                htmlFor={`resolution-proof-${complaintId}`}
-                                className="mt-2 flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line bg-white p-3 transition hover:border-brand hover:bg-brand-soft/30"
-                              >
-                                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
-                                  <ImagePlus size={19} />
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-semibold">
-                                    {resolutionProofs[complaintId]?.name ??
-                                      "Choose a resolution photo"}
-                                  </span>
-                                  <span className="mt-1 block text-xs text-muted">
-                                    Add a photo showing the completed repair
-                                  </span>
-                                </span>
-                              </label>
+                              {selectedProofFile ? (
+                                <div className="mt-2.5 flex items-center justify-between gap-2.5 rounded-2xl border border-brand/20 bg-white p-2.5 shadow-2xs overflow-hidden">
+                                  <div className="flex flex-1 min-w-0 items-center gap-2.5 overflow-hidden">
+                                    {previewUrl ? (
+                                      <img
+                                        src={previewUrl}
+                                        alt="Resolution proof preview"
+                                        className="size-12 rounded-xl object-cover border border-line shrink-0 shadow-2xs"
+                                      />
+                                    ) : (
+                                      <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+                                        <ImagePlus size={18} />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1 overflow-hidden">
+                                      <p className="truncate text-xs font-bold text-ink">
+                                        {selectedProofFile.name}
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] text-muted">
+                                        {(selectedProofFile.size / (1024 * 1024)).toFixed(2)} MB · Ready for AI verification
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        cameraInputRef.current?.click();
+                                      }}
+                                      className="rounded-lg p-1.5 text-slate-500 hover:bg-stone-100 hover:text-brand cursor-pointer"
+                                      title="Retake photo"
+                                      aria-label="Retake photo"
+                                    >
+                                      <Camera size={16} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleClearProof}
+                                      className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-rose-600 cursor-pointer"
+                                      title="Remove photo"
+                                      aria-label="Remove photo"
+                                    >
+                                      <X size={16} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="mt-2 grid grid-cols-2 gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        cameraInputRef.current?.click();
+                                      }}
+                                      className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand-soft/70 px-3 py-2 text-xs font-bold text-brand-dark transition hover:bg-brand-soft active:scale-98 shadow-2xs"
+                                    >
+                                      <Camera size={16} className="text-brand shrink-0" />
+                                      <span>Open Camera</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        fileInputRef.current?.click();
+                                      }}
+                                      className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-xs font-bold text-ink transition hover:border-brand/40 hover:bg-stone-50 active:scale-98 shadow-2xs"
+                                    >
+                                      <ImagePlus size={16} className="text-slate-600 shrink-0" />
+                                      <span>Upload Photo</span>
+                                    </button>
+                                  </div>
+                                  <p className="mt-1.5 text-xs text-muted">
+                                    Use <strong>Open Camera</strong> on mobile to snap the repaired asset, or <strong>Upload Photo</strong> from gallery.
+                                  </p>
+                                </>
+                              )}
 
                               <input
+                                ref={cameraInputRef}
+                                id={`resolution-camera-${complaintId}`}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="fixed -top-[1000px] -left-[1000px] size-px opacity-0 pointer-events-none"
+                                tabIndex={-1}
+                                aria-hidden="true"
+                                onChange={handleProofFileChange}
+                              />
+
+                              <input
+                                ref={fileInputRef}
                                 id={`resolution-proof-${complaintId}`}
                                 type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                className="sr-only"
-                                onChange={(event) => {
-                                  const file = event.target.files?.[0] ?? null;
-                                  setFileValidationError("");
-                                  if (file) {
-                                    const check = validateImageFile(file);
-                                    if (!check.valid) {
-                                      event.target.value = "";
-                                      setFileValidationError(check.error);
-                                      setResolutionProofs((current) => ({
-                                        ...current,
-                                        [complaintId]: null,
-                                      }));
-                                      return;
-                                    }
-                                  }
-                                  setResolutionProofs((current) => ({
-                                    ...current,
-                                    [complaintId]: file,
-                                  }));
-                                }}
+                                accept="image/jpeg,image/png,image/webp,image/jpg"
+                                className="fixed -top-[1000px] -left-[1000px] size-px opacity-0 pointer-events-none"
+                                tabIndex={-1}
+                                aria-hidden="true"
+                                onChange={handleProofFileChange}
                               />
+
                               {fileValidationError && (
                                 <p role="alert" className="mt-2 text-xs text-rose-700">
                                   {fileValidationError}
@@ -293,14 +431,48 @@ export default function StaffComplaintStatusForm({
                             </div>
                           )}
 
-                          {actionError[complaintId] && (
-                            <p
-                              role="alert"
-                              className="mt-2 text-sm text-rose-700"
-                            >
-                              {actionError[complaintId]}
-                            </p>
-                          )}
+                          {actionError[complaintId] && (() => {
+                            const rawErr = actionError[complaintId];
+                            const errMsg = typeof rawErr === "object" ? rawErr?.message : String(rawErr || "");
+                            const isMismatch =
+                              rawErr?.verification?.verdict === "MISMATCH" ||
+                              /resolution photo does not match|mismatch/i.test(errMsg);
+                            const reasons = rawErr?.verification?.reasons || [];
+
+                            if (isMismatch) {
+                              return (
+                                <div
+                                  role="alert"
+                                  className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-rose-950"
+                                >
+                                  <div className="flex items-start gap-2">
+                                    <AlertTriangle size={18} className="mt-0.5 shrink-0 text-rose-600" />
+                                    <div className="min-w-0 text-sm">
+                                      <p className="font-bold text-rose-900">
+                                        Resolution photo does not match the reported issue
+                                      </p>
+                                      <p className="mt-1 text-xs text-rose-800">
+                                        Upload a clearer photo of the same asset to verify repair completion.
+                                      </p>
+                                      {reasons.length > 0 && (
+                                        <ul className="mt-2 list-disc pl-4 text-xs space-y-1 text-rose-900 font-medium">
+                                          {reasons.map((r, idx) => (
+                                            <li key={idx}>{r}</li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <p role="alert" className="mt-2 text-sm text-rose-700">
+                                {errMsg}
+                              </p>
+                            );
+                          })()}
 
                           {successMessage[complaintId] && (
                             <p
@@ -309,6 +481,13 @@ export default function StaffComplaintStatusForm({
                             >
                               {successMessage[complaintId]}
                             </p>
+                          )}
+
+                          {isSaving && selectedStatus === "Resolved" && (
+                            <div className="mt-3 flex items-center justify-center gap-1.5 rounded-lg border border-brand/20 bg-brand-soft/50 px-3 py-1.5 text-xs font-semibold text-brand-dark animate-pulse">
+                              <Sparkles size={14} className="animate-spin text-brand" />
+                              <span>AI check running… verifying resolution proof photo</span>
+                            </div>
                           )}
 
                           <button
@@ -324,8 +503,8 @@ export default function StaffComplaintStatusForm({
                               />
                             )}
                             {selectedStatus === "Resolved"
-                              ? "Resolve complaint"
-                              : "Save update"}
+                              ? isSaving ? "Verifying resolution…" : "Resolve complaint"
+                              : isSaving ? "Saving…" : "Save update"}
                           </button>
                         </div>
 

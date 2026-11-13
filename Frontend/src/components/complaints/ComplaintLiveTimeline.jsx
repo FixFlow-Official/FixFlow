@@ -5,7 +5,6 @@ import {
   MessageCircle,
   MessageSquare,
   Radio,
-  Smartphone,
 } from "lucide-react";
 import { formatDate, formatStatus } from "../../utils/complaintConfig.js";
 
@@ -54,7 +53,7 @@ export default function ComplaintLiveTimeline({
             }`}
           >
             <MessageSquare size={12} />
-            <span>WhatsApp / SMS ({smsUpdates.length})</span>
+            <span>WhatsApp Updates ({smsUpdates.length})</span>
           </button>
           <button
             type="button"
@@ -71,64 +70,47 @@ export default function ComplaintLiveTimeline({
         </div>
       </div>
 
-      {/* WhatsApp / SMS Live Feed */}
+      {/* WhatsApp Live Feed */}
       {(activeTab === "all" || activeTab === "sms") && smsUpdates.length > 0 && (
         <div className="mt-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
-              Live WhatsApp &amp; SMS Dispatches
+              Live WhatsApp Dispatches
             </span>
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
               <CheckCheck size={12} />
-              98% Read Rate Active
+              Meta WhatsApp Active
             </span>
           </div>
 
           <div className="space-y-2.5">
-            {smsUpdates.map((item, idx) => {
-              const isWhatsApp = item.channel === "whatsapp";
-              return (
-                <div
-                  key={`${item.sentAt}-${idx}`}
-                  className={`rounded-2xl border p-3.5 shadow-xs transition ${
-                    isWhatsApp
-                      ? "border-emerald-200 bg-emerald-50/50"
-                      : "border-sky-200 bg-sky-50/50"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          isWhatsApp
-                            ? "bg-emerald-600 text-white"
-                            : "bg-sky-600 text-white"
-                        }`}
-                      >
-                        {isWhatsApp ? (
-                          <MessageCircle size={10} />
-                        ) : (
-                          <Smartphone size={10} />
-                        )}
-                        <span>{isWhatsApp ? "WhatsApp" : "SMS"}</span>
-                      </span>
-                      <span className="text-xs font-semibold text-ink">
-                        To: {item.recipientPhone || "Student Phone"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted">
-                      <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>{formatDate(item.sentAt)}</span>
-                    </div>
+            {smsUpdates.map((item, idx) => (
+              <div
+                key={`${item.sentAt}-${idx}`}
+                className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3.5 shadow-xs transition"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                      <MessageCircle size={10} />
+                      <span>WhatsApp</span>
+                    </span>
+                    <span className="text-xs font-semibold text-ink">
+                      To: {item.recipientPhone || "Student Phone"}
+                    </span>
                   </div>
 
-                  <p className="mt-2 text-xs leading-relaxed text-ink bg-white/80 p-2.5 rounded-xl border border-line/60">
-                    "{item.message}"
-                  </p>
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted">
+                    <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>{formatDate(item.sentAt)}</span>
+                  </div>
                 </div>
-              );
-            })}
+
+                <p className="mt-2 text-xs leading-relaxed text-ink bg-white/80 p-2.5 rounded-xl border border-line/60">
+                  "{item.message}"
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       )}

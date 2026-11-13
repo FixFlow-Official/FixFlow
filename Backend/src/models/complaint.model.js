@@ -7,6 +7,7 @@ const complaintStatuses = [
   "In_Progress",
   "On_Hold",
   "Resolved",
+  "Reopened",
   "Rejected",
   "Closed",
   "Withdrawn",
@@ -81,9 +82,48 @@ const complaintSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    adminAuditRequired: {
+      type: Boolean,
+      default: false,
+    },
     resolutionVerifiedAt: {
       type: Date,
       default: null,
+    },
+    aiResolutionVerification: {
+      verdict: {
+        type: String,
+        enum: ["VERIFIED", "INCONCLUSIVE", "MISMATCH"],
+        default: null,
+      },
+      confidenceScore: {
+        type: Number,
+        min: 0,
+        max: 100,
+        default: null,
+      },
+      reasons: {
+        type: [String],
+        default: [],
+      },
+      observedAsset: {
+        type: String,
+        maxlength: 120,
+        default: null,
+      },
+      provider: {
+        type: String,
+        enum: ["gemini", "rules", "none"],
+        default: null,
+      },
+      checkedAt: {
+        type: Date,
+        default: null,
+      },
+      checkedBy: {
+        type: String,
+        default: null,
+      },
     },
     reopenedCount: {
       type: Number,
