@@ -24,6 +24,7 @@ import {
   createBroadcastRequest,
   updateBroadcastRequest,
   deleteBroadcastRequest,
+  getExecutiveReportsRequest,
 } from "../src/services/api.js";
 
 function jsonResponse(payload, status = 200, headers = {}) {
@@ -508,6 +509,28 @@ test("broadcastRequests send correct URLs, methods, and payloads", async (t) => 
   assert.equal(calls[4].url, "/api/admin/broadcasts/b123");
   assert.equal(calls[4].method, "DELETE");
 });
+
+test("getExecutiveReportsRequest passes period and authorization headers", async (t) => {
+  let captured;
+  mockFetch(t, async (url, options) => {
+    captured = { url, options };
+    return jsonResponse({
+      period: "90d",
+      summary: { total: 0, resolved: 0 },
+      mttrByDepartment: [],
+      slaBreachHeatmap: [],
+      technicianEfficiency: [],
+      csatByDepartment: [],
+    });
+  });
+
+  const res = await getExecutiveReportsRequest("90d", "admin-jwt-token");
+  assert.match(captured.url, /\/api\/admin\/reports\/executive\?period=90d/);
+  assert.equal(captured.options.method, "GET");
+  assert.equal(captured.options.headers.Authorization, "Bearer admin-jwt-token");
+  assert.equal(res.period, "90d");
+});
+
 
 
 

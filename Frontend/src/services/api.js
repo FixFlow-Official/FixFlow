@@ -687,6 +687,15 @@ export async function getAdminComplaintReportsRequest(period, accessToken) {
   );
 }
 
+export async function getExecutiveReportsRequest(period = "90d", accessToken) {
+  const query = new URLSearchParams({ period });
+  return complaintRequest(
+    `/api/admin/reports/executive?${query.toString()}`,
+    { method: "GET" },
+    accessToken,
+  );
+}
+
 export async function getAdminSlaOverviewRequest({ page = 1, limit = 20, view = "all" } = {}, accessToken) {
   const query = new URLSearchParams({ page: String(page), limit: String(limit), view });
   return complaintRequest(`/api/admin/sla?${query.toString()}`, { method: "GET" }, accessToken);

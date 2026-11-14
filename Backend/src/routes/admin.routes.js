@@ -31,6 +31,7 @@ router.patch(
 );
 
 router.get("/reports/complaints", verifyAccessToken, adminReportsController.getComplaintReports);
+router.get("/reports/executive", verifyAccessToken, adminReportsController.getExecutiveReports);
 router.get("/sla", verifyAccessToken, slaController.getSlaOverview);
 router.put("/sla/policies", verifyAccessToken, slaController.updateSlaPolicies);
 router.get("/sla/complaints/:complaintId/history", verifyAccessToken, slaController.getComplaintSlaHistory);

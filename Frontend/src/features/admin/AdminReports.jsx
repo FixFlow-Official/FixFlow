@@ -2,14 +2,34 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
+  BarChart3,
   CheckCircle2,
   ClipboardList,
   Clock3,
+  Gauge,
+  Layers,
   RefreshCw,
+  ShieldAlert,
   Sparkles,
+  Star,
+  Users,
   X,
 } from "lucide-react";
-import { getAdminComplaintReportsRequest, getAdminReportInsightsRequest } from "../../services/api.js";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
+import {
+  getAdminComplaintReportsRequest,
+  getExecutiveReportsRequest,
+  getAdminReportInsightsRequest,
+} from "../../services/api.js";
 import { formatStatus } from "../../utils/complaintConfig.js";
 import { useAssistantContext } from "../../context/assistantContext.jsx";
 
@@ -47,6 +67,8 @@ function MetricCard({ icon: Icon, label, value, hint, tone = "brand", onClick })
     blue: "bg-sky-50 text-sky-700",
     amber: "bg-amber-50 text-amber-700",
     green: "bg-emerald-50 text-emerald-700",
+    rose: "bg-rose-50 text-rose-700",
+    purple: "bg-purple-50 text-purple-700",
   };
 
   return (
@@ -62,7 +84,7 @@ function MetricCard({ icon: Icon, label, value, hint, tone = "brand", onClick })
           <p className="mt-2 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{value}</p>
           <p className="mt-1 text-xs leading-5 text-muted">{hint}</p>
         </div>
-        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${toneStyles[tone]}`}>
+        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${toneStyles[tone] || toneStyles.brand}`}>
           <Icon size={19} />
         </span>
       </div>
@@ -138,8 +160,10 @@ function ReportDetailsModal({ detail, onClose }) {
 }
 
 export default function AdminReports({ accessToken }) {
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "executive"
   const [period, setPeriod] = useState("90d");
   const [report, setReport] = useState(null);
+  const [execReport, setExecReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -154,18 +178,23 @@ export default function AdminReports({ accessToken }) {
   useEffect(() => {
     setScreenContext({
       currentSection: "admin-reports",
-      pageTitle: "Executive Reports, Resolution Trends & KPI Analytics",
-      activeFilters: { period },
-      reportSummary: report?.summary || null,
+      pageTitle: activeTab === "executive"
+        ? "Executive Facility Health, MTTR & SLA Analytics"
+        : "Executive Reports, Resolution Trends & KPI Analytics",
+      activeFilters: { period, tab: activeTab },
+      reportSummary: (activeTab === "executive" ? execReport?.summary : report?.summary) || null,
       interactiveElements: [
+        "tabSelector: overview, executive",
         "periodFilterPills: 30d, 90d, 12m, all",
         "generateAiInsightsButton",
-        "metricCards: Total complaints, avg resolution time, open backlog, resolution rate",
-        "categoryBreakdownBars",
+        "metricCards",
+        "mttrDepartmentBarChart",
+        "slaBreachHeatmapTable",
+        "technicianEfficiencyTable",
       ],
       availableActions: ["filter", "clearFilters", "navigate"],
     });
-  }, [period, report, setScreenContext]);
+  }, [activeTab, period, report, execReport, setScreenContext]);
 
   useEffect(() => {
     function handleSetFilters(e) {
@@ -194,50 +223,78 @@ export default function AdminReports({ accessToken }) {
     setRefreshing(true);
     setError("");
     try {
-      const data = await getAdminComplaintReportsRequest(period, accessToken);
-      if (requestId === requestIdRef.current) setReport(data);
+      if (activeTab === "executive") {
+        const data = await getExecutiveReportsRequest(period, accessToken);
+        if (requestId === requestIdRef.current) setExecReport(data);
+      } else {
+        const data = await getAdminComplaintReportsRequest(period, accessToken);
+        if (requestId === requestIdRef.current) setReport(data);
+      }
     } catch (requestError) {
       if (requestId === requestIdRef.current) setError(requestError.message || "Could not load complaint reports.");
     } finally {
       if (requestId === requestIdRef.current) setRefreshing(false);
     }
-  }, [accessToken, period]);
+  }, [accessToken, activeTab, period]);
 
   useEffect(() => {
     const requestId = ++requestIdRef.current;
-    getAdminComplaintReportsRequest(period, accessToken)
-      .then((data) => {
-        if (requestId === requestIdRef.current) setReport(data);
-      })
-      .catch((requestError) => {
-        if (requestId === requestIdRef.current) setError(requestError.message || "Could not load complaint reports.");
-      })
-      .finally(() => {
-        if (requestId === requestIdRef.current) setLoading(false);
-      });
-  }, [accessToken, period]);
+    setLoading(true);
+    setError("");
+
+    if (activeTab === "executive") {
+      getExecutiveReportsRequest(period, accessToken)
+        .then((data) => {
+          if (requestId === requestIdRef.current) setExecReport(data);
+        })
+        .catch((requestError) => {
+          if (requestId === requestIdRef.current) setError(requestError.message || "Could not load executive reports.");
+        })
+        .finally(() => {
+          if (requestId === requestIdRef.current) setLoading(false);
+        });
+    } else {
+      getAdminComplaintReportsRequest(period, accessToken)
+        .then((data) => {
+          if (requestId === requestIdRef.current) setReport(data);
+        })
+        .catch((requestError) => {
+          if (requestId === requestIdRef.current) setError(requestError.message || "Could not load complaint reports.");
+        })
+        .finally(() => {
+          if (requestId === requestIdRef.current) setLoading(false);
+        });
+    }
+  }, [accessToken, activeTab, period]);
 
   const summary = report?.summary || {};
+  const execSummary = execReport?.summary || {};
   const maxTrend = Math.max(1, ...(report?.trend || []).flatMap((item) => [item.submitted, item.resolved]));
   const periodLabel = periodOptions.find((option) => option.value === period)?.label.toLowerCase();
+
   async function generateInsights() {
-    if (!report || aiInsightLoading) return;
+    const currentReport = activeTab === "executive" ? execReport : report;
+    if (!currentReport || aiInsightLoading) return;
     setAiInsightLoading(true);
     setAiInsightError("");
     setAiInsight("");
     setAiInsightSource("");
     try {
+      const isExec = activeTab === "executive";
+      const s = currentReport.summary || {};
       const result = await getAdminReportInsightsRequest({
         period: periodOptions.find((option) => option.value === period)?.label,
         summary: {
-          total: summary.total ?? 0,
-          current: summary.current ?? 0,
-          resolved: summary.resolved ?? 0,
-          averageResolutionHours: summary.averageResolutionHours ?? null,
+          total: s.total ?? 0,
+          current: s.current ?? (s.total - (s.resolved ?? 0)),
+          resolved: s.resolved ?? 0,
+          averageResolutionHours: isExec ? (s.avgResolutionHours ?? null) : (s.averageResolutionHours ?? null),
         },
-        categories: (report.categories || []).map((entry) => ({ label: String(entry._id || "Other"), count: entry.count })),
-        statuses: (report.statuses || []).map((entry) => ({ label: formatStatus(String(entry._id || "Other")), count: entry.count })),
-        departments: (report.departments || []).map((entry) => ({ label: String(entry._id || "Unassigned"), count: entry.count })),
+        categories: (report?.categories || []).map((entry) => ({ label: String(entry._id || "Other"), count: entry.count })),
+        statuses: (report?.statuses || []).map((entry) => ({ label: formatStatus(String(entry._id || "Other")), count: entry.count })),
+        departments: isExec
+          ? (execReport?.mttrByDepartment || []).map((entry) => ({ label: String(entry.department || "Unassigned"), count: entry.total }))
+          : (report?.departments || []).map((entry) => ({ label: String(entry._id || "Unassigned"), count: entry.count })),
       }, accessToken);
       setAiInsight(result.insights || "No insights were returned.");
       setAiInsightSource(result.source || "gemini");
@@ -247,6 +304,7 @@ export default function AdminReports({ accessToken }) {
       setAiInsightLoading(false);
     }
   }
+
   const openMetric = (title, value, description, extra) => setSelectedDetail({ title, value, description, content: extra });
   const openBreakdown = (title, entries, total) => setSelectedDetail({
     title,
@@ -254,13 +312,23 @@ export default function AdminReports({ accessToken }) {
     content: entries.length ? <div className="mt-4 space-y-3">{entries.map((entry) => <div key={entry._id} className="flex items-center justify-between gap-3 rounded-xl bg-canvas px-3 py-3"><span className="min-w-0 break-words text-sm font-semibold text-ink">{formatStatus(String(entry._id || "Other"))}</span><span className="shrink-0 text-sm tabular-nums text-muted">{entry.count} ({total ? Math.round(entry.count / total * 100) : 0}%)</span></div>)}</div> : <p className="mt-4 rounded-xl bg-canvas p-4 text-sm text-muted">No data is available for this period.</p>,
   });
 
+  // Calculate slowest technician for highlight
+  const resolvedTechs = (execReport?.technicianEfficiency || []).filter((t) => t.avgResolveHours !== null);
+  const maxResolveHours = resolvedTechs.length ? Math.max(...resolvedTechs.map((t) => t.avgResolveHours)) : null;
+
   return (
     <main className="w-full min-w-0">
       <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <span className="inline-flex rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand-dark">Administrator workspace</span>
-          <h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">Complaint reports</h1>
-          <p className="mt-2 text-sm leading-6 text-muted">See complaint volume, outcomes, and workload across campus.</p>
+          <h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+            {activeTab === "executive" ? "Executive MTTR & SLA Analytics" : "Complaint reports"}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            {activeTab === "executive"
+              ? "High-level facility health, resolution MTTR, SLA breach heatmap, and technician efficiency."
+              : "See complaint volume, outcomes, and workload across campus."}
+          </p>
         </div>
         <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[minmax(9rem,1fr)_auto_auto]">
           <label htmlFor="report-period" className="sr-only">Report time period</label>
@@ -270,6 +338,7 @@ export default function AdminReports({ accessToken }) {
             onChange={(event) => {
               requestIdRef.current += 1;
               setReport(null);
+              setExecReport(null);
               setLoading(true);
               setError("");
               setPeriod(event.target.value);
@@ -287,12 +356,45 @@ export default function AdminReports({ accessToken }) {
             <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
             Refresh
           </button>
-          <button type="button" onClick={generateInsights} disabled={!report || loading || aiInsightLoading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-3.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10">
+          <button
+            type="button"
+            onClick={generateInsights}
+            disabled={(!report && !execReport) || loading || aiInsightLoading}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-3.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10"
+          >
             {aiInsightLoading ? <RefreshCw size={15} className="animate-spin" /> : <Sparkles size={15} />}
             {aiInsightLoading ? "Analyzing…" : "AI insights"}
           </button>
         </div>
       </div>
+
+      {/* Tabs Switcher */}
+      <nav aria-label="Reports Views" className="mt-6 flex border-b border-line">
+        <button
+          type="button"
+          onClick={() => setActiveTab("overview")}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition focus-visible:outline-none ${
+            activeTab === "overview"
+              ? "border-brand text-brand"
+              : "border-transparent text-muted hover:border-line hover:text-ink"
+          }`}
+        >
+          <Layers size={16} />
+          Overview
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("executive")}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition focus-visible:outline-none ${
+            activeTab === "executive"
+              ? "border-brand text-brand"
+              : "border-transparent text-muted hover:border-line hover:text-ink"
+          }`}
+        >
+          <Gauge size={16} />
+          Executive
+        </button>
+      </nav>
 
       {error && (
         <div role="alert" className="mt-6 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-800">
@@ -301,13 +403,27 @@ export default function AdminReports({ accessToken }) {
         </div>
       )}
 
-      {(aiInsight || aiInsightError) && <section className={`mt-5 rounded-2xl border p-4 sm:p-5 ${aiInsightError ? "border-rose-200 bg-rose-50" : "border-brand/15 bg-gradient-to-br from-brand-soft/60 to-white"}`}><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-brand shadow-sm"><Sparkles size={18} /></span><div className="min-w-0"><h2 className="text-sm font-bold text-ink">{aiInsightSource === "fallback" ? "AI insights unavailable" : "AI report insights"}</h2><p className={`mt-2 whitespace-pre-wrap text-sm leading-6 ${aiInsightError ? "text-rose-800" : "text-muted"}`}>{aiInsightError || aiInsight}</p><p className="mt-2 text-[11px] text-muted">Generated from aggregate counts only; verify insights against the charts.</p></div></div></section>}
+      {(aiInsight || aiInsightError) && (
+        <section className={`mt-5 rounded-2xl border p-4 sm:p-5 ${aiInsightError ? "border-rose-200 bg-rose-50" : "border-brand/15 bg-gradient-to-br from-brand-soft/60 to-white"}`}>
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-brand shadow-sm">
+              <Sparkles size={18} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-ink">{aiInsightSource === "fallback" ? "AI insights unavailable" : "AI report insights"}</h2>
+              <p className={`mt-2 whitespace-pre-wrap text-sm leading-6 ${aiInsightError ? "text-rose-800" : "text-muted"}`}>{aiInsightError || aiInsight}</p>
+              <p className="mt-2 text-[11px] text-muted">Generated from aggregate metrics; verify insights against the dashboard tables.</p>
+            </div>
+          </div>
+        </section>
+      )}
 
-      {loading && !report ? (
+      {loading && (activeTab === "overview" ? !report : !execReport) ? (
         <div className="mt-6 flex min-h-56 items-center justify-center gap-2 rounded-2xl border border-line bg-white text-sm text-muted">
-          <RefreshCw size={18} className="animate-spin text-brand" /> Loading reports…
+          <RefreshCw size={18} className="animate-spin text-brand" /> Loading analytics…
         </div>
-      ) : (
+      ) : activeTab === "overview" ? (
+        /* ================= OVERVIEW TAB ================= */
         <div className={`mt-6 space-y-5 transition-opacity ${loading || refreshing ? "opacity-60" : "opacity-100"}`}>
           <section aria-label="Complaint summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard icon={ClipboardList} label="Total complaints" value={summary.total ?? 0} hint={`Submitted ${periodLabel}`} tone="blue" onClick={() => openMetric("Total complaints", summary.total ?? 0, `Complaints submitted ${periodLabel}.`)} />
@@ -400,7 +516,314 @@ export default function AdminReports({ accessToken }) {
             {report?.generatedAt ? `Updated ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(report.generatedAt))}` : ""}
           </p>
         </div>
+      ) : (
+        /* ================= EXECUTIVE TAB ================= */
+        <div className={`mt-6 space-y-6 transition-opacity ${loading || refreshing ? "opacity-60" : "opacity-100"}`}>
+          {/* Executive Summary Metrics with Sample Sizes (n=...) */}
+          <section aria-label="Executive summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              icon={Clock3}
+              label="Campus MTTR"
+              value={execSummary.avgResolutionHours !== null ? `MTTR ${execSummary.avgResolutionHours}h (n=${execSummary.resolved})` : "No resolved complaints in this period"}
+              hint={execSummary.avgResolutionHours !== null ? `Mean Time to Resolve (${execSummary.resolved} resolved)` : "Awaiting complaint resolutions"}
+              tone="amber"
+            />
+            <MetricCard
+              icon={Activity}
+              label="Avg First Response"
+              value={execSummary.avgFirstResponseHours !== null ? `${execSummary.avgFirstResponseHours}h (n=${execSummary.total})` : "No resolved complaints in this period"}
+              hint={execSummary.avgFirstResponseHours !== null ? `Initial staff acknowledgment time` : "No acknowledgment records"}
+              tone="blue"
+            />
+            <MetricCard
+              icon={ShieldAlert}
+              label="SLA Breach Rate"
+              value={execSummary.overallSlaBreachRate !== null ? `${execSummary.overallSlaBreachRate}% (n=${execSummary.total})` : "No resolved complaints in this period"}
+              hint={execSummary.overallSlaBreachRate !== null ? `Complaints exceeding SLA promise` : "No active or resolved tickets"}
+              tone="rose"
+            />
+            <MetricCard
+              icon={Star}
+              label="Campus CSAT"
+              value={execSummary.avgCsat !== null ? `${execSummary.avgCsat} ★ (n=${execSummary.resolved})` : "No resolved complaints in this period"}
+              hint={execSummary.avgCsat !== null ? `Student satisfaction score (1–5 scale)` : "No student CSAT ratings"}
+              tone="green"
+            />
+          </section>
+
+          {/* Section 1: MTTR by Department Bar Chart (Recharts) */}
+          <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+              <div>
+                <h2 className="font-display text-lg font-bold text-ink flex items-center gap-2">
+                  <BarChart3 size={18} className="text-brand" />
+                  MTTR by Department (Mean Time to Resolution)
+                </h2>
+                <p className="mt-1 text-xs text-muted">
+                  Compares average resolution duration (MTTR) against initial acknowledgment response time.
+                </p>
+              </div>
+            </div>
+
+            {(!execReport?.mttrByDepartment?.length || execReport.mttrByDepartment.every((d) => d.resolved === 0 && d.total === 0)) ? (
+              <p className="mt-6 rounded-xl bg-canvas px-4 py-12 text-center text-sm font-medium text-muted">
+                No resolved complaints in this period
+              </p>
+            ) : (
+              <div className="mt-6">
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={execReport.mttrByDepartment.map((d) => ({
+                        department: d.department,
+                        mttr: d.avgResolutionHours,
+                        firstResponse: d.avgFirstResponseHours,
+                        resolved: d.resolved,
+                        total: d.total,
+                        breachRate: d.slaBreachRate,
+                      }))}
+                      margin={{ top: 10, right: 20, left: 0, bottom: 25 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="department" stroke="#64748b" fontSize={12} tickLine={false} />
+                      <YAxis stroke="#64748b" fontSize={12} tickLine={false} unit="h" />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#ffffff", borderRadius: "0.75rem", borderColor: "#cbd5e1" }}
+                        formatter={(val, name, props) => {
+                          const n = name === "MTTR (Hours)" ? props.payload.resolved : props.payload.total;
+                          return [val !== null ? `${val}h (n=${n})` : "No resolved complaints in this period", name];
+                        }}
+                      />
+                      <Legend verticalAlign="top" height={36} />
+                      <Bar dataKey="mttr" name="MTTR (Hours)" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="firstResponse" name="First Response (Hours)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Sample Size Breakdown Cards for each department */}
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {execReport.mttrByDepartment.map((dept) => (
+                    <div key={dept.department} className="rounded-xl border border-line bg-canvas/60 p-3.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-sm text-ink">{dept.department}</span>
+                        <span className="text-xs font-semibold text-muted">Total: {dept.total}</span>
+                      </div>
+                      <div className="mt-2 space-y-1 text-xs">
+                        <p className="flex justify-between text-slate-700">
+                          <span>MTTR:</span>
+                          <span className="font-bold text-sky-800">
+                            {dept.avgResolutionHours !== null ? `MTTR ${dept.avgResolutionHours}h (n=${dept.resolved})` : "No resolved complaints in this period"}
+                          </span>
+                        </p>
+                        <p className="flex justify-between text-slate-700">
+                          <span>First Response:</span>
+                          <span className="font-medium text-emerald-800">
+                            {dept.avgFirstResponseHours !== null ? `${dept.avgFirstResponseHours}h (n=${dept.total})` : "—"}
+                          </span>
+                        </p>
+                        <p className="flex justify-between text-slate-700">
+                          <span>SLA Breach Rate:</span>
+                          <span className={`font-semibold ${dept.slaBreachRate >= 20 ? "text-rose-700" : "text-slate-800"}`}>
+                            {dept.slaBreachRate !== null ? `${dept.slaBreachRate}% (n=${dept.total})` : "—"}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Section 2: SLA Breach Heatmap Table */}
+          <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+            <div className="border-b border-line pb-4">
+              <h2 className="font-display text-lg font-bold text-ink flex items-center gap-2">
+                <ShieldAlert size={18} className="text-rose-600" />
+                SLA Breach Heatmap (Top Campus Locations)
+              </h2>
+              <p className="mt-1 text-xs text-muted">
+                Facility locations sorted by highest SLA breach rate descending (red ≥ 30%, amber 10–29%, green &lt; 10%).
+              </p>
+            </div>
+
+            {(!execReport?.slaBreachHeatmap?.length || execReport.slaBreachHeatmap.every((c) => c.total === 0)) ? (
+              <p className="mt-6 rounded-xl bg-canvas px-4 py-12 text-center text-sm font-medium text-muted">
+                No resolved complaints in this period
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-xs uppercase tracking-wider text-muted">
+                      <th className="py-3 px-3">Building</th>
+                      <th className="py-3 px-3">Department</th>
+                      <th className="py-3 px-3 text-right">Breach Count</th>
+                      <th className="py-3 px-3 text-right">Total Sample</th>
+                      <th className="py-3 px-3 text-right">Breach Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {execReport.slaBreachHeatmap.map((cell, idx) => {
+                      const rate = cell.breachRate;
+                      let badgeClasses = "bg-slate-100 text-slate-700 border-slate-200";
+                      if (rate !== null) {
+                        if (rate >= 30) badgeClasses = "bg-rose-100 text-rose-800 border-rose-300 font-bold";
+                        else if (rate >= 10) badgeClasses = "bg-amber-100 text-amber-800 border-amber-300 font-semibold";
+                        else badgeClasses = "bg-emerald-100 text-emerald-800 border-emerald-300 font-medium";
+                      }
+
+                      return (
+                        <tr key={`${cell.building}-${cell.department}-${idx}`} className="hover:bg-canvas/50 transition">
+                          <td className="py-3 px-3 font-semibold text-ink">{cell.building}</td>
+                          <td className="py-3 px-3 text-slate-700">{cell.department}</td>
+                          <td className="py-3 px-3 text-right tabular-nums text-slate-800 font-medium">{cell.breachCount}</td>
+                          <td className="py-3 px-3 text-right tabular-nums text-muted">{cell.total}</td>
+                          <td className="py-3 px-3 text-right">
+                            <span className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-xs tabular-nums ${badgeClasses}`}>
+                              {rate !== null ? `${rate}% (n=${cell.total})` : "No resolved complaints in this period"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Section 3: Technician Efficiency Table */}
+          <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+            <div className="border-b border-line pb-4">
+              <h2 className="font-display text-lg font-bold text-ink flex items-center gap-2">
+                <Users size={18} className="text-brand" />
+                Technician Efficiency & Response Performance
+              </h2>
+              <p className="mt-1 text-xs text-muted">
+                Staff workload, acknowledgment time, resolution MTTR, and average student satisfaction rating.
+              </p>
+            </div>
+
+            {!execReport?.technicianEfficiency?.length ? (
+              <p className="mt-6 rounded-xl bg-canvas px-4 py-12 text-center text-sm font-medium text-muted">
+                No resolved complaints in this period
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-xs uppercase tracking-wider text-muted">
+                      <th className="py-3 px-3">Technician</th>
+                      <th className="py-3 px-3">Department</th>
+                      <th className="py-3 px-3 text-right">Assigned</th>
+                      <th className="py-3 px-3 text-right">Resolved</th>
+                      <th className="py-3 px-3 text-right">Avg Acknowledge</th>
+                      <th className="py-3 px-3 text-right">Avg Resolve (MTTR)</th>
+                      <th className="py-3 px-3 text-right">Avg CSAT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {execReport.technicianEfficiency.map((tech) => {
+                      const isSlowest = maxResolveHours !== null && tech.avgResolveHours === maxResolveHours && resolvedTechs.length > 1;
+
+                      return (
+                        <tr key={tech.staffId} className="hover:bg-canvas/50 transition">
+                          <td className="py-3 px-3 font-semibold text-ink">
+                            <div className="flex items-center gap-2">
+                              <span>{tech.name}</span>
+                              <span className="text-xs text-muted font-normal">(ID: {tech.staffId})</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-slate-700">{tech.department}</td>
+                          <td className="py-3 px-3 text-right tabular-nums text-slate-800 font-medium">
+                            {tech.assigned} <span className="text-xs text-muted">(n={tech.assigned})</span>
+                          </td>
+                          <td className="py-3 px-3 text-right tabular-nums text-slate-800 font-medium">
+                            {tech.resolved} <span className="text-xs text-muted">(n={tech.resolved})</span>
+                          </td>
+                          <td className="py-3 px-3 text-right tabular-nums text-slate-700">
+                            {tech.avgAcknowledgeHours !== null
+                              ? `${tech.avgAcknowledgeHours}h (n=${tech.assigned})`
+                              : "—"}
+                          </td>
+                          <td className="py-3 px-3 text-right tabular-nums">
+                            {tech.avgResolveHours !== null ? (
+                              <span className="inline-flex items-center gap-1.5 font-bold text-sky-900">
+                                {isSlowest && (
+                                  <span className="inline-flex rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-800">
+                                    Slowest MTTR
+                                  </span>
+                                )}
+                                MTTR {tech.avgResolveHours}h (n={tech.resolved})
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted">No resolved complaints in this period</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right tabular-nums font-semibold text-emerald-800">
+                            {tech.avgCsat !== null ? `${tech.avgCsat} ★ (n=${tech.resolved})` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Section 4: CSAT by Department */}
+          <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+            <div className="border-b border-line pb-4">
+              <h2 className="font-display text-lg font-bold text-ink flex items-center gap-2">
+                <Star size={18} className="text-amber-500 fill-amber-500" />
+                CSAT Breakdown by Department
+              </h2>
+              <p className="mt-1 text-xs text-muted">
+                Departmental student satisfaction metrics and count of low ratings (&le; 2 stars).
+              </p>
+            </div>
+
+            {(!execReport?.csatByDepartment?.length || execReport.csatByDepartment.every((c) => c.ratingsCount === 0)) ? (
+              <p className="mt-6 rounded-xl bg-canvas px-4 py-12 text-center text-sm font-medium text-muted">
+                No resolved complaints in this period
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {execReport.csatByDepartment.map((item) => (
+                  <div key={item.department} className="rounded-xl border border-line bg-canvas/40 p-4">
+                    <div className="flex items-center justify-between gap-2 border-b border-line pb-2">
+                      <span className="font-bold text-ink text-sm">{item.department}</span>
+                      <span className="font-extrabold text-base text-amber-600 flex items-center gap-1">
+                        {item.avgCsat !== null ? `${item.avgCsat} ★` : "—"}
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-1.5 text-xs">
+                      <p className="flex justify-between text-slate-700">
+                        <span>Total Ratings:</span>
+                        <span className="font-semibold text-slate-900">(n={item.ratingsCount})</span>
+                      </p>
+                      <p className="flex justify-between text-slate-700">
+                        <span>Low Ratings (&le; 2 Stars):</span>
+                        <span className={`font-bold ${item.lowRatingCount > 0 ? "text-rose-700" : "text-emerald-700"}`}>
+                          {item.lowRatingCount} (n={item.ratingsCount})
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <p className="text-right text-xs text-muted">
+            {execReport?.generatedAt ? `Updated ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(execReport.generatedAt))}` : ""}
+          </p>
+        </div>
       )}
+
       <ReportDetailsModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </main>
   );
