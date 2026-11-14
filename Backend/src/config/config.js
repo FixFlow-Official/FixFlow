@@ -25,6 +25,8 @@ const config = {
   WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID?.trim(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim(),
   WHATSAPP_LANGUAGE_CODE: process.env.WHATSAPP_LANGUAGE_CODE?.trim() || "en_US",
+  ENABLE_WEEKLY_DIGEST: String(process.env.ENABLE_WEEKLY_DIGEST).toLowerCase() === "true",
+  DIGEST_RECIPIENTS: process.env.DIGEST_RECIPIENTS?.trim() || "",
 };
 
 const requiredVariables = [

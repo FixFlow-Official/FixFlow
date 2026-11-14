@@ -17,6 +17,32 @@ const shutdownController = new AbortController();
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 let shutdownStarted = false;
 let stopSlaMonitor = null;
+let stopWeeklyDigestCron = null;
+
+if (String(process.env.ENABLE_WEEKLY_DIGEST).toLowerCase() === "true" || config.ENABLE_WEEKLY_DIGEST === true) {
+  try {
+    const cron = require("node-cron");
+    const { sendWeeklyDigest } = require("./scripts/sendWeeklyDigest");
+    const digestTask = cron.schedule(
+      "0 9 * * 1",
+      async () => {
+        try {
+          const result = await sendWeeklyDigest();
+          console.log(`Weekly digest sent to ${result?.sentTo?.length || 0} recipients`);
+        } catch (error) {
+          console.error("Weekly digest failed:", error.message || error);
+        }
+      },
+      {
+        timezone: "Asia/Kolkata",
+      }
+    );
+    stopWeeklyDigestCron = () => digestTask.stop();
+    console.log("Weekly executive facility digest cron is scheduled (every Monday 09:00 Asia/Kolkata)");
+  } catch (cronError) {
+    console.error("Could not initialize weekly digest cron:", cronError.message || cronError);
+  }
+}
 
 // Serve readiness responses immediately; regular API requests receive 503 until
 // MongoDB and the campus directory migration are ready.
@@ -45,6 +71,7 @@ async function shutdown(signalName) {
   console.log(`${signalName} received. Shutting down FixFlow backend.`);
   shutdownController.abort();
   stopSlaMonitor?.();
+  stopWeeklyDigestCron?.();
 
   // Finish active requests first, but do not let a stuck client block shutdown forever.
   const forceCloseTimer = setTimeout(() => {
