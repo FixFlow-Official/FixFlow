@@ -1111,6 +1111,28 @@ export async function deleteBroadcastRequest(id, accessToken) {
   );
 }
 
+// Student Reputation & Campus Guardians Leaderboard
+export async function getStudentReputationRequest(accessToken) {
+  return complaintRequest("/api/student/reputation", { method: "GET" }, accessToken);
+}
+
+export async function getStudentLeaderboardRequest(accessToken, limit = 10) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  return complaintRequest(`/api/student/leaderboard?${query.toString()}`, { method: "GET" }, accessToken);
+}
+
+export async function updateStudentReputationRequest({ leaderboardOptIn }, accessToken) {
+  return complaintRequest(
+    "/api/student/reputation",
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leaderboardOptIn }),
+    },
+    accessToken,
+  );
+}
+
 
 
 

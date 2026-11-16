@@ -11,6 +11,7 @@ import ProfileSettings from "../components/profile/ProfileSettings.jsx";
 import QrScannerModal from "../components/common/QrScannerModal.jsx";
 import CampusTrendingFeed from "../features/student/CampusTrendingFeed.jsx";
 import CampusOutageSection from "../components/broadcasts/CampusOutageSection.jsx";
+import StudentReputationLeaderboard from "../features/student/StudentReputationLeaderboard.jsx";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -20,6 +21,7 @@ import {
   MessageSquareText,
   QrCode,
   Radio,
+  Trophy,
   UserRound,
 } from "lucide-react";
 import { useAuth } from "../context/useAuth.js";
@@ -358,6 +360,12 @@ export default function DashboardPage() {
     setPage("trending");
   }
 
+  function openReputation() {
+    setActiveSection("reputation");
+    setSelectedComplaint(null);
+    setPage("reputation");
+  }
+
   function openComplaintDetails(complaint) {
     setSelectedComplaint(complaint);
     setPage("detail");
@@ -539,8 +547,10 @@ export default function DashboardPage() {
           setPage("trending");
         } else if (section === "broadcasts") {
           setPage("broadcasts");
+        } else if (section === "reputation") {
+          setPage("reputation");
         } else if (section === "complaints") {
-          if (page === "trending" || page === "broadcasts") {
+          if (page === "trending" || page === "broadcasts" || page === "reputation") {
             setPage("create");
           }
         }
@@ -552,6 +562,7 @@ export default function DashboardPage() {
         { id: "myComplaints", label: "My complaints" },
         { id: "trendingFeed", label: "Campus trending" },
         { id: "campusOutages", label: "Campus outages" },
+        { id: "campusGuardians", label: "Campus guardians" },
       ]}
       onAssistantNavigate={(item) => {
         if (item.id === "newComplaint") {
@@ -563,6 +574,8 @@ export default function DashboardPage() {
         } else if (item.id === "campusOutages" || item.id === "broadcasts") {
           setActiveSection("broadcasts");
           setPage("broadcasts");
+        } else if (item.id === "campusGuardians" || item.id === "reputation") {
+          openReputation();
         } else {
           setActiveSection(item.id);
         }
@@ -571,6 +584,7 @@ export default function DashboardPage() {
         { id: "complaints", label: "Complaints", icon: MessageSquareText },
         { id: "trending", label: "Campus Trending", icon: Flame },
         { id: "broadcasts", label: "Campus Outages", icon: Radio },
+        { id: "reputation", label: "Campus Guardians", icon: Trophy },
         { id: "profile", label: "Profile", icon: UserRound },
       ]}
     >
@@ -602,6 +616,13 @@ export default function DashboardPage() {
               onSelectComplaint={openComplaintDetails}
             />
           </div>
+        </div>
+      ) : activeSection === "reputation" || page === "reputation" ? (
+        <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#e8f3ef_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
+          <StudentReputationLeaderboard
+            accessToken={accessToken}
+            onBack={openCreateComplaint}
+          />
         </div>
       ) : (
       <div className="relative isolate mx-auto w-full max-w-none px-3 py-5 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[460px] before:bg-[radial-gradient(ellipse_at_top,_#e8f3ef_0%,_transparent_68%)] sm:px-6 sm:py-8 lg:px-8 xl:px-10">
@@ -644,6 +665,14 @@ export default function DashboardPage() {
                   >
                     <Flame size={16} className="text-amber-600" />
                     Trending Issues
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openReputation}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-purple-300 bg-purple-50/80 px-4 text-sm font-semibold text-purple-900 shadow-2xs transition hover:bg-purple-100 sm:w-auto"
+                  >
+                    <Trophy size={16} className="text-purple-600" />
+                    Guardians & Points
                   </button>
                   <button
                     type="button"
