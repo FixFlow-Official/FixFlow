@@ -90,6 +90,10 @@ const complaintSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    reputationAwarded: {
+      type: Boolean,
+      default: false,
+    },
     aiResolutionVerification: {
       verdict: {
         type: String,

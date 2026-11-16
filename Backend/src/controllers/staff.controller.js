@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const complaintModel = require("../models/complaint.model");
 const uploadFile = require("../services/storage.service");
 const { verifyResolution } = require("../services/resolutionVerification.service");
+const { awardReputation } = require("../services/reputation.service");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
 const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
 const {
@@ -291,6 +292,13 @@ async function updateComplaintStatus(req, res) {
       complaint.resolutionVerified = aiVerification?.verdict === "VERIFIED";
       if (aiVerification?.verdict === "VERIFIED") {
         complaint.resolutionVerifiedAt = new Date();
+      }
+      if (complaint.resolutionVerified && !complaint.reputationAwarded) {
+        try {
+          await awardReputation(complaint, { saveComplaint: false });
+        } catch (repErr) {
+          console.error("Could not award reputation for verified complaint:", repErr);
+        }
       }
     }
 

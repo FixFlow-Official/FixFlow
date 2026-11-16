@@ -95,4 +95,24 @@ router.get(
   studentController.getComplaintVerification,
 );
 
+/**
+ * @route GET /api/student/reputation
+ * @description student views points, badges, verified reports count, and rank
+ */
+router.get("/reputation", verifyAccessToken, studentController.getStudentReputation);
+
+/**
+ * @route PATCH /api/student/reputation
+ * @description student updates reputation preferences (e.g. opt in/out of public leaderboard)
+ */
+router.patch("/reputation", verifyAccessToken, studentController.updateStudentReputation);
+
+/**
+ * @route GET /api/student/reputation/leaderboard
+ * @route GET /api/student/leaderboard
+ * @description opt-in student reputation leaderboard (first name only, no email/phone)
+ */
+router.get("/reputation/leaderboard", verifyAccessToken, studentController.getStudentLeaderboard);
+router.get("/leaderboard", verifyAccessToken, studentController.getStudentLeaderboard);
+
 module.exports = router;

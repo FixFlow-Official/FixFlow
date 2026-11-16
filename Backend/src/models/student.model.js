@@ -57,9 +57,30 @@ const studentSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  reputation: {
+    points: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    badges: {
+      type: [String],
+      default: [],
+    },
+    verifiedReports: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    leaderboardOptIn: {
+      type: Boolean,
+      default: true,
+    },
+  },
 });
 
 studentSchema.index({ username: 1, _id: 1 });
+studentSchema.index({ "reputation.points": -1, "reputation.verifiedReports": -1 });
 
 const studentModel = mongoose.model("student", studentSchema);
 

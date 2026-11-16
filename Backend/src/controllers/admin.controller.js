@@ -7,6 +7,7 @@ const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
 const sessionModel = require("../models/session.model");
 const campusDirectoryModel = require("../models/campusDirectory.model");
+const { awardReputation } = require("../services/reputation.service");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
 const { dispatchTimelineAlerts } = require("../services/smsWhatsApp.service");
 const {
@@ -882,6 +883,14 @@ async function verifyOverrideComplaint(req, res) {
     complaint.resolutionVerified = true;
     complaint.resolutionVerifiedAt = new Date();
 
+    if (!complaint.reputationAwarded) {
+      try {
+        await awardReputation(complaint, { saveComplaint: false });
+      } catch (repErr) {
+        console.error("Could not award reputation on admin verify-override:", repErr);
+      }
+    }
+
     const overrideNote = trimmedReason
       ? `Resolution verification overridden by admin: ${trimmedReason}`
       : "Resolution verification overridden by admin.";
@@ -1006,6 +1015,7 @@ module.exports = {
   addUserToDirectoryByAdmin,
   deleteUserByAdmin,
   verifyOverrideComplaint,
+  overrideResolutionVerification: verifyOverrideComplaint,
   getAuditQueue,
   resolveComplaintAudit,
 };

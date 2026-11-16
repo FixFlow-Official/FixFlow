@@ -6,6 +6,7 @@ const studentModel = require("../models/student.model");
 const adminModel = require("../models/admin.model");
 const { broadcastModel } = require("../models/broadcast.model");
 const { createNotifications, complaintNotification } = require("../services/notification.service");
+const { awardReputation, getLeaderboard: getLeaderboardService } = require("../services/reputation.service");
 const smsWhatsAppService = require("../services/smsWhatsApp.service");
 const { getSlaPolicy, makeComplaintSlaDates } = require("../services/sla.service");
 const { triageComplaint, fingerprintComplaint } = require("../services/complaintTriage.service");
@@ -515,6 +516,14 @@ async function verifyComplaintResolution(req, res) {
   complaint.csatRating = numRating;
   complaint.csatFeedback = feedback ? String(feedback).trim().slice(0, 1000) : "";
 
+  if (!complaint.reputationAwarded) {
+    try {
+      await awardReputation(complaint, { saveComplaint: false });
+    } catch (repErr) {
+      console.error("Could not award reputation on student verification:", repErr);
+    }
+  }
+
   if (numRating <= 2) {
     complaint.adminAuditRequired = true;
     try {
@@ -593,6 +602,14 @@ async function submitCsat(req, res) {
   complaint.csatFeedback = feedback ? String(feedback).trim().slice(0, 1000) : "";
   complaint.resolutionVerified = true;
   complaint.resolutionVerifiedAt = new Date();
+
+  if (!complaint.reputationAwarded) {
+    try {
+      await awardReputation(complaint, { saveComplaint: false });
+    } catch (repErr) {
+      console.error("Could not award reputation on student CSAT:", repErr);
+    }
+  }
 
   if (numRating <= 2) {
     complaint.adminAuditRequired = true;
@@ -867,6 +884,109 @@ async function getComplaintVerification(req, res) {
   }
 }
 
+// GET /api/student/reputation
+async function getStudentReputation(req, res) {
+  if (!req.auth || req.auth.role !== "student") {
+    return res.status(403).json({ message: "Only students have reputation profiles." });
+  }
+
+  try {
+    const student = await studentModel.findById(req.auth.id).select("username rollno reputation").lean();
+    if (!student) {
+      return res.status(404).json({ message: "Student not found." });
+    }
+
+    const rep = student.reputation || {
+      points: 0,
+      badges: [],
+      verifiedReports: 0,
+      leaderboardOptIn: true,
+    };
+
+    let rank = null;
+    const points = rep.points || 0;
+    if (points > 0 && rep.leaderboardOptIn !== false) {
+      const higherCount = await studentModel.countDocuments({
+        "reputation.leaderboardOptIn": { $ne: false },
+        "reputation.points": { $gt: points },
+      });
+      rank = higherCount + 1;
+    }
+
+    const includeLeaderboard = req.query.leaderboard === "true" || req.query.includeLeaderboard === "true";
+    let leaderboardData;
+    if (includeLeaderboard) {
+      leaderboardData = await getLeaderboardService({ limit: parseInt(req.query.limit, 10) || 10 });
+    }
+
+    return res.status(200).json({
+      reputation: {
+        points: rep.points || 0,
+        badges: rep.badges || [],
+        verifiedReports: rep.verifiedReports || 0,
+        leaderboardOptIn: rep.leaderboardOptIn !== false,
+      },
+      points: rep.points || 0,
+      badges: rep.badges || [],
+      verifiedReports: rep.verifiedReports || 0,
+      leaderboardOptIn: rep.leaderboardOptIn !== false,
+      rank,
+      ...(leaderboardData ? { leaderboard: leaderboardData } : {}),
+    });
+  } catch (err) {
+    console.error("getStudentReputation failed", { requestId: req.requestId, error: err });
+    return res.status(500).json({ message: "Could not load reputation profile." });
+  }
+}
+
+// GET /api/student/leaderboard or /api/student/reputation/leaderboard
+async function getStudentLeaderboard(req, res) {
+  try {
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 10), 50);
+    const leaderboard = await getLeaderboardService({ limit });
+    return res.status(200).json({
+      leaderboard,
+      count: leaderboard.length,
+    });
+  } catch (err) {
+    console.error("getStudentLeaderboard failed", { requestId: req.requestId, error: err });
+    return res.status(500).json({ message: "Could not load reputation leaderboard." });
+  }
+}
+
+// PATCH /api/student/reputation
+async function updateStudentReputation(req, res) {
+  if (!req.auth || req.auth.role !== "student") {
+    return res.status(403).json({ message: "Only students can update reputation settings." });
+  }
+
+  const { leaderboardOptIn } = req.body || {};
+  if (typeof leaderboardOptIn !== "boolean") {
+    return res.status(400).json({ message: "leaderboardOptIn must be a boolean." });
+  }
+
+  try {
+    const student = await studentModel.findById(req.auth.id);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found." });
+    }
+
+    if (!student.reputation) {
+      student.reputation = { points: 0, badges: [], verifiedReports: 0, leaderboardOptIn: true };
+    }
+    student.reputation.leaderboardOptIn = leaderboardOptIn;
+    await student.save();
+
+    return res.status(200).json({
+      message: "Reputation settings updated.",
+      reputation: student.reputation,
+    });
+  } catch (err) {
+    console.error("updateStudentReputation failed", { requestId: req.requestId, error: err });
+    return res.status(500).json({ message: "Could not update reputation settings." });
+  }
+}
+
 module.exports = {
   createComplaint,
   getComplaint,
@@ -877,4 +997,7 @@ module.exports = {
   reopenComplaint,
   getTrendingComplaints,
   getComplaintVerification,
+  getStudentReputation,
+  getStudentLeaderboard,
+  updateStudentReputation,
 };
