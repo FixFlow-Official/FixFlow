@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -8,6 +8,7 @@ import {
   Clock3,
   Gauge,
   Layers,
+  LoaderCircle,
   RefreshCw,
   ShieldAlert,
   Sparkles,
@@ -16,22 +17,14 @@ import {
   X,
 } from "lucide-react";
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-} from "recharts";
-import {
   getAdminComplaintReportsRequest,
   getExecutiveReportsRequest,
   getAdminReportInsightsRequest,
 } from "../../services/api.js";
 import { formatStatus } from "../../utils/complaintConfig.js";
 import { useAssistantContext } from "../../context/assistantContext.jsx";
+
+const ExecutiveMttrChart = lazy(() => import("./ExecutiveMttrChart.jsx"));
 
 const periodOptions = [
   { value: "30d", label: "Last 30 days" },
@@ -571,35 +564,25 @@ export default function AdminReports({ accessToken }) {
               </p>
             ) : (
               <div className="mt-6">
-                <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={execReport.mttrByDepartment.map((d) => ({
-                        department: d.department,
-                        mttr: d.avgResolutionHours,
-                        firstResponse: d.avgFirstResponseHours,
-                        resolved: d.resolved,
-                        total: d.total,
-                        breachRate: d.slaBreachRate,
-                      }))}
-                      margin={{ top: 10, right: 20, left: 0, bottom: 25 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis dataKey="department" stroke="#64748b" fontSize={12} tickLine={false} />
-                      <YAxis stroke="#64748b" fontSize={12} tickLine={false} unit="h" />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "#ffffff", borderRadius: "0.75rem", borderColor: "#cbd5e1" }}
-                        formatter={(val, name, props) => {
-                          const n = name === "MTTR (Hours)" ? props.payload.resolved : props.payload.total;
-                          return [val !== null ? `${val}h (n=${n})` : "No resolved complaints in this period", name];
-                        }}
-                      />
-                      <Legend verticalAlign="top" height={36} />
-                      <Bar dataKey="mttr" name="MTTR (Hours)" fill="#0284c7" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="firstResponse" name="First Response (Hours)" fill="#10b981" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <Suspense
+                  fallback={
+                    <div className="flex h-72 w-full items-center justify-center rounded-xl bg-canvas text-sm font-medium text-muted">
+                      <LoaderCircle className="animate-spin text-brand mr-2" size={20} />
+                      <span>Loading MTTR chart...</span>
+                    </div>
+                  }
+                >
+                  <ExecutiveMttrChart
+                    data={execReport.mttrByDepartment.map((d) => ({
+                      department: d.department,
+                      mttr: d.avgResolutionHours,
+                      firstResponse: d.avgFirstResponseHours,
+                      resolved: d.resolved,
+                      total: d.total,
+                      breachRate: d.slaBreachRate,
+                    }))}
+                  />
+                </Suspense>
 
                 {/* Sample Size Breakdown Cards for each department */}
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

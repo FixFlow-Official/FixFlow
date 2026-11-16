@@ -10,8 +10,12 @@ import ComplaintResolutionVerification from "../components/complaints/ComplaintR
 import { useAuth } from "../context/useAuth.js";
 import { useAssistantContext } from "../context/assistantContext.jsx";
 import { getComplaintDetailsRequest } from "../services/api.js";
-import { downloadComplaintPdf } from "../utils/complaintPdf.js";
 import { formatDate } from "../utils/complaintConfig.js";
+
+async function downloadComplaintPdf(complaint) {
+  const { downloadComplaintPdf: runDownload } = await import("../utils/complaintPdf.js");
+  return runDownload(complaint);
+}
 
 const dashboardPaths = {
   student: "/student/dashboard",

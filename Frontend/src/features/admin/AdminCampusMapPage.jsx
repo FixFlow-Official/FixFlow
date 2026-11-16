@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -29,7 +29,7 @@ import {
   initKarnalPresetRequest,
 } from "../../services/api.js";
 import { useAssistantContext } from "../../context/assistantContext.jsx";
-import RoomQrModal from "../../components/common/RoomQrModal.jsx";
+const RoomQrModal = lazy(() => import("../../components/common/RoomQrModal.jsx"));
 
 const CATEGORY_ICONS = {
   Academic: GraduationCap,
@@ -1180,14 +1180,16 @@ export default function AdminCampusMapPage({ accessToken }) {
         </div>
       )}
       {qrModal && (
-        <RoomQrModal
-          buildingName={qrModal.buildingName}
-          buildingCode={qrModal.buildingCode}
-          floorName={qrModal.floorName}
-          room={qrModal.room}
-          rooms={qrModal.rooms || []}
-          onClose={() => setQrModal(null)}
-        />
+        <Suspense fallback={null}>
+          <RoomQrModal
+            buildingName={qrModal.buildingName}
+            buildingCode={qrModal.buildingCode}
+            floorName={qrModal.floorName}
+            room={qrModal.room}
+            rooms={qrModal.rooms || []}
+            onClose={() => setQrModal(null)}
+          />
+        </Suspense>
       )}
     </div>
   );

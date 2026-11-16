@@ -18,6 +18,11 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             {
+              name: 'vendor-react',
+              test: /node_modules[\\/](react|react-dom|react-router|react-router-dom)[\\/]/,
+              priority: 30,
+            },
+            {
               name: 'pdf-jspdf',
               test: /node_modules[\\/]jspdf[\\/]/,
               priority: 20,
