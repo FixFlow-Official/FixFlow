@@ -110,7 +110,23 @@ self.addEventListener("push", (event) => {
     renotify: false,
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  const notifyClients = self.clients
+    .matchAll({ type: "window", includeUncontrolled: true })
+    .then((clients) => {
+      for (const client of clients) {
+        client.postMessage({
+          type: "FIXFLOW_PUSH_NOTIFICATION",
+          payload,
+        });
+      }
+    });
+
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      notifyClients,
+    ]),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

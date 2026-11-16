@@ -129,4 +129,48 @@ async function getComplaintReports(req, res) {
   }
 }
 
-module.exports = { getComplaintReports };
+const { queryExecutiveMetrics } = require("../services/executiveDigest.service");
+const { sendWeeklyDigest } = require("../../scripts/sendWeeklyDigest");
+
+// Executive facility health, MTTR and SLA analytics
+async function getExecutiveReports(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({ message: "Only administrators can view executive reports." });
+  }
+
+  const period = req.query.period || "90d";
+  if (!["7d", "30d", "90d", "12m", "all"].includes(period)) {
+    return res.status(400).json({ message: "Choose a valid report period." });
+  }
+
+  try {
+    const data = await queryExecutiveMetrics({ period });
+    return res.status(200).json(data);
+  } catch (error) {
+    console.error("getExecutiveReports failed", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "Could not load executive reports." });
+  }
+}
+
+// Manual trigger for weekly executive facility digest
+async function sendDigestNow(req, res) {
+  if (req.auth?.role !== "admin") {
+    return res.status(403).json({ message: "Only administrators can trigger the weekly digest." });
+  }
+
+  try {
+    const period = req.body?.period || "7d";
+    const result = await sendWeeklyDigest({ period });
+    return res.status(200).json({
+      message: "Weekly executive facility digest dispatched.",
+      sentTo: result.sentTo,
+      generatedAt: result.generatedAt,
+      summary: result.summary,
+    });
+  } catch (error) {
+    console.error("sendDigestNow failed", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "Could not send weekly digest." });
+  }
+}
+
+module.exports = { getComplaintReports, getExecutiveReports, sendDigestNow };

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Download, ThumbsUp, X } from "lucide-react";
 import ComplaintStatusBadge from "./ComplaintStatusBadge.jsx";
 import ComplaintConversation from "./ComplaintConversation.jsx";
+import { getOptimizedImageUrl } from "../../utils/imageUrl.js";
 
 function formatDate(date) {
   if (!date) return "Date unavailable";
@@ -97,13 +98,16 @@ export default function ExpandableComplaintCard({
             <span className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
               {complaint.complaintPictureUrl && (
                 <img
-                  src={complaint.complaintPictureUrl}
+                  src={getOptimizedImageUrl(complaint.complaintPictureUrl, "card")}
                   alt=""
+                  width={80}
+                  height={80}
                   loading="lazy"
+                  decoding="async"
                   onError={(event) => {
                     event.currentTarget.style.display = "none";
                   }}
-                  className="size-16 shrink-0 rounded-xl bg-stone-100 object-cover sm:size-20"
+                  className="size-16 shrink-0 rounded-xl bg-stone-100 object-cover sm:size-20 aspect-square"
                 />
               )}
 
@@ -256,16 +260,20 @@ export default function ExpandableComplaintCard({
                     href={complaint.complaintPictureUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="mb-5 block overflow-hidden rounded-xl border border-line bg-stone-50"
+                    className="mb-5 block overflow-hidden rounded-xl border border-line bg-stone-100 aspect-video max-h-[420px] sm:max-h-[280px]"
                     aria-label="Open submitted proof photo"
                   >
                     <img
-                      src={complaint.complaintPictureUrl}
+                      src={getOptimizedImageUrl(complaint.complaintPictureUrl, "detail")}
                       alt={`Submitted proof for ${complaint.complaintTitle || "complaint"}`}
+                      width={1200}
+                      height={675}
+                      loading="lazy"
+                      decoding="async"
                       onError={(event) => {
                         event.currentTarget.style.display = "none";
                       }}
-                      className="max-h-[420px] w-full object-contain sm:max-h-[240px]"
+                      className="size-full object-contain"
                     />
                   </a>
                 )}

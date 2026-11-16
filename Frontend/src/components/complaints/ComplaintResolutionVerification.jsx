@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   AlertCircle,
-  AlertTriangle,
   Camera,
   CheckCircle2,
   Clock3,
@@ -40,12 +39,44 @@ export default function ComplaintResolutionVerification({
   const [ratingError, setRatingError] = useState("");
   const [reopenError, setReopenError] = useState("");
   const [submittedMessage, setSubmittedMessage] = useState("");
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60000);
-    return () => clearInterval(timer);
-  }, []);
+    let timeoutId;
+
+    function scheduleNextTick() {
+      const current = Date.now();
+      setNow(current);
+
+      if (complaint?.status === "Resolved") {
+        const resolvedAtMs = complaint.resolvedAt
+          ? new Date(complaint.resolvedAt).getTime()
+          : (complaint.updatedAt ? new Date(complaint.updatedAt).getTime() : current);
+        const remaining = resolvedAtMs + 48 * 60 * 60 * 1000 - current;
+        if (remaining <= 0) {
+          return;
+        }
+      }
+
+      // Schedule next tick precisely aligned to the upcoming whole-minute boundary
+      const msUntilNextMinute = 60000 - (current % 60000) + 50;
+      timeoutId = setTimeout(scheduleNextTick, msUntilNextMinute);
+    }
+
+    scheduleNextTick();
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        setNow(Date.now());
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [complaint?.status, complaint?.resolvedAt, complaint?.updatedAt]);
 
   if (!complaint || (complaint.status !== "Resolved" && complaint.status !== "Reopened" && !complaint.reopenedCount)) {
     return null;

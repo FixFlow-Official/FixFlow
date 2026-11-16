@@ -324,7 +324,11 @@ export default function StaffComplaintStatusForm({
                                       <img
                                         src={previewUrl}
                                         alt="Resolution proof preview"
-                                        className="size-12 rounded-xl object-cover border border-line shrink-0 shadow-2xs"
+                                        width={48}
+                                        height={48}
+                                        loading="lazy"
+                                        decoding="async"
+                                        className="size-12 rounded-xl object-cover border border-line shrink-0 shadow-2xs aspect-square"
                                       />
                                     ) : (
                                       <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">

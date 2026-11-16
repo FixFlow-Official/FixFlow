@@ -24,12 +24,16 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/useAuth.js";
 import { useAssistantContext } from "../context/assistantContext.jsx";
-import { downloadComplaintPdf } from "../utils/complaintPdf.js";
 import { compressImageIfNeeded, validateImageFile } from "../utils/fileValidation.js";
 import {
   createComplaintRequest,
   getComplaintsRequest,
 } from "../services/api.js";
+
+async function downloadComplaintPdf(complaint) {
+  const { downloadComplaintPdf: runDownload } = await import("../utils/complaintPdf.js");
+  return runDownload(complaint);
+}
 
 const activeComplaintStatuses = [
   "Submitted",

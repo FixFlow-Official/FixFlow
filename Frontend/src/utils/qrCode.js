@@ -1,5 +1,3 @@
-import QRCode from "qrcode";
-
 /**
  * Builds the canonical scan-to-report URL for a specific campus room/lab door.
  */
@@ -45,6 +43,7 @@ export function parseRoomReportUrl(urlOrSearch) {
  */
 export async function generateQrDataUrl(text, options = {}) {
   if (!text) throw new Error("Text is required to generate a QR code.");
+  const { default: QRCode } = await import("qrcode");
   return QRCode.toDataURL(text, {
     width: options.width || 360,
     margin: options.margin !== undefined ? options.margin : 2,

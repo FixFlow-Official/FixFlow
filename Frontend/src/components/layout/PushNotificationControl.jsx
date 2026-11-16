@@ -131,7 +131,13 @@ export default function PushNotificationControl() {
         // Rebind a previously enabled device to the account currently signed in.
         await savePushSubscriptionRequest(subscription.toJSON(), accessToken);
       }
-      setEnabled(Boolean(subscription) && Notification.permission === "granted");
+      const isSubscribed = Boolean(subscription) && Notification.permission === "granted";
+      setEnabled(isSubscribed);
+      window.dispatchEvent(
+        new CustomEvent("fixflow:push-subscription-changed", {
+          detail: { subscribed: isSubscribed },
+        })
+      );
       if (!subscription && getSavedOptIn() && Notification.permission !== "granted") {
         setError("Your browser or device has blocked notifications. Allow them in site and device settings, then reopen FixFlow to reconnect this device.");
       }
@@ -164,6 +170,11 @@ export default function PushNotificationControl() {
         }
         saveOptIn(false);
         setEnabled(false);
+        window.dispatchEvent(
+          new CustomEvent("fixflow:push-subscription-changed", {
+            detail: { subscribed: false },
+          })
+        );
         return;
       }
 
@@ -203,6 +214,11 @@ export default function PushNotificationControl() {
       }
       saveOptIn(true);
       setEnabled(true);
+      window.dispatchEvent(
+        new CustomEvent("fixflow:push-subscription-changed", {
+          detail: { subscribed: true },
+        })
+      );
     } catch (requestError) {
       setError(requestError.message || "Could not update push notification settings.");
     } finally {

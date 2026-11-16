@@ -10,8 +10,12 @@ import ComplaintResolutionVerification from "../components/complaints/ComplaintR
 import { useAuth } from "../context/useAuth.js";
 import { useAssistantContext } from "../context/assistantContext.jsx";
 import { getComplaintDetailsRequest } from "../services/api.js";
-import { downloadComplaintPdf } from "../utils/complaintPdf.js";
 import { formatDate } from "../utils/complaintConfig.js";
+
+async function downloadComplaintPdf(complaint) {
+  const { downloadComplaintPdf: runDownload } = await import("../utils/complaintPdf.js");
+  return runDownload(complaint);
+}
 
 const dashboardPaths = {
   student: "/student/dashboard",
@@ -213,8 +217,11 @@ function ComplaintDetailsContent({ complaintId }) {
                           src={complaint.complaintPictureUrl}
                           alt={`Reported photo for ${complaint.complaintTitle}`}
                           ariaLabel="Open submitted proof photo"
-                          className="mt-2 inline-flex max-w-full overflow-hidden rounded-xl border border-line bg-white"
-                          imageClassName="max-h-72 max-w-full object-contain"
+                          variant="detail"
+                          width={800}
+                          height={450}
+                          className="mt-2 block w-full overflow-hidden rounded-xl border border-line bg-stone-100 aspect-video max-h-72"
+                          imageClassName="size-full object-contain"
                         />
                       </div>
                       <div>
@@ -225,8 +232,11 @@ function ComplaintDetailsContent({ complaintId }) {
                           src={complaint.resolutionProofUrl}
                           alt={`Resolution photo for ${complaint.complaintTitle}`}
                           ariaLabel="Open resolution proof photo"
-                          className="mt-2 inline-flex max-w-full overflow-hidden rounded-xl border border-emerald-300 bg-white"
-                          imageClassName="max-h-72 max-w-full object-contain"
+                          variant="detail"
+                          width={800}
+                          height={450}
+                          className="mt-2 block w-full overflow-hidden rounded-xl border border-emerald-300 bg-stone-100 aspect-video max-h-72"
+                          imageClassName="size-full object-contain"
                         />
                       </div>
                     </div>
@@ -238,8 +248,11 @@ function ComplaintDetailsContent({ complaintId }) {
                       src={complaint.complaintPictureUrl}
                       alt={`Proof for ${complaint.complaintTitle}`}
                       ariaLabel="Open submitted proof photo"
-                      className="mt-2 inline-flex max-w-full overflow-hidden rounded-xl border border-line"
-                      imageClassName="max-h-80 max-w-full object-contain"
+                      variant="detail"
+                      width={800}
+                      height={450}
+                      className="mt-2 block w-full overflow-hidden rounded-2xl border border-line bg-stone-100 aspect-video max-h-80"
+                      imageClassName="size-full object-contain"
                     />
                   </section>
                 ) : null}

@@ -30,7 +30,11 @@ import {
   assignedFilters,
   categoryDepartments,
 } from "../utils/complaintConfig.js";
-import { downloadComplaintPdf } from "../utils/complaintPdf.js";
+
+async function downloadComplaintPdf(complaint) {
+  const { downloadComplaintPdf: runDownload } = await import("../utils/complaintPdf.js");
+  return runDownload(complaint);
+}
 import {
   assignComplaintRequest,
   getAssignedComplaintsRequest,

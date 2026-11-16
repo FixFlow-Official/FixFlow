@@ -110,10 +110,25 @@ export default function BroadcastBanner() {
   }, [accessToken]);
 
   useEffect(() => {
-    fetchActive();
-    // Poll every 3 minutes for new campus outage alerts
-    const interval = setInterval(fetchActive, 3 * 60 * 1000);
-    return () => clearInterval(interval);
+    const timeoutId = window.setTimeout(() => fetchActive(), 0);
+
+    // Poll every 10 minutes for campus outage alerts + refresh on window focus
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchActive();
+      }
+    }, 10 * 60 * 1000);
+
+    const handleFocus = () => {
+      fetchActive();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.clearTimeout(timeoutId);
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [fetchActive]);
 
   const visibleBroadcasts = broadcasts

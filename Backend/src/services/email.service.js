@@ -24,18 +24,29 @@ async function verifyTransporter() {
 }
 
 // Function to send email
-const sendEmail = async (to, subject, text, html) => {
+const sendEmail = async (toOrOptions, subject, text, html, attachments = []) => {
   try {
-    const info = await transporter.sendMail({
-      from: `"FixFlow-project" <${config.GOOGLE_USER}>`, // sender address
-      to, // list of receivers
-      subject, // Subject line
-      text, // plain text body
-      html, // html body
-    });
+    let mailOptions;
+    if (typeof toOrOptions === "object" && toOrOptions !== null && !Array.isArray(toOrOptions)) {
+      mailOptions = {
+        from: `"FixFlow-project" <${config.GOOGLE_USER}>`,
+        ...toOrOptions,
+      };
+    } else {
+      mailOptions = {
+        from: `"FixFlow-project" <${config.GOOGLE_USER}>`,
+        to: toOrOptions,
+        subject,
+        text,
+        html,
+        ...(attachments && attachments.length ? { attachments } : {}),
+      };
+    }
 
+    const activeTransporter = sendEmail.transporter || transporter;
+    const info = await activeTransporter.sendMail(mailOptions);
     console.log("Message sent: %s", info.messageId);
-    console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+    return info;
   } catch (error) {
     console.error("Error sending email:", error);
     throw error;

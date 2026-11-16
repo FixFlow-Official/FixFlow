@@ -31,6 +31,46 @@ export default function NotificationCenter() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (!("Notification" in window) || Notification.permission !== "granted") return false;
+    const prefKey = user?.id ? `fixflow:push-opt-in:${user.role}:${user.id}` : null;
+    if (prefKey) {
+      try {
+        return window.localStorage.getItem(prefKey) === "1";
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
+
+  const checkPushSubscription = useCallback(async () => {
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      !("Notification" in window) ||
+      Notification.permission !== "granted"
+    ) {
+      setPushSubscribed(false);
+      return false;
+    }
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        setPushSubscribed(false);
+        return false;
+      }
+      const sub = await reg.pushManager?.getSubscription();
+      const active = Boolean(sub);
+      setPushSubscribed(active);
+      return active;
+    } catch {
+      setPushSubscribed(false);
+      return false;
+    }
+  }, []);
 
   const refreshNotifications = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -45,18 +85,105 @@ export default function NotificationCenter() {
     }
   }, [accessToken]);
 
+  // Sync push subscription status, listen for service worker push messages & window focus
   useEffect(() => {
     if (!user) return undefined;
-    const initialTimeoutId = window.setTimeout(() => refreshNotifications(), 0);
-    const intervalId = window.setInterval(() => refreshNotifications(), 30000);
-    const handleFocus = () => refreshNotifications();
-    window.addEventListener("focus", handleFocus);
-    return () => {
-      window.clearInterval(intervalId);
-      window.clearTimeout(initialTimeoutId);
-      window.removeEventListener("focus", handleFocus);
+
+    const timeoutId = window.setTimeout(() => {
+      checkPushSubscription();
+    }, 0);
+
+    const handleFocus = () => {
+      refreshNotifications();
+      checkPushSubscription();
     };
-  }, [user, refreshNotifications]);
+
+    const handleSubscriptionChange = (event) => {
+      if (typeof event.detail?.subscribed === "boolean") {
+        setPushSubscribed(event.detail.subscribed);
+      } else {
+        checkPushSubscription();
+      }
+    };
+
+    const handleSwMessage = (event) => {
+      if (
+        event.data?.type === "FIXFLOW_PUSH_NOTIFICATION" ||
+        event.data?.type === "PUSH_NOTIFICATION_RECEIVED"
+      ) {
+        refreshNotifications();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("fixflow:push-subscription-changed", handleSubscriptionChange);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", handleSwMessage);
+    }
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("fixflow:push-subscription-changed", handleSubscriptionChange);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+      }
+    };
+  }, [user, checkPushSubscription, refreshNotifications]);
+
+  // Refresh on mount. Poll every 30s ONLY if push is not subscribed, and pause while document is hidden.
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const initialTimeoutId = window.setTimeout(() => {
+      refreshNotifications();
+    }, 0);
+
+    if (pushSubscribed) {
+      return () => {
+        window.clearTimeout(initialTimeoutId);
+      };
+    }
+
+    let intervalId = null;
+
+    const startPolling = () => {
+      if (intervalId || document.hidden) return;
+      intervalId = window.setInterval(() => {
+        if (!document.hidden) {
+          refreshNotifications();
+        }
+      }, 30000);
+    };
+
+    const stopPolling = () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        refreshNotifications();
+        startPolling();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearTimeout(initialTimeoutId);
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user, pushSubscribed, refreshNotifications]);
 
   useEffect(() => {
     if (!open) return undefined;

@@ -22,7 +22,11 @@ import {
   getStaffAssignedComplaintsRequest,
   updateComplaintStatusRequest,
 } from "../services/api.js";
-import { downloadComplaintPdf } from "../utils/complaintPdf.js";
+
+async function downloadComplaintPdf(complaint) {
+  const { downloadComplaintPdf: runDownload } = await import("../utils/complaintPdf.js");
+  return runDownload(complaint);
+}
 
 const staffStatuses = [
   { value: "Under_Review", label: "Under review" },

@@ -166,7 +166,11 @@ export default function RoomQrModal({
                         <img
                           src={qrUrl}
                           alt={`Scan QR Code to report issue in ${rm}`}
-                          className="size-48 object-contain sm:size-52"
+                          width={208}
+                          height={208}
+                          loading="lazy"
+                          decoding="async"
+                          className="size-48 object-contain sm:size-52 aspect-square"
                         />
                       ) : (
                         <div className="grid size-48 place-items-center text-xs text-muted">
