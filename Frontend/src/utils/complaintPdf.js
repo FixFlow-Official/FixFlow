@@ -1,4 +1,5 @@
 import { formatDate, formatStatus } from "./complaintConfig.js";
+import { getOptimizedImageUrl } from "./imageUrl.js";
 
 // Escape user-controlled content before adding it to the PDF report.
 function escapeHtml(value) {
@@ -98,13 +99,13 @@ export async function downloadComplaintPdf(complaint) {
 
   const submittedProofHtml = complaint.complaintPictureUrl
     ? '<img class="proof-image" crossorigin="anonymous" src="' +
-      escapeHtml(complaint.complaintPictureUrl) +
+      escapeHtml(getOptimizedImageUrl(complaint.complaintPictureUrl, "detail")) +
       '" alt="Submitted complaint proof" />'
     : "<p>No submitted proof photo is available.</p>";
 
   const resolutionProofHtml = complaint.resolutionProofUrl
     ? '<img class="proof-image" crossorigin="anonymous" src="' +
-      escapeHtml(complaint.resolutionProofUrl) +
+      escapeHtml(getOptimizedImageUrl(complaint.resolutionProofUrl, "detail")) +
       '" alt="Resolution proof" />'
     : "";
 

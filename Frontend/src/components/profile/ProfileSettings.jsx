@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "../../context/useAuth.js";
+import { getOptimizedImageUrl } from "../../utils/imageUrl.js";
 import {
   changeMyPasswordRequest,
   requestPhoneOtpRequest,
@@ -237,7 +238,17 @@ export default function ProfileSettings() {
 
           <div className="mt-5 flex flex-col gap-4 rounded-2xl bg-gradient-to-r from-brand-soft/70 to-emerald-50/70 p-4 sm:flex-row sm:items-center">
             <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-2xl bg-white text-xl font-extrabold text-brand shadow-sm ring-1 ring-brand/10">
-              {displayedPhoto ? <img src={displayedPhoto} alt={`${user?.username || "Your"} profile`} className="size-full object-cover" /> : getInitials(username)}
+              {displayedPhoto ? (
+                <img
+                  src={getOptimizedImageUrl(displayedPhoto, "card")}
+                  alt={`${user?.username || "Your"} profile`}
+                  width={80}
+                  height={80}
+                  loading="lazy"
+                  decoding="async"
+                  className="size-full object-cover aspect-square"
+                />
+              ) : getInitials(username)}
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-ink">Profile photo</p>

@@ -106,8 +106,11 @@ export default function AdminAssignedComplaintCard({
                               src={complaint.complaintPictureUrl}
                               alt={`Proof for ${complaint.complaintTitle}`}
                               ariaLabel="Open complaint proof photo"
-                              className="mt-2 inline-flex overflow-hidden rounded-xl border border-line"
-                              imageClassName="h-36 w-48 object-cover"
+                              variant="card"
+                              width={192}
+                              height={144}
+                              className="mt-2 inline-flex overflow-hidden rounded-xl border border-line bg-stone-100 aspect-[4/3] h-36 w-48"
+                              imageClassName="size-full object-cover"
                             />
                           </div>
                         )}

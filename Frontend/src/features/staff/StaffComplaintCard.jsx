@@ -115,8 +115,11 @@ export default function StaffComplaintCard({
                                 src={complaint.resolutionProofUrl}
                                 alt={`Resolution proof for ${complaint.complaintTitle}`}
                                 ariaLabel="Open resolution proof photo"
-                                className="mt-4 inline-flex overflow-hidden rounded-xl border border-emerald-200"
-                                imageClassName="h-40 w-56 object-cover"
+                                variant="card"
+                                width={224}
+                                height={160}
+                                className="mt-4 inline-flex overflow-hidden rounded-xl border border-emerald-200 bg-stone-100 aspect-[7/5] h-40 w-56"
+                                imageClassName="size-full object-cover"
                               />
                             ) : (
                               <p className="mt-3 text-sm text-emerald-800">

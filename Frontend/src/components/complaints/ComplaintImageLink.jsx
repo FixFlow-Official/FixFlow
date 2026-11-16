@@ -1,9 +1,14 @@
+import { getOptimizedImageUrl } from "../../utils/imageUrl.js";
+
 export default function ComplaintImageLink({
   src,
   alt,
   ariaLabel,
   className,
   imageClassName,
+  variant = "detail",
+  width,
+  height,
 }) {
   if (!src) return null;
 
@@ -15,7 +20,15 @@ export default function ComplaintImageLink({
       className={className}
       aria-label={ariaLabel}
     >
-      <img src={src} alt={alt} className={imageClassName} />
+      <img
+        src={getOptimizedImageUrl(src, variant)}
+        alt={alt}
+        width={width}
+        height={height}
+        loading="lazy"
+        decoding="async"
+        className={imageClassName}
+      />
     </a>
   );
 }
