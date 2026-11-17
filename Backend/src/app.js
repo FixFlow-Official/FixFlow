@@ -1,4 +1,6 @@
 const express = require("express");
+const fs = require("node:fs");
+const path = require("node:path");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
@@ -75,6 +77,16 @@ app.use("/api/broadcasts", broadcastRouter);
 
 // Keep unknown API paths and unexpected failures in the same JSON format.
 app.use("/api", notFoundHandler);
+
+// In production, serve the built single-page React frontend
+const frontendDist = path.resolve(__dirname, "../../Frontend/dist");
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+}
+
 app.use(errorHandler);
 
 module.exports = app;

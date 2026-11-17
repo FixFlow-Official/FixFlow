@@ -1,0 +1,14 @@
+{
+  "name": "fixflow",
+  "version": "1.0.0",
+  "description": "FixFlow — Campus Facility Maintenance & Issue Tracking Platform",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix Frontend install && npm --prefix Frontend run build && npm --prefix Backend install",
+    "start": "node Backend/server.js",
+    "test": "npm --prefix Frontend test && npm --prefix Backend test"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}
